@@ -1,0 +1,44 @@
+[package]
+name = "tlsn-mpc-circuits"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["full"]
+full = ["aes_128_reverse", "adder64", "sha256"]
+aes_128_reverse = []
+adder64 = []
+sha256 = []
+
+[dependencies]
+thiserror.workspace = true
+regex.workspace = true
+prost.workspace = true
+rayon.workspace = true
+clap = { workspace = true, features = ["derive"] }
+sha2 = { workspace = true, features = ["compress"] }
+hex.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_yaml.workspace = true
+lazy_static.workspace = true
+
+[dev-dependencies]
+aes.workspace = true
+digest.workspace = true
+rand.workspace = true
+rstest.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true
+
+[lib]
+name = "mpc_circuits"
+path = "src/lib.rs"
+
+[[bin]]
+name = "compile"
+path = "src/bin/compile.rs"
+
+[[bin]]
+name = "parse"
+path = "src/bin/parse.rs"
