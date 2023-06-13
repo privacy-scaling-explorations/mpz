@@ -22,6 +22,17 @@ All crates in this repository are licensed under either of
 
 at your option.
 
+## Overview
+
+Home of multi-party computation libraries:
+
+  - oblivious transfer: Core building block used a lot in our codebase.
+  - garbling: We use several variants of garbled circuit executions in our codebase
+    (DEAP, Dual-Ex, ZK)
+  - circuits: code to build circuits, with some basic circuit components
+    available.
+  - share-conversion: supports converting between additive and multiplicative
+    shares for performing finite-field arithmetic in 2PC.
 
 ## Contribution
 
