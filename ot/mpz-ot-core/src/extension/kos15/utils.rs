@@ -115,8 +115,7 @@ pub fn kos15_check_sender(
         check1 ^= chi;
     }
 
-    let mut base_choices = base_choices.iter().copied();
-    let delta: [u8; ROW_LENGTH_TR] = std::array::from_fn(|_| u8::from_msb0(base_choices.by_ref()));
+    let delta = <[u8; ROW_LENGTH_TR]>::from_msb0(base_choices.iter().copied());
     let delta = Clmul::new(&delta);
 
     let x = Clmul::new(x);
@@ -153,8 +152,7 @@ pub fn encrypt_values<C: BlockCipher<BlockSize = U16> + BlockEncrypt>(
     }
 
     let mut ciphertexts: Vec<[Block; 2]> = Vec::with_capacity(table.len());
-    let mut choices = choices.iter().copied();
-    let delta: [u8; ROW_LENGTH_TR] = std::array::from_fn(|_| u8::from_msb0(choices.by_ref()));
+    let delta = <[u8; ROW_LENGTH_TR]>::from_msb0(choices.iter().copied());
     let delta = Block::from(delta);
     // If Receiver used *random* choice bits during OT extension setup, he will now
     // instruct us to de-randomize, so that the value corresponding to his *actual*
