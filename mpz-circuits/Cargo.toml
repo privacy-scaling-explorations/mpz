@@ -14,7 +14,6 @@ aes = []
 sha2 = ["dep:sha2"]
 
 [dependencies]
-tlsn-utils.workspace = true
 mpz-circuits-macros = { path = "../mpz-circuits-macros" }
 
 sha2 = { workspace = true, features = ["compress"], optional = true }
@@ -27,6 +26,7 @@ rand.workspace = true
 regex = { workspace = true, optional = true }
 once_cell.workspace = true
 thiserror.workspace = true
+itybity.workspace = true
 
 [dev-dependencies]
 aes.workspace = true
