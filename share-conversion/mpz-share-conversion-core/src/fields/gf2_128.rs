@@ -2,11 +2,11 @@
 
 use std::ops::{Add, Mul, Neg};
 
+use itybity::{BitLength, FromBits, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution};
 use serde::{Deserialize, Serialize};
 
 use mpz_core::{Block, BlockSerialize};
-use utils::bits::{FromBits, ToBits};
 
 use super::Field;
 
@@ -112,10 +112,6 @@ impl Field for Gf2_128 {
         Self(1 << rhs)
     }
 
-    fn get_bit(&self, n: usize) -> bool {
-        (self.0 >> n) & 1 == 1
-    }
-
     /// Galois field inversion of 128-bit block
     fn inverse(self) -> Self {
         let mut a = self;
@@ -136,6 +132,22 @@ impl Field for Gf2_128 {
     }
 }
 
+impl BitLength for Gf2_128 {
+    const BITS: usize = 128;
+}
+
+impl GetBit<Lsb0> for Gf2_128 {
+    fn get_bit(&self, index: usize) -> bool {
+        GetBit::<Lsb0>::get_bit(&self.0, index)
+    }
+}
+
+impl GetBit<Msb0> for Gf2_128 {
+    fn get_bit(&self, index: usize) -> bool {
+        GetBit::<Msb0>::get_bit(&self.0, index)
+    }
+}
+
 impl FromBits for Gf2_128 {
     fn from_lsb0(iter: impl IntoIterator<Item = bool>) -> Self {
         Self(u128::from_lsb0(iter))
@@ -143,24 +155,6 @@ impl FromBits for Gf2_128 {
 
     fn from_msb0(iter: impl IntoIterator<Item = bool>) -> Self {
         Self(u128::from_msb0(iter))
-    }
-}
-
-impl ToBits for Gf2_128 {
-    fn into_lsb0(self) -> Vec<bool> {
-        self.0.into_lsb0()
-    }
-
-    fn into_lsb0_boxed(self: Box<Self>) -> Vec<bool> {
-        self.0.into_lsb0()
-    }
-
-    fn into_msb0(self) -> Vec<bool> {
-        self.0.into_msb0()
-    }
-
-    fn into_msb0_boxed(self: Box<Self>) -> Vec<bool> {
-        self.0.into_msb0()
     }
 }
 

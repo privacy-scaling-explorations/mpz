@@ -8,9 +8,9 @@ use std::{
     ops::{Add, Mul, Neg},
 };
 
+use itybity::{BitLength, FromBits, GetBit, Lsb0, Msb0};
 use mpz_core::BlockSerialize;
 use rand::{distributions::Standard, prelude::Distribution, Rng};
-use utils::bits::{FromBits, ToBits};
 
 /// A trait for finite fields
 pub trait Field:
@@ -30,7 +30,9 @@ pub trait Field:
     + Eq
     + BlockSerialize
     + FromBits
-    + ToBits
+    + GetBit<Lsb0>
+    + GetBit<Msb0>
+    + BitLength
 {
     /// The number of bits of a field element
     const BIT_SIZE: u32;
@@ -43,9 +45,6 @@ pub trait Field:
 
     /// Return a field element from a power of two.
     fn two_pow(rhs: u32) -> Self;
-
-    /// Return the n-th bit, where n=0 returns the least-significant bit
-    fn get_bit(&self, n: usize) -> bool;
 
     /// Return the multiplicative inverse
     fn inverse(self) -> Self;
@@ -96,6 +95,7 @@ pub fn compute_product_repeated<T: Field>(powers: &mut Vec<T>, factor: T, count:
 #[cfg(test)]
 mod tests {
     use super::{compute_product_repeated, Field};
+    use itybity::{GetBit, Lsb0};
     use rand::SeedableRng;
     use rand_chacha::ChaCha12Rng;
 
@@ -139,9 +139,9 @@ mod tests {
         let b = T::from_lsb0(b);
 
         assert_eq!(a, T::one());
-        assert!(a.get_bit(0));
+        assert!(GetBit::<Lsb0>::get_bit(&a, 0));
 
         assert_eq!(b, T::two_pow(T::BIT_SIZE - 1));
-        assert!(b.get_bit((T::BIT_SIZE - 1) as usize));
+        assert!(GetBit::<Lsb0>::get_bit(&b, (T::BIT_SIZE - 1) as usize));
     }
 }

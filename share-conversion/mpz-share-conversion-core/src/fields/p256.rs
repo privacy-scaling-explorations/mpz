@@ -4,12 +4,12 @@ use std::ops::{Add, Mul, Neg};
 
 use ark_ff::{BigInt, BigInteger, Field as ArkField, FpConfig, MontBackend, One, Zero};
 use ark_secp256r1::{fq::Fq, FqConfig};
+use itybity::{BitLength, FromBits, GetBit, Lsb0, Msb0};
 use num_bigint::ToBigUint;
 use rand::{distributions::Standard, prelude::Distribution};
 use serde::{Deserialize, Serialize};
 
 use mpz_core::{Block, BlockSerialize};
-use utils::bits::{FromBits, ToBits};
 
 use super::Field;
 
@@ -114,10 +114,6 @@ impl Field for P256 {
         P256(out)
     }
 
-    fn get_bit(&self, n: usize) -> bool {
-        MontBackend::<FqConfig, 4>::into_bigint(self.0).get_bit(n)
-    }
-
     fn inverse(self) -> Self {
         P256(ArkField::inverse(&self.0).expect("Unable to invert field element"))
     }
@@ -131,6 +127,22 @@ impl Field for P256 {
     }
 }
 
+impl BitLength for P256 {
+    const BITS: usize = 256;
+}
+
+impl GetBit<Lsb0> for P256 {
+    fn get_bit(&self, index: usize) -> bool {
+        MontBackend::<FqConfig, 4>::into_bigint(self.0).get_bit(index)
+    }
+}
+
+impl GetBit<Msb0> for P256 {
+    fn get_bit(&self, index: usize) -> bool {
+        MontBackend::<FqConfig, 4>::into_bigint(self.0).get_bit(256 - index)
+    }
+}
+
 impl FromBits for P256 {
     fn from_lsb0(iter: impl IntoIterator<Item = bool>) -> Self {
         P256(BigInt::from_bits_le(&iter.into_iter().collect::<Vec<bool>>()).into())
@@ -138,24 +150,6 @@ impl FromBits for P256 {
 
     fn from_msb0(iter: impl IntoIterator<Item = bool>) -> Self {
         P256(BigInt::from_bits_be(&iter.into_iter().collect::<Vec<bool>>()).into())
-    }
-}
-
-impl ToBits for P256 {
-    fn into_lsb0(self) -> Vec<bool> {
-        (0..256).map(|i| self.get_bit(i)).collect()
-    }
-
-    fn into_lsb0_boxed(self: Box<Self>) -> Vec<bool> {
-        (0..256).map(|i| self.get_bit(i)).collect()
-    }
-
-    fn into_msb0(self) -> Vec<bool> {
-        (0..256).map(|i| self.get_bit(i)).rev().collect()
-    }
-
-    fn into_msb0_boxed(self: Box<Self>) -> Vec<bool> {
-        (0..256).map(|i| self.get_bit(i)).rev().collect()
     }
 }
 
