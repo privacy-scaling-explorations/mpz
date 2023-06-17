@@ -18,10 +18,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     c.bench_function("clmul_reuse", move |bench| {
-        bench.iter(|| {
-            a.clmul_reuse(&mut b);
-            black_box(());
-        });
+        bench.iter(|| a.clmul_reuse(&mut b));
     });
 }
 
