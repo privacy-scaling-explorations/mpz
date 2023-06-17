@@ -139,7 +139,7 @@ pub mod tests {
         // Try sending too much. This should fail
         let oversized_inputs = &[inputs.as_slice(), inputs.as_slice()].concat();
         assert_eq!(
-            sender.send(&oversized_inputs),
+            sender.send(oversized_inputs),
             Err(ExtSenderCoreError::InvalidInputLength)
         );
 
@@ -147,7 +147,7 @@ pub mod tests {
         for chunk in inputs.chunks(4) {
             assert!(!sender.is_complete());
             assert!(!receiver.is_complete());
-            let payload = sender.send(&chunk).unwrap();
+            let payload = sender.send(chunk).unwrap();
             received.append(&mut receiver.receive(payload).unwrap());
         }
         assert!(sender.is_complete());
@@ -229,8 +229,8 @@ pub mod tests {
         for (input, choice) in inputs.chunks(4).zip(choices.chunks(4)) {
             assert!(!sender.is_complete());
             assert!(!receiver.is_complete());
-            let derandomize = receiver.derandomize(&choice).unwrap();
-            let payload = sender.rand_send(&input, derandomize).unwrap();
+            let derandomize = receiver.derandomize(choice).unwrap();
+            let payload = sender.rand_send(input, derandomize).unwrap();
             received.append(&mut receiver.receive(payload).unwrap());
         }
         assert!(sender.is_complete());

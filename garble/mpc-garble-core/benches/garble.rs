@@ -13,31 +13,27 @@ fn criterion_benchmark(c: &mut Criterion) {
         .collect::<Vec<_>>();
     group.bench_function("aes128", |b| {
         b.iter(|| {
-            black_box({
-                let mut gen = Generator::new(AES128.clone(), encoder.delta(), &inputs).unwrap();
+            let mut gen = Generator::new(AES128.clone(), encoder.delta(), &inputs).unwrap();
 
-                let mut enc_gates = Vec::with_capacity(AES128.and_count());
-                while let Some(gate) = gen.next() {
-                    enc_gates.push(gate);
-                }
+            let mut enc_gates = Vec::with_capacity(AES128.and_count());
+            for gate in gen.by_ref() {
+                enc_gates.push(gate);
+            }
 
-                let _ = gen.outputs().unwrap();
-            })
+            black_box(gen.outputs().unwrap())
         })
     });
     group.bench_function("aes128_with_hash", |b| {
         b.iter(|| {
-            black_box({
-                let mut gen =
-                    Generator::new_with_hasher(AES128.clone(), encoder.delta(), &inputs).unwrap();
+            let mut gen =
+                Generator::new_with_hasher(AES128.clone(), encoder.delta(), &inputs).unwrap();
 
-                let mut enc_gates = Vec::with_capacity(AES128.and_count());
-                while let Some(gate) = gen.next() {
-                    enc_gates.push(gate);
-                }
+            let mut enc_gates = Vec::with_capacity(AES128.and_count());
+            for gate in gen.by_ref() {
+                enc_gates.push(gate);
+            }
 
-                let _ = gen.outputs().unwrap();
-            })
+            black_box(gen.outputs().unwrap())
         })
     });
 }

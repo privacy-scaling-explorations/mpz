@@ -809,7 +809,7 @@ mod tests {
 
         let value: T = rng.gen();
 
-        let encoded: EncodedValue<_> = encoder.encode_by_type(0, &T::value_type()).into();
+        let encoded: EncodedValue<_> = encoder.encode_by_type(0, &T::value_type());
         let decoding = encoded.decoding();
         let commit = encoded.commit();
         let active = encoded.select(value).unwrap();

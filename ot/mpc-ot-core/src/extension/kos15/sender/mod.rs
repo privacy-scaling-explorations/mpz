@@ -358,7 +358,7 @@ fn extension_setup_from(
         &setup_msg.x,
         &setup_msg.t0,
         &setup_msg.t1,
-        &base_choices,
+        base_choices,
     ) {
         return Err(ExtSenderCoreError::ConsistencyCheckFailed);
     };

@@ -1,3 +1,5 @@
+#![allow(clippy::all)]
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{
     distributions::{Distribution, Standard},
@@ -88,12 +90,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         bench.iter(|| matrix_transpose::transpose_bits(&mut m2, rows));
     });
 
-    let m3: Vec<Vec<u8>> = matrix.clone().chunks(columns).map(|r| r.to_vec()).collect();
+    let m3: Vec<Vec<u8>> = matrix.chunks(columns).map(|r| r.to_vec()).collect();
     c.bench_function("transpose_bits_baseline", move |bench| {
         bench.iter(|| transpose_bits(&m3));
     });
 
-    let m4: Vec<Vec<u8>> = matrix.clone().chunks(columns).map(|r| r.to_vec()).collect();
+    let m4: Vec<Vec<u8>> = matrix.chunks(columns).map(|r| r.to_vec()).collect();
     c.bench_function("transpose_baseline", move |bench| {
         bench.iter(|| transpose(&m4));
     });

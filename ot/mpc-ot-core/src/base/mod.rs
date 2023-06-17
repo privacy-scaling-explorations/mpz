@@ -62,7 +62,7 @@ pub mod tests {
 
         #[fixture]
         #[once]
-        pub fn ot_core_data(choice: &Vec<bool>, values: &Vec<[Block; 2]>) -> Data {
+        pub fn ot_core_data(choice: &[bool], values: &[[Block; 2]]) -> Data {
             let mut rng = thread_rng();
 
             let mut sender = DhOtSender::default();
@@ -100,7 +100,7 @@ pub mod tests {
         let sender_setup = sender.setup(&mut rng).unwrap();
 
         let mut receiver = DhOtReceiver::default();
-        let receiver_choices = receiver.setup(&mut rng, &choice, sender_setup).unwrap();
+        let receiver_choices = receiver.setup(&mut rng, choice, sender_setup).unwrap();
 
         let send = sender.send(&s_inputs, receiver_choices).unwrap();
         let receive = receiver.receive(send).unwrap();

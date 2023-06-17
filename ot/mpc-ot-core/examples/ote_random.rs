@@ -53,7 +53,7 @@ pub fn main() {
         let received_sum: u128 = received.iter().map(|b| b.inner()).sum();
         let choice = received_sum % 2 == 0;
         let derandomize = receiver.derandomize(&[choice, !choice]).unwrap();
-        let payload = sender.rand_send(&chunk, derandomize).unwrap();
+        let payload = sender.rand_send(chunk, derandomize).unwrap();
         received.append(&mut receiver.receive(payload).unwrap());
     }
 

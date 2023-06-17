@@ -26,6 +26,7 @@ pub fn mock_ot_pair() -> (MockOTSender, MockOTReceiver) {
 }
 
 #[derive(Clone, Debug)]
+#[allow(clippy::type_complexity)]
 pub struct MockOTSender {
     sender_buffer: Arc<Mutex<HashMap<String, Box<dyn Any + Send + 'static>>>>,
     receiver_buffer: Arc<Mutex<HashMap<String, oneshot::Sender<Box<dyn Any + Send + 'static>>>>>,
@@ -57,6 +58,7 @@ impl ObliviousReveal for MockOTSender {
 }
 
 #[derive(Clone, Debug)]
+#[allow(clippy::type_complexity)]
 pub struct MockOTReceiver {
     sender_buffer: Arc<Mutex<HashMap<String, Box<dyn Any + Send + 'static>>>>,
     receiver_buffer: Arc<Mutex<HashMap<String, oneshot::Sender<Box<dyn Any + Send + 'static>>>>>,

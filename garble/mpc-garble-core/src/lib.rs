@@ -8,47 +8,46 @@
 //! use mpc_circuits::circuits::AES128;
 //! use mpc_garble_core::{Generator, Evaluator, ChaChaEncoder, Encoder};
 //!
-//! fn main() {
-//!     let encoder = ChaChaEncoder::new([0u8; 32]);
-//!     let encoded_key = encoder.encode::<[u8; 16]>(0);
-//!     let encoded_plaintext = encoder.encode::<[u8; 16]>(1);
 //!
-//!     let key = b"super secret key";
-//!     let plaintext = b"super secret msg";
+//! let encoder = ChaChaEncoder::new([0u8; 32]);
+//! let encoded_key = encoder.encode::<[u8; 16]>(0);
+//! let encoded_plaintext = encoder.encode::<[u8; 16]>(1);
 //!
-//!     let active_key = encoded_key.select(*key).unwrap();
-//!     let active_plaintext = encoded_plaintext.select(*plaintext).unwrap();
+//! let key = b"super secret key";
+//! let plaintext = b"super secret msg";
 //!
-//!     let mut gen =
-//!         Generator::new(
-//!             AES128.clone(),
-//!             encoder.delta(),
-//!             &[encoded_key, encoded_plaintext]
-//!         ).unwrap();
+//! let active_key = encoded_key.select(*key).unwrap();
+//! let active_plaintext = encoded_plaintext.select(*plaintext).unwrap();
 //!
-//!     let mut ev =
-//!         Evaluator::new(
-//!             AES128.clone(),
-//!             &[active_key, active_plaintext]
-//!         ).unwrap();
+//! let mut gen =
+//!     Generator::new(
+//!         AES128.clone(),
+//!         encoder.delta(),
+//!         &[encoded_key, encoded_plaintext]
+//!     ).unwrap();
 //!
-//!     const BATCH_SIZE: usize = 1000;
-//!     while !(gen.is_complete() && ev.is_complete()) {
-//!         let batch: Vec<_> = gen.by_ref().take(BATCH_SIZE).collect();
-//!         ev.evaluate(batch.iter());
-//!     }
+//! let mut ev =
+//!     Evaluator::new(
+//!         AES128.clone(),
+//!         &[active_key, active_plaintext]
+//!     ).unwrap();
 //!
-//!     let encoded_outputs = gen.outputs().unwrap();
-//!     let encoded_ciphertext = encoded_outputs[0].clone();
-//!     let ciphertext_decoding = encoded_ciphertext.decoding();
-//!
-//!     let active_outputs = ev.outputs().unwrap();
-//!     let active_ciphertext = active_outputs[0].clone();
-//!     let ciphertext: [u8; 16] =
-//!         active_ciphertext.decode(&ciphertext_decoding).unwrap().try_into().unwrap();
-//!
-//!     println!("'{plaintext:?} AES encrypted with key '{key:?}' is '{ciphertext:?}'");
+//! const BATCH_SIZE: usize = 1000;
+//! while !(gen.is_complete() && ev.is_complete()) {
+//!     let batch: Vec<_> = gen.by_ref().take(BATCH_SIZE).collect();
+//!     ev.evaluate(batch.iter());
 //! }
+//!
+//! let encoded_outputs = gen.outputs().unwrap();
+//! let encoded_ciphertext = encoded_outputs[0].clone();
+//! let ciphertext_decoding = encoded_ciphertext.decoding();
+//!
+//! let active_outputs = ev.outputs().unwrap();
+//! let active_ciphertext = active_outputs[0].clone();
+//! let ciphertext: [u8; 16] =
+//!     active_ciphertext.decode(&ciphertext_decoding).unwrap().try_into().unwrap();
+//!
+//! println!("'{plaintext:?} AES encrypted with key '{key:?}' is '{ciphertext:?}'");
 //! ```
 
 #![deny(missing_docs, unreachable_pub, unused_must_use)]
@@ -88,7 +87,7 @@ mod tests {
         use crate::{evaluator as ev, generator as gen};
 
         let mut rng = ChaCha12Rng::from_entropy();
-        let mut cipher = Aes128::new_from_slice(&CIPHER_FIXED_KEY).unwrap();
+        let cipher = Aes128::new_from_slice(&CIPHER_FIXED_KEY).unwrap();
 
         let delta = Delta::random(&mut rng);
         let x_0 = Label::random(&mut rng);
@@ -100,22 +99,10 @@ mod tests {
         let (z_0, encrypted_gate) = gen::and_gate(&cipher, &x_0, &y_0, &delta, gid);
         let z_1 = z_0 ^ delta;
 
-        assert_eq!(
-            ev::and_gate(&mut cipher, &x_0, &y_1, &encrypted_gate, gid),
-            z_0
-        );
-        assert_eq!(
-            ev::and_gate(&mut cipher, &x_0, &y_1, &encrypted_gate, gid),
-            z_0
-        );
-        assert_eq!(
-            ev::and_gate(&mut cipher, &x_1, &y_0, &encrypted_gate, gid),
-            z_0
-        );
-        assert_eq!(
-            ev::and_gate(&mut cipher, &x_1, &y_1, &encrypted_gate, gid),
-            z_1
-        );
+        assert_eq!(ev::and_gate(&cipher, &x_0, &y_1, &encrypted_gate, gid), z_0);
+        assert_eq!(ev::and_gate(&cipher, &x_0, &y_1, &encrypted_gate, gid), z_0);
+        assert_eq!(ev::and_gate(&cipher, &x_1, &y_0, &encrypted_gate, gid), z_0);
+        assert_eq!(ev::and_gate(&cipher, &x_1, &y_1, &encrypted_gate, gid), z_1);
     }
 
     #[test]

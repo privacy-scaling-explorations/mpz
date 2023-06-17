@@ -118,7 +118,7 @@ impl Kos15Receiver<state::BaseSend> {
         choices: &[bool],
     ) -> Result<(Kos15Receiver<state::Setup>, ExtReceiverSetup), ExtReceiverCoreError> {
         let (table, choices, message) = extension_setup_from(
-            &choices,
+            choices,
             &mut self.0.rng,
             &mut self.0.rngs,
             &self.0.cointoss_random,
@@ -341,7 +341,7 @@ fn receive_from(
 fn extension_setup_from(
     choices: &[bool],
     rng: &mut ChaCha12Rng,
-    rngs: &mut Vec<[ChaCha12Rng; 2]>,
+    rngs: &mut [[ChaCha12Rng; 2]],
     cointoss_random: &[u8; 32],
 ) -> Result<(KosMatrix, Vec<bool>, ExtReceiverSetup), ExtReceiverCoreError> {
     // For performance purposes we require that choice + padding is a multiple of 8 * LANE_COUNT.

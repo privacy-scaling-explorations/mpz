@@ -171,8 +171,8 @@ mod tests {
         let a: T = rng.gen();
         let b: T = rng.gen();
 
-        let a_full: EncodedValue<_> = encoder.encode_by_type(0, &T::value_type()).into();
-        let b_full: EncodedValue<_> = encoder.encode_by_type(1, &T::value_type()).into();
+        let a_full: EncodedValue<_> = encoder.encode_by_type(0, &T::value_type());
+        let b_full: EncodedValue<_> = encoder.encode_by_type(1, &T::value_type());
         let c_full = (&a_full ^ &b_full).unwrap();
 
         let a_active = a_full.select(a).unwrap();
@@ -203,8 +203,8 @@ mod tests {
         let a: [T; 16] = rng.gen();
         let b: [T; 16] = rng.gen();
 
-        let a_full: EncodedValue<_> = encoder.encode_by_type(0, &<[T; 16]>::value_type()).into();
-        let b_full: EncodedValue<_> = encoder.encode_by_type(1, &<[T; 16]>::value_type()).into();
+        let a_full: EncodedValue<_> = encoder.encode_by_type(0, &<[T; 16]>::value_type());
+        let b_full: EncodedValue<_> = encoder.encode_by_type(1, &<[T; 16]>::value_type());
         let c_full = (&a_full ^ &b_full).unwrap();
 
         let a_active = a_full.select(a).unwrap();
