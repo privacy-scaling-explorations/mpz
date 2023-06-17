@@ -1,10 +1,10 @@
 //! Traits for transferring encodings via oblivious transfer.
 
 use async_trait::async_trait;
+use itybity::IntoBits;
 use mpz_circuits::types::Value;
 use mpz_core::Block;
 use mpz_garble_core::{encoding_state, EncodedValue, Label};
-use utils::bits::ToBitsIter;
 
 /// A trait for sending encodings via oblivious transfer.
 #[async_trait]
@@ -61,7 +61,7 @@ where
                 id,
                 choice
                     .iter()
-                    .flat_map(|value| value.clone().into_lsb0_iter())
+                    .flat_map(|value| value.clone().into_iter_lsb0())
                     .collect(),
             )
             .await?;
