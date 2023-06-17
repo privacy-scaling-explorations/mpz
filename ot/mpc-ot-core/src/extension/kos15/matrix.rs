@@ -167,7 +167,6 @@ mod tests {
     fn test_byte_matrix_new() {
         let inner = gen_vec(12);
         let _matrix = KosMatrix::new(inner, 3).unwrap();
-        assert!(true);
     }
 
     #[test]

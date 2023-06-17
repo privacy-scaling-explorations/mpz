@@ -158,7 +158,7 @@ impl<const N: usize> ObliviousReceiveOwned<bool, [Block; N]>
             let msg: [[u8; Block::LEN]; N] = std::array::from_fn(|i| {
                 msg_slice[i * Block::LEN..(i + 1) * Block::LEN]
                     .try_into()
-                    .expect(&format!("Expected array to have length {}", Block::LEN))
+                    .unwrap_or_else(|_| panic!("Expected array to have length {}", Block::LEN))
             });
 
             // Convert the array of [u8; Block::LEN] into an array of generic_array

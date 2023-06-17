@@ -1101,7 +1101,7 @@ mod tests {
                     .await
                     .unwrap();
 
-                let outputs = follower
+                follower
                     .decode_blind(
                         "test",
                         &[c_ref],
@@ -1117,8 +1117,6 @@ mod tests {
                     .finalize(&mut sink, &mut stream, &follower_ot_recv)
                     .await
                     .unwrap();
-
-                outputs
             }
         };
 

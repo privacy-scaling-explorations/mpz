@@ -58,7 +58,7 @@ impl DhOtSender {
         // Randomly sample a private key
         let private_key = Scalar::random(rng);
         // Compute the pubkey A = aG where G is a generator
-        let public_key = &private_key * &*RISTRETTO_BASEPOINT_TABLE;
+        let public_key = &private_key * RISTRETTO_BASEPOINT_TABLE;
 
         // Update the state
         self.private_key = Some(private_key);
@@ -102,7 +102,7 @@ impl DhOtSender {
             .map(|(input, receivers_choice)| {
                 // Witness the receiver's choice in the transcript
                 self.transcript
-                    .append_message(b"B", &*receivers_choice.compress().as_bytes());
+                    .append_message(b"B", receivers_choice.compress().as_bytes());
 
                 // Construct a tweak to domain-separate the ristretto point hashes
                 let mut tweak = [0u8; 16];
@@ -110,9 +110,9 @@ impl DhOtSender {
 
                 // yr is B^a in [ref1]
                 let yr = private_key * receivers_choice;
-                let k0 = hash_point(&yr, &tweak).into();
+                let k0 = hash_point(&yr, &tweak);
                 // yr - ys == (B/A)^a in [ref1]
-                let k1 = hash_point(&(yr - ys), &tweak).into();
+                let k1 = hash_point(&(yr - ys), &tweak);
 
                 [encrypt_input(k0, input[0]), encrypt_input(k1, input[1])]
             })
