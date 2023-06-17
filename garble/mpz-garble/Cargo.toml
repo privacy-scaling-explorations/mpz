@@ -1,0 +1,49 @@
+[package]
+name = "mpz-garble"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "mpz_garble"
+
+[features]
+default = ["mock"]
+mock = ["mpz-ot/mock"]
+
+[dependencies]
+mpz-circuits.workspace = true
+mpz-ot.workspace = true
+mpz-garble-core.workspace = true
+mpz-core.workspace = true
+tlsn-utils.workspace = true
+tlsn-utils-aio.workspace = true
+
+async-trait.workspace = true
+prost.workspace = true
+futures.workspace = true
+futures-util.workspace = true
+cipher.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+rand_chacha = { workspace = true }
+thiserror.workspace = true
+aes = { workspace = true }
+rayon = { workspace = true }
+derive_builder.workspace = true
+
+[dev-dependencies]
+mpz-ot = { workspace = true, features = ["mock"] }
+rstest = { workspace = true }
+criterion = { workspace = true, features = ["async_tokio"] }
+tlsn-utils-aio = { workspace = true, features = ["duplex"] }
+tokio = { workspace = true, features = [
+    "net",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+] }
+async_executors = { version = "0.6", features = ["notwasm", "tokio_tp"] }
+
+[[bench]]
+name = "deap"
+harness = false

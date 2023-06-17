@@ -1,29 +1,29 @@
 [workspace]
 members = [
-    "mpc-core",
+    "mpz-core",
     "garble/*",
     "ot/*",
-    "mpc-circuits",
-    "mpc-circuits-macros",
+    "mpz-circuits",
+    "mpz-circuits-macros",
     "share-conversion/*",
     "matrix-transpose",
     "clmul",
 ]
 
 [workspace.dependencies]
-# tlsn
-tlsn-mpc-core = { path = "mpc-core" }
-tlsn-mpc-circuits = { path = "mpc-circuits" }
-tlsn-mpc-ot-core = { path = "ot/mpc-ot-core" }
-tlsn-mpc-ot = { path = "ot/mpc-ot" }
-tlsn-mpc-garble-core = { path = "garble/mpc-garble-core" }
-tlsn-mpc-garble = { path = "garble/mpc-garble" }
-tlsn-mpc-share-conversion-core = { path = "share-conversion/mpc-share-conversion-core" }
-tlsn-share-conversion = { path = "share-conversion/mpc-share-conversion" }
-tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils" }
-tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils" }
+mpz-core = { path = "mpz-core" }
+mpz-circuits = { path = "mpz-circuits" }
+mpz-ot-core = { path = "ot/mpz-ot-core" }
+mpz-ot = { path = "ot/mpz-ot" }
+mpz-garble-core = { path = "garble/mpz-garble-core" }
+mpz-garble = { path = "garble/mpz-garble" }
+mpz-share-conversion-core = { path = "share-conversion/mpz-share-conversion-core" }
+mpz-share-conversion = { path = "share-conversion/mpz-share-conversion" }
 clmul = { path = "clmul" }
 matrix-transpose = { path = "matrix-transpose" }
+
+tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils" }
+tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils" }
 
 # rand
 rand_chacha = "0.3"
