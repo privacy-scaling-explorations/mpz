@@ -1,7 +1,7 @@
 use aes::BlockDecrypt;
 use cipher::{consts::U16, generic_array::GenericArray, BlockCipher, BlockEncrypt};
 use core::ops::{BitAnd, BitXor};
-use itybity::IntoBits;
+use itybity::{BitLength, GetBit, Lsb0, Msb0};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::convert::{From, TryInto};
@@ -151,16 +151,19 @@ pub trait BlockSerialize {
     fn from_blocks(blocks: Self::Serialized) -> Self;
 }
 
-impl IntoBits for Block {
-    type IterLsb0 = <u128 as IntoBits>::IterLsb0;
-    type IterMsb0 = <u128 as IntoBits>::IterMsb0;
+impl BitLength for Block {
+    const BITS: usize = 128;
+}
 
-    fn into_iter_lsb0(self) -> Self::IterLsb0 {
-        self.0.into_iter_lsb0()
+impl GetBit<Lsb0> for Block {
+    fn get_bit(&self, index: usize) -> bool {
+        GetBit::<Lsb0>::get_bit(&self.0, index)
     }
+}
 
-    fn into_iter_msb0(self) -> Self::IterMsb0 {
-        self.0.into_iter_msb0()
+impl GetBit<Msb0> for Block {
+    fn get_bit(&self, index: usize) -> bool {
+        GetBit::<Msb0>::get_bit(&self.0, index)
     }
 }
 
