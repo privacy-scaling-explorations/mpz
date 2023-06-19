@@ -23,6 +23,7 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+          components: clippy
       - uses: Swatinem/rust-cache@v2.0.0
 
       - name: "Build"
@@ -35,6 +36,11 @@ jobs:
         # env:
         #   RUSTDOCFLAGS: -D warnings
         run: cargo doc --no-deps --workspace --lib --document-private-items --examples
+
+      - name: Run Clippy
+        # env:
+        #   RUSTDOCFLAGS: -D warnings
+        run: cargo clippy --all-targets --all-features
 
   rustfmt:
     name: Rustfmt
