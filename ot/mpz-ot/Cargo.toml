@@ -1,0 +1,38 @@
+[package]
+name = "mpz-ot"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "mpz_ot"
+
+[features]
+default = ["mock"]
+mock = []
+
+[dependencies]
+mpz-core.workspace = true
+mpz-ot-core.workspace = true
+tlsn-utils-aio.workspace = true
+async-trait.workspace = true
+prost.workspace = true
+futures.workspace = true
+futures-util.workspace = true
+aes.workspace = true
+cipher.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+rand_chacha.workspace = true
+p256 = { workspace = true, optional = true }
+thiserror.workspace = true
+tokio = { workspace = true, features = [
+    "net",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+] }
+rayon = { workspace = true }
+
+[dev-dependencies]
+rstest = { workspace = true }
+criterion = { workspace = true, features = ["async_tokio"] }
