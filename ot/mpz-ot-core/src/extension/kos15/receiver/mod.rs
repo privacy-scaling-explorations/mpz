@@ -15,11 +15,12 @@ use crate::{
 };
 use aes::{Aes128, NewBlockCipher};
 use error::{CommittedOTError, ExtReceiverCoreError};
+use itybity::FromBits;
 use mpz_core::{utils::blake3, Block};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 use rand_core::RngCore;
-use utils::{bits::FromBits, iter::xor};
+use utils::iter::xor;
 
 pub struct Kos15Receiver<S = state::Initialized>(S)
 where
@@ -359,15 +360,16 @@ fn extension_setup_from(
     // KOS extension matrix by 32 columns. After transposition these additional columns turn
     // into additional rows, namely 32 * 8, where the factor 8 comes from the fact that it is a
     // bit-level transpose. This is why, in the end we will have to drain 256 rows in total.
-    let padding = calc_padding(choices.len());
-    let mut padding_values = vec![false; padding];
-    rng.fill::<[bool]>(&mut padding_values);
+    let padding_len = calc_padding(choices.len());
+    let ncols = choices.len() + padding_len;
 
-    // Extend choice bits
-    let mut r_bool = choices.to_vec();
-    r_bool.extend(&padding_values);
+    let padding = (0..padding_len).map(|_| rng.gen::<bool>());
+    let r_bool = choices
+        .iter()
+        .copied()
+        .chain(padding)
+        .collect::<Vec<bool>>();
     let r: Vec<u8> = Vec::from_msb0(r_bool.iter().copied());
-    let ncols = r_bool.len();
 
     let row_length = ncols / 8;
     let num_elements = BASE_COUNT * row_length;
@@ -400,7 +402,7 @@ fn extension_setup_from(
     let kos15check_results = kos15_check_receiver(&mut rng, &ts, &r_bool);
 
     // Remove padding and the last 256 rows which were sacrificed due to the KOS check
-    ts.split_off_rows(ts.rows() - padding)?;
+    ts.split_off_rows(ts.rows() - padding_len)?;
 
     let message = ExtReceiverSetup {
         count: choices.len(),

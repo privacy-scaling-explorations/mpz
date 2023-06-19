@@ -224,7 +224,7 @@ impl BuilderState {
         let one = self.get_const_one();
 
         let nodes: Vec<_> = value
-            .into_lsb0_iter()
+            .into_iter_lsb0()
             .map(|bit| if bit { one } else { zero })
             .collect();
 

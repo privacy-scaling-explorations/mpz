@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 
-use utils::bits::ToBitsIter;
+use itybity::IntoBits;
 
 use crate::{
     ops::binary::{switch_nbit, wrapping_add_nbit, wrapping_sub_nbit},
@@ -47,7 +47,7 @@ pub fn nbyte_add_mod_trace<'a, const N: usize>(
         .collect::<Vec<_>>();
     let mut modulus_bits = modulus
         .into_iter()
-        .flat_map(|m| m.into_lsb0_iter())
+        .flat_map(|m| m.into_iter_lsb0())
         .map(|bit| Node::new(bit as usize))
         .collect::<Vec<_>>();
 

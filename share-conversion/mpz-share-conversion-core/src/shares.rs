@@ -2,6 +2,7 @@
 
 use crate::fields::Field;
 
+use itybity::IntoBits;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 
@@ -84,8 +85,8 @@ where
     /// Returns the binary representation of the share.
     pub fn binary_encoding(&self) -> Vec<bool> {
         match self {
-            Self::Add(share) => share.0.into_lsb0(),
-            Self::Mul(share) => share.0.into_lsb0(),
+            Self::Add(share) => share.0.into_lsb0_vec(),
+            Self::Mul(share) => share.0.into_lsb0_vec(),
         }
     }
 

@@ -1,4 +1,4 @@
-use utils::bits::ToBits;
+use itybity::IntoBits;
 
 use crate::{
     components::Gate,
@@ -136,7 +136,7 @@ impl Circuit {
                 })?;
             }
 
-            for (node, bit) in input.iter().zip(value.clone().into_lsb0()) {
+            for (node, bit) in input.iter().zip(value.clone().into_iter_lsb0()) {
                 feeds[node.id] = Some(bit);
             }
         }

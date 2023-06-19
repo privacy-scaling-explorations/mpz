@@ -1,9 +1,9 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use itybity::IntoBits;
 use mpz_core::Block;
 use mpz_ot_core::{DhOtReceiver, DhOtSender, Kos15Receiver, Kos15Sender};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha12Rng;
-use utils::bits::IterToBits;
 
 fn base_ot(c: &mut Criterion) {
     let mut group = c.benchmark_group("base_ot");
@@ -13,7 +13,7 @@ fn base_ot(c: &mut Criterion) {
             let mut rng = ChaCha12Rng::from_entropy();
             let mut choice = vec![0u8; n / 8];
             rng.fill_bytes(&mut choice);
-            let choice = choice.into_msb0();
+            let choice = choice.into_msb0_vec();
             b.iter(|| {
                 let mut sender = DhOtSender::default();
                 let sender_setup = sender.setup(&mut rng).unwrap();
@@ -36,7 +36,7 @@ fn ext_ot(c: &mut Criterion) {
             let mut rng = ChaCha12Rng::from_entropy();
             let mut choice = vec![0u8; n / 8];
             rng.fill_bytes(&mut choice);
-            let choice = choice.into_msb0();
+            let choice = choice.into_msb0_vec();
             b.iter(|| {
                 let receiver = Kos15Receiver::default();
                 let (receiver, base_sender_setup) = receiver.base_setup().unwrap();

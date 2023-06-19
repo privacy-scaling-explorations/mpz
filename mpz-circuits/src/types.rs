@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::components::{Feed, Node};
+use itybity::{FromBits, IntoBits};
 use rand::Rng;
-use utils::bits::{FromBits, ToBits, ToBitsIter};
 
 /// An error related to binary type conversions.
 #[derive(Debug, thiserror::Error)]
@@ -24,7 +24,7 @@ pub enum TypeError {
 
 /// A type that can be represented in binary form.
 #[allow(clippy::len_without_is_empty)]
-pub trait ToBinaryRepr: ToBitsIter + Into<Value> {
+pub trait ToBinaryRepr: IntoBits + Into<Value> {
     /// The binary representation of the type.
     type Repr: Clone + Into<BinaryRepr>;
 
@@ -573,66 +573,34 @@ impl Value {
     }
 }
 
-impl ToBitsIter for Value {
-    type Lsb0Iter = Box<dyn Iterator<Item = bool> + Send + 'static>;
-    type Msb0Iter = Box<dyn Iterator<Item = bool> + Send + 'static>;
+impl IntoBits for Value {
+    type IterLsb0 = std::vec::IntoIter<bool>;
+    type IterMsb0 = std::vec::IntoIter<bool>;
 
-    fn into_lsb0_iter(self) -> Self::Lsb0Iter {
+    fn into_iter_lsb0(self) -> Self::IterLsb0 {
         match self {
-            Value::Bit(v) => Box::new(std::iter::once(v)),
-            Value::U8(v) => Box::new(v.into_lsb0_iter()),
-            Value::U16(v) => Box::new(v.into_lsb0_iter()),
-            Value::U32(v) => Box::new(v.into_lsb0_iter()),
-            Value::U64(v) => Box::new(v.into_lsb0_iter()),
-            Value::U128(v) => Box::new(v.into_lsb0_iter()),
-            Value::Array(v) => Box::new(v.into_iter().flat_map(|v| v.into_lsb0_iter())),
+            Value::Bit(v) => v.into_lsb0_vec(),
+            Value::U8(v) => v.into_lsb0_vec(),
+            Value::U16(v) => v.into_lsb0_vec(),
+            Value::U32(v) => v.into_lsb0_vec(),
+            Value::U64(v) => v.into_lsb0_vec(),
+            Value::U128(v) => v.into_lsb0_vec(),
+            Value::Array(v) => v.into_iter().flat_map(|v| v.into_iter_lsb0()).collect(),
         }
+        .into_iter()
     }
 
-    fn into_msb0_iter(self) -> Self::Msb0Iter {
+    fn into_iter_msb0(self) -> Self::IterMsb0 {
         match self {
-            Value::Bit(v) => Box::new(std::iter::once(v)),
-            Value::U8(v) => Box::new(v.into_msb0_iter()),
-            Value::U16(v) => Box::new(v.into_msb0_iter()),
-            Value::U32(v) => Box::new(v.into_msb0_iter()),
-            Value::U64(v) => Box::new(v.into_msb0_iter()),
-            Value::U128(v) => Box::new(v.into_msb0_iter()),
-            Value::Array(v) => Box::new(v.into_iter().flat_map(|v| v.into_msb0_iter())),
+            Value::Bit(v) => v.into_msb0_vec(),
+            Value::U8(v) => v.into_msb0_vec(),
+            Value::U16(v) => v.into_msb0_vec(),
+            Value::U32(v) => v.into_msb0_vec(),
+            Value::U64(v) => v.into_msb0_vec(),
+            Value::U128(v) => v.into_msb0_vec(),
+            Value::Array(v) => v.into_iter().flat_map(|v| v.into_iter_msb0()).collect(),
         }
-    }
-}
-
-impl ToBits for Value {
-    fn into_lsb0(self) -> Vec<bool> {
-        match self {
-            Value::Bit(v) => vec![v],
-            Value::U8(v) => v.into_lsb0(),
-            Value::U16(v) => v.into_lsb0(),
-            Value::U32(v) => v.into_lsb0(),
-            Value::U64(v) => v.into_lsb0(),
-            Value::U128(v) => v.into_lsb0(),
-            Value::Array(v) => v.into_iter().flat_map(|v| v.into_lsb0()).collect(),
-        }
-    }
-
-    fn into_lsb0_boxed(self: Box<Self>) -> Vec<bool> {
-        self.into_lsb0()
-    }
-
-    fn into_msb0(self) -> Vec<bool> {
-        match self {
-            Value::Bit(v) => vec![v],
-            Value::U8(v) => v.into_msb0(),
-            Value::U16(v) => v.into_msb0(),
-            Value::U32(v) => v.into_msb0(),
-            Value::U64(v) => v.into_msb0(),
-            Value::U128(v) => v.into_msb0(),
-            Value::Array(v) => v.into_iter().flat_map(|v| v.into_msb0()).collect(),
-        }
-    }
-
-    fn into_msb0_boxed(self: Box<Self>) -> Vec<bool> {
-        self.into_msb0()
+        .into_iter()
     }
 }
 

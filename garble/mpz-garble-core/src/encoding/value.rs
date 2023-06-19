@@ -1,7 +1,7 @@
+use itybity::{FromBits, ToBits};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::ops::BitXor;
-use utils::bits::{FromBits, ToBitsIter};
 
 use mpz_circuits::types::{StaticValueType, TypeError, Value, ValueType};
 use mpz_core::{hash::DomainSeparatedHash, impl_domain_separated_hash, Block};
@@ -23,7 +23,7 @@ pub enum ValueError {
 }
 
 /// A trait for encoding values.
-pub trait Encode: ToBitsIter {
+pub trait Encode {
     /// The encoded value type.
     type Encoded;
 
@@ -320,7 +320,7 @@ macro_rules! define_encoded_variant {
 
             /// Returns the active encoding of the plaintext value
             pub(crate) fn select(&self, value: $PlaintextTy) -> $EncodedTy<state::Active> {
-                let mut bits = value.into_lsb0_iter();
+                let mut bits = value.iter_lsb0();
                 let delta = self.0.delta();
                 $EncodedTy::<state::Active>::new(self.0.labels.map(|label| {
                     if bits.next().expect("bit length should match") {
@@ -559,7 +559,7 @@ macro_rules! define_decoding_info_variant {
         impl $value<state::Active> {
             /// Recovers the full encoding of this value using the decoding information and delta.
             pub(crate) fn recover(&self, decoding: &$name, delta: Delta) -> $value<state::Full> {
-                let mut decoding = decoding.0.into_lsb0_iter();
+                let mut decoding = decoding.0.iter_lsb0();
                 $value::<state::Full>::new(
                     delta,
                     self.0.labels.map(|label| {
@@ -578,7 +578,7 @@ macro_rules! define_decoding_info_variant {
                 value: $ty,
                 delta: Delta,
             ) -> $value<state::Full> {
-                let mut value = value.into_lsb0_iter();
+                let mut value = value.iter_lsb0();
                 $value::<state::Full>::new(
                     delta,
                     self.0.labels.map(|label| {
@@ -596,7 +596,7 @@ macro_rules! define_decoding_info_variant {
                 <$ty>::from_lsb0(
                     self.0
                         .iter()
-                        .zip(decoding.0.into_lsb0_iter())
+                        .zip(decoding.0.iter_lsb0())
                         .map(|(label, dec)| label.pointer_bit() ^ dec),
                 )
                 .into()

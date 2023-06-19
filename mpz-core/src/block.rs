@@ -1,10 +1,10 @@
 use aes::BlockDecrypt;
 use cipher::{consts::U16, generic_array::GenericArray, BlockCipher, BlockEncrypt};
 use core::ops::{BitAnd, BitXor};
+use itybity::{BitLength, GetBit, Lsb0, Msb0};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::convert::{From, TryInto};
-use utils::bits::ToBitsIter;
 
 /// A block of 128 bits
 #[repr(transparent)]
@@ -151,17 +151,19 @@ pub trait BlockSerialize {
     fn from_blocks(blocks: Self::Serialized) -> Self;
 }
 
-impl ToBitsIter for Block {
-    type Lsb0Iter = <u128 as ToBitsIter>::Lsb0Iter;
+impl BitLength for Block {
+    const BITS: usize = 128;
+}
 
-    type Msb0Iter = <u128 as ToBitsIter>::Msb0Iter;
-
-    fn into_lsb0_iter(self) -> Self::Lsb0Iter {
-        self.0.into_lsb0_iter()
+impl GetBit<Lsb0> for Block {
+    fn get_bit(&self, index: usize) -> bool {
+        GetBit::<Lsb0>::get_bit(&self.0, index)
     }
+}
 
-    fn into_msb0_iter(self) -> Self::Msb0Iter {
-        self.0.into_msb0_iter()
+impl GetBit<Msb0> for Block {
+    fn get_bit(&self, index: usize) -> bool {
+        GetBit::<Msb0>::get_bit(&self.0, index)
     }
 }
 

@@ -12,7 +12,6 @@ lto = true
 [dependencies]
 mpz-core.workspace = true
 mpz-circuits.workspace = true
-tlsn-utils.workspace = true
 
 aes = { workspace = true, features = [] }
 cipher.workspace = true
@@ -27,6 +26,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_arrays.workspace = true
 thiserror.workspace = true
 derive_builder.workspace = true
+itybity.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

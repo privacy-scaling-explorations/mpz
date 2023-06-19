@@ -32,7 +32,7 @@ pub mod tests {
     use rstest::*;
 
     pub mod fixtures {
-        use utils::bits::IterToBits;
+        use itybity::IntoBits;
 
         use super::*;
 
@@ -48,7 +48,7 @@ pub mod tests {
         pub fn choice() -> Vec<bool> {
             let mut choice = vec![0u8; 16];
             thread_rng().fill_bytes(&mut choice);
-            choice.into_msb0()
+            choice.into_msb0_vec()
         }
 
         #[fixture]
