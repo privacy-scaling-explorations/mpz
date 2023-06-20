@@ -9,12 +9,10 @@ use mpz_ot_core::{
     msgs::{ExtSenderEncryptedPayload, OTMessage},
     s_state::SenderState,
 };
+use mpz_utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use utils_aio::{
-    expect_msg_or_err,
-    non_blocking_backend::{Backend, NonBlockingBackend},
-};
+use utils_aio::expect_msg_or_err;
 
 pub struct Kos15IOSender<T: SenderState> {
     inner: Kos15Sender<T>,

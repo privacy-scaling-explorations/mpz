@@ -17,6 +17,8 @@ mpz-garble-core.workspace = true
 mpz-core.workspace = true
 tlsn-utils.workspace = true
 tlsn-utils-aio.workspace = true
+mpz-utils.workspace = true
+mpz-utils-aio.workspace = true
 
 async-trait.workspace = true
 prost.workspace = true

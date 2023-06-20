@@ -8,6 +8,8 @@ members = [
     "share-conversion/*",
     "matrix-transpose",
     "clmul",
+    "utils",
+    "utils-aio",
 ]
 
 [workspace.dependencies]
@@ -19,11 +21,13 @@ mpz-garble-core = { path = "garble/mpz-garble-core" }
 mpz-garble = { path = "garble/mpz-garble" }
 mpz-share-conversion-core = { path = "share-conversion/mpz-share-conversion-core" }
 mpz-share-conversion = { path = "share-conversion/mpz-share-conversion" }
+mpz-utils = { path = "utils" }
+mpz-utils-aio = { path = "utils-aio" }
 clmul = { path = "clmul" }
 matrix-transpose = { path = "matrix-transpose" }
 
-tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils" }
-tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils" }
+tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils", branch = "cleanup" }
+tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils", branch = "cleanup" }
 
 # rand
 rand_chacha = "0.3"

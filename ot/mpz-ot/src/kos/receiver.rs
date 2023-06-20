@@ -9,10 +9,8 @@ use mpz_ot_core::{
     msgs::{ExtSenderEncryptedPayload, OTMessage},
     r_state::ReceiverState,
 };
-use utils_aio::{
-    expect_msg_or_err,
-    non_blocking_backend::{Backend, NonBlockingBackend},
-};
+use mpz_utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
+use utils_aio::expect_msg_or_err;
 
 pub struct Kos15IOReceiver<T: ReceiverState> {
     inner: Kos15Receiver<T>,

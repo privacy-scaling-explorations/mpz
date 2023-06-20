@@ -14,6 +14,7 @@ mock = []
 mpz-core.workspace = true
 mpz-ot-core.workspace = true
 tlsn-utils-aio.workspace = true
+mpz-utils-aio.workspace = true
 async-trait.workspace = true
 prost.workspace = true
 futures.workspace = true

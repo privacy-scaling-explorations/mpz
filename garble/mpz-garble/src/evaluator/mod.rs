@@ -21,11 +21,9 @@ use mpz_core::{
 use mpz_garble_core::{
     encoding_state, msg::GarbleMessage, Decoding, EncodedValue, Evaluator as EvaluatorCore,
 };
+use mpz_utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 use utils::iter::FilterDrain;
-use utils_aio::{
-    expect_msg_or_err,
-    non_blocking_backend::{Backend, NonBlockingBackend},
-};
+use utils_aio::expect_msg_or_err;
 
 use crate::{
     config::ValueIdConfig,
