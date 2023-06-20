@@ -8,7 +8,6 @@ members = [
     "share-conversion/*",
     "matrix-transpose",
     "clmul",
-    "utils",
     "utils-aio",
 ]
 
@@ -21,7 +20,6 @@ mpz-garble-core = { path = "garble/mpz-garble-core" }
 mpz-garble = { path = "garble/mpz-garble" }
 mpz-share-conversion-core = { path = "share-conversion/mpz-share-conversion-core" }
 mpz-share-conversion = { path = "share-conversion/mpz-share-conversion" }
-mpz-utils = { path = "utils" }
 mpz-utils-aio = { path = "utils-aio" }
 clmul = { path = "clmul" }
 matrix-transpose = { path = "matrix-transpose" }
