@@ -87,17 +87,34 @@ mod tests {
         (0..elements).map(|_| rng.gen::<T>()).collect()
     }
 
+    fn transpose_naive(data: &[u8], row_width: usize) -> Vec<u8> {
+        use itybity::*;
+
+        let bits: Vec<Vec<bool>> = data.chunks(row_width).map(|x| x.to_lsb0_vec()).collect();
+        let col_count = bits[0].len();
+        let row_count = bits.len();
+
+        let mut bits_: Vec<Vec<bool>> = vec![vec![false; row_count]; col_count];
+        for j in 0..row_count {
+            for i in 0..col_count {
+                bits_[i][j] = bits[j][i];
+            }
+        }
+
+        bits_.into_iter().flat_map(Vec::<u8>::from_lsb0).collect()
+    }
+
     #[test]
     fn test_transpose_bits() {
-        let mut rows = 512;
+        let rows = 512;
         let columns = 256;
 
         let mut matrix: Vec<u8> = random_vec::<u8>(columns * rows);
-        let original = matrix.clone();
+        let naive = transpose_naive(&matrix, columns);
+
         transpose_bits(&mut matrix, rows).unwrap();
-        rows = columns;
-        transpose_bits(&mut matrix, 8 * rows).unwrap();
-        assert_eq!(original, matrix);
+
+        assert_eq!(naive, matrix);
     }
 
     #[test]
