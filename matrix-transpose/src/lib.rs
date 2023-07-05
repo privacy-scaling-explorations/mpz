@@ -32,6 +32,7 @@ use thiserror::Error;
 
 /// This function transposes a matrix on the bit-level.
 ///
+/// Assumes an LSB0 bit encoding of the matrix.
 /// This implementation requires that the number of rows is a power of 2
 /// and that the number of columns is a multiple of 8
 pub fn transpose_bits(matrix: &mut [u8], rows: usize) -> Result<(), TransposeError> {
@@ -158,12 +159,12 @@ mod tests {
             for k in 0..8 {
                 for (l, chunk) in row.chunks(8).enumerate() {
                     let expected: u8 = chunk.iter().enumerate().fold(0, |acc, (m, element)| {
-                        acc + (element >> 7) * 2_u8.pow(7_u32 - m as u32)
+                        acc + (element & 1) * 2_u8.pow(m as u32)
                     });
                     let actual = matrix[row_index * columns + columns / 8 * k + l];
                     assert_eq!(expected, actual);
                 }
-                let shifted_row = row.iter_mut().map(|el| *el << 1).collect::<Vec<u8>>();
+                let shifted_row = row.iter_mut().map(|el| *el >> 1).collect::<Vec<u8>>();
                 row.copy_from_slice(&shifted_row);
             }
         }
