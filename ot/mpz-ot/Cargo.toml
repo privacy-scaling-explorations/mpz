@@ -25,14 +25,14 @@ rand_core.workspace = true
 rand_chacha.workspace = true
 p256 = { workspace = true, optional = true }
 thiserror.workspace = true
+rayon = { workspace = true }
+
+[dev-dependencies]
+rstest = { workspace = true }
+criterion = { workspace = true, features = ["async_tokio"] }
 tokio = { workspace = true, features = [
     "net",
     "macros",
     "rt",
     "rt-multi-thread",
 ] }
-rayon = { workspace = true }
-
-[dev-dependencies]
-rstest = { workspace = true }
-criterion = { workspace = true, features = ["async_tokio"] }
