@@ -119,6 +119,37 @@ mod tests {
     }
 
     #[test]
+    fn test_transpose_naive() {
+        let matrix = [
+            // ------- bits in lsb0
+            3u8,   // 1 1 0 0 0 0 0 0
+            76u8,  // 0 0 1 1 0 0 1 0
+            120u8, // 0 0 0 1 1 1 1 0
+            9u8,   // 1 0 0 1 0 0 0 0
+            17u8,  // 1 0 0 0 1 0 0 0
+            102u8, // 0 1 1 0 0 1 1 0
+            53u8,  // 1 0 1 0 1 1 0 0
+            125u8, // 1 0 1 1 1 1 1 0
+        ];
+
+        let expected = [
+            // ------- bits in lsb0
+            217u8, // 1 0 0 1 1 0 1 1
+            33u8,  // 1 0 0 0 0 1 0 0
+            226u8, // 0 1 0 0 0 1 1 1
+            142u8, // 0 1 1 1 0 0 0 1
+            212u8, // 0 0 1 0 1 0 1 1
+            228u8, // 0 0 1 0 0 1 1 1
+            166u8, // 0 1 1 0 0 1 0 1
+            0u8,   // 0 0 0 0 0 0 0 0
+        ];
+
+        let naive = transpose_naive(&matrix, 1);
+
+        assert_eq!(naive, expected);
+    }
+
+    #[test]
     fn test_transpose() {
         let rounds = 7_u32;
         let mut rows = 2_usize.pow(rounds);
