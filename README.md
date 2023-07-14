@@ -1,8 +1,10 @@
 [![CI](https://github.com/tlsnotary/mpz/actions/workflows/rust.yml/badge.svg)](https://github.com/tlsnotary/mpz/actions)
 
-<p align="center">
-    <img src="./tlsn-banner.png" width=1280 />
-</p>
+# Warning
+
+The 2PC protocols in this library are designed so that at the end of execution they fully reveal all the secrets of party A and leak 1-bit information about the secrets of party B.
+
+Thus, this protocol should only be used in certain very exotic scenarios. Please make sure you fully understand these ramifications before using it.
 
 # MPZ
 
