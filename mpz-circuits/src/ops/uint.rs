@@ -142,7 +142,7 @@ impl<'a> BitXor for Tracer<'a, BinaryRepr> {
                 self.state,
                 BinaryRepr::Array(
                     a.into_iter()
-                        .zip(b.into_iter())
+                        .zip(b)
                         .map(|(a, b)| {
                             let c = Tracer::new(self.state, a) ^ Tracer::new(self.state, b);
                             c.value

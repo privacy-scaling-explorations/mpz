@@ -139,7 +139,7 @@ impl<const N: usize> ObliviousReceiveOwned<bool, [Block; N]>
         let mut plaintext: Vec<[Block; N]> = Vec::with_capacity(choices.len());
         for ((key, choice), msgs) in keys
             .iter()
-            .zip(choices.into_iter())
+            .zip(choices)
             .zip(ciphertexts.chunks_exact(2 * N * Block::LEN))
         {
             let cipher = Aes128::new(&key.to_be_bytes().into());
