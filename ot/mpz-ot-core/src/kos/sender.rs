@@ -172,7 +172,7 @@ impl Sender<state::Extension> {
         }
 
         if us.len() != NROWS * row_width {
-            panic!();
+            return Err(SenderError::InvalidExtend);
         }
 
         let mut qs = vec![0u8; NROWS * row_width];

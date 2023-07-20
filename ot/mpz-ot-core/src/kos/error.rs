@@ -6,6 +6,8 @@ pub enum SenderError {
     InvalidState(String),
     #[error("count mismatch: receiver expected {0}, got {1}")]
     CountMismatch(usize, usize),
+    #[error("invalid extend")]
+    InvalidExtend,
     #[error("consistency check failed")]
     ConsistencyCheckFailed,
     #[error("not enough OTs are setup: expected {0}, actual {1}")]
