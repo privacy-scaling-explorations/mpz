@@ -55,6 +55,7 @@ impl Receiver {
     /// # Arguments
     ///
     /// * `config` - The receiver's configuration
+    /// * `seed` - The RNG seed used to generate the receiver's keys.
     pub fn new_with_seed(config: ReceiverConfig, seed: [u8; 32]) -> Self {
         Self {
             state: State::Initialized(Box::new(ReceiverCore::new_with_seed(config, seed))),
