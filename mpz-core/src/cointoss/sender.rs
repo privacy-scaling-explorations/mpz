@@ -1,6 +1,6 @@
 use crate::{
     cointoss::{
-        msgs::{ReceiverPayload, SenderCommitments, SenderPayload},
+        msgs::{ReceiverPayload, SenderCommitment, SenderPayload},
         CointossError,
     },
     commit::HashCommit,
@@ -21,21 +21,20 @@ impl Sender {
         }
     }
 
-    /// Sends the coin-toss commitments.
-    pub fn send(self) -> (Sender<sender_state::Committed>, SenderCommitments) {
+    /// Sends the coin-toss commitment.
+    pub fn send(self) -> (Sender<sender_state::Committed>, SenderCommitment) {
         let sender_state::Initialized { seeds } = self.state;
 
-        let (decommitments, commitments): (Vec<_>, Vec<_>) =
-            seeds.iter().copied().map(|seed| seed.hash_commit()).unzip();
+        let (decommitment, commitment) = seeds.clone().hash_commit();
 
         (
             Sender {
                 state: sender_state::Committed {
                     seeds,
-                    decommitments,
+                    decommitment,
                 },
             },
-            SenderCommitments { commitments },
+            SenderCommitment { commitment },
         )
     }
 }
@@ -65,7 +64,7 @@ impl Sender<sender_state::Committed> {
         Ok((
             seeds,
             SenderPayload {
-                decommitments: self.state.decommitments,
+                decommitment: self.state.decommitment,
             },
         ))
     }
@@ -101,7 +100,7 @@ pub mod sender_state {
     /// The sender's committed state.
     pub struct Committed {
         pub(super) seeds: Vec<Block>,
-        pub(super) decommitments: Vec<Decommitment<Block>>,
+        pub(super) decommitment: Decommitment<Vec<Block>>,
     }
 
     impl State for Committed {}

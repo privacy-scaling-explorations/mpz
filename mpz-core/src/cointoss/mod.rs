@@ -15,8 +15,8 @@
 //! let sender = Sender::new(sender_seeds);
 //! let receiver = Receiver::new(receiver_seeds);
 //!
-//! let (sender, commitments) = sender.send();
-//! let (receiver, receiver_payload) = receiver.reveal(commitments)?;
+//! let (sender, commitment) = sender.send();
+//! let (receiver, receiver_payload) = receiver.reveal(commitment)?;
 //! let (sender_output, sender_payload) = sender.finalize(receiver_payload)?;
 //! let receiver_output = receiver.finalize(sender_payload)?;
 //!

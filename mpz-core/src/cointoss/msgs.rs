@@ -8,23 +8,23 @@ use crate::{commit::Decommitment, hash::Hash, Block};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(missing_docs)]
 pub enum Message {
-    SenderCommitments(SenderCommitments),
+    SenderCommitments(SenderCommitment),
     SenderPayload(SenderPayload),
     ReceiverPayload(ReceiverPayload),
 }
 
-/// The coin-toss sender's commitments.
+/// The coin-toss sender's commitment.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SenderCommitments {
-    /// The commitments to the random seeds.
-    pub commitments: Vec<Hash>,
+pub struct SenderCommitment {
+    /// The commitment to the random seeds.
+    pub commitment: Hash,
 }
 
 /// The coin-toss sender's payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SenderPayload {
-    /// The decommitments to the random seeds.
-    pub decommitments: Vec<Decommitment<Block>>,
+    /// The decommitment to the random seeds.
+    pub decommitment: Decommitment<Vec<Block>>,
 }
 
 /// The coin-toss receiver's payload.

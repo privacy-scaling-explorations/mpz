@@ -1,6 +1,6 @@
 use crate::{
     cointoss::{
-        msgs::{ReceiverPayload, SenderCommitments, SenderPayload},
+        msgs::{ReceiverPayload, SenderCommitment, SenderPayload},
         CointossError,
     },
     hash::Hash,
@@ -21,25 +21,18 @@ impl Receiver {
         }
     }
 
-    /// Reveals the receiver's seeds after receiving the sender's commitments.
+    /// Reveals the receiver's seeds after receiving the sender's commitment.
     pub fn reveal(
         self,
-        sender_commitments: SenderCommitments,
+        sender_commitment: SenderCommitment,
     ) -> Result<(Receiver<receiver_state::Received>, ReceiverPayload), CointossError> {
         let receiver_state::Initialized { seeds } = self.state;
-
-        if sender_commitments.commitments.len() != seeds.len() {
-            return Err(CointossError::CountMismatch {
-                expected: sender_commitments.commitments.len(),
-                actual: seeds.len(),
-            });
-        }
 
         Ok((
             Receiver {
                 state: receiver_state::Received {
                     seeds: seeds.clone(),
-                    commitments: sender_commitments.commitments,
+                    commitment: sender_commitment.commitment,
                 },
             },
             ReceiverPayload { seeds },
@@ -50,34 +43,25 @@ impl Receiver {
 impl Receiver<receiver_state::Received> {
     /// Finalizes the coin-toss, returning the random seeds.
     pub fn finalize(self, payload: SenderPayload) -> Result<Vec<Block>, CointossError> {
-        let decommitments = payload.decommitments;
+        let decommitment = payload.decommitment;
         let receiver_seeds = self.state.seeds;
-        let commitments = self.state.commitments;
+        let commitment = self.state.commitment;
 
-        if decommitments.len() != receiver_seeds.len() {
+        if decommitment.data().len() != receiver_seeds.len() {
             return Err(CointossError::CountMismatch {
-                expected: decommitments.len(),
+                expected: decommitment.data().len(),
                 actual: receiver_seeds.len(),
             });
         }
 
-        if commitments.len() != receiver_seeds.len() {
-            return Err(CointossError::CountMismatch {
-                expected: commitments.len(),
-                actual: receiver_seeds.len(),
-            });
-        }
+        decommitment.verify(&commitment)?;
 
-        decommitments
+        Ok(decommitment
+            .into_inner()
             .into_iter()
             .zip(receiver_seeds)
-            .zip(commitments)
-            .map(|((decommitment, receiver_seed), commitment)| {
-                decommitment.verify(&commitment)?;
-
-                Ok(receiver_seed ^ decommitment.into_inner())
-            })
-            .collect::<Result<Vec<_>, CointossError>>()
+            .map(|(decommitment, receiver_seed)| receiver_seed ^ decommitment)
+            .collect::<Vec<_>>())
     }
 }
 
@@ -106,10 +90,10 @@ pub mod receiver_state {
 
     opaque_debug::implement!(Initialized);
 
-    /// The receiver's state after receiving the sender's commitments.
+    /// The receiver's state after receiving the sender's commitment.
     pub struct Received {
         pub(super) seeds: Vec<Block>,
-        pub(super) commitments: Vec<Hash>,
+        pub(super) commitment: Hash,
     }
 
     impl State for Received {}
