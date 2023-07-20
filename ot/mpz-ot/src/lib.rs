@@ -5,6 +5,7 @@
 #![deny(clippy::all)]
 
 pub mod chou_orlandi;
+pub mod kos;
 #[cfg(feature = "mock")]
 pub mod mock;
 
