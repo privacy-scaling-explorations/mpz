@@ -48,6 +48,7 @@ impl Receiver {
     /// # Arguments
     ///
     /// * `config` - The receiver's configuration
+    /// * `seed` - The RNG seed used to generate the receiver's keys
     pub fn new_with_seed(config: ReceiverConfig, seed: [u8; 32]) -> Self {
         Self {
             config,
@@ -186,7 +187,6 @@ impl Receiver<state::Setup> {
 ///
 /// # Arguments
 ///
-/// * `rng` - A crypto-secure RNG
 /// * `base_table` - A Ristretto basepoint table from the sender's public key
 /// * `receiver_private_keys` - The private keys of the OT receiver
 /// * `choices` - The choices of the OT receiver

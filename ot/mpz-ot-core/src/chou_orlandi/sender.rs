@@ -58,7 +58,7 @@ impl Sender {
     /// # Arguments
     ///
     /// * `config` - The Sender's configuration
-    /// * `seed` - The RNG seed
+    /// * `seed` - The RNG seed used to generate the sender's keys
     pub fn new_with_seed(config: SenderConfig, seed: [u8; 32]) -> Self {
         let mut rng = ChaCha20Rng::from_seed(seed);
 
