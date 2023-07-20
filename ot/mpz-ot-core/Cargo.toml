@@ -6,6 +6,10 @@ edition = "2021"
 [lib]
 name = "mpz_ot_core"
 
+[features]
+default = ["rayon"]
+rayon = ["dep:rayon", "itybity/rayon"]
+
 [dependencies]
 mpz-core.workspace = true
 clmul.workspace = true
@@ -19,12 +23,15 @@ cipher.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 rand_chacha.workspace = true
+rayon = { workspace = true, optional = true }
 curve25519-dalek = { workspace = true, features = ["serde", "rand_core"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 derive_builder.workspace = true
-merlin.workspace = true
-itybity.workspace = true
+itybity = { path = "../../../itybity" }
+opaque-debug.workspace = true
+cfg-if.workspace = true
+enum-try-as-inner = { tag = "0.1.0", git = "https://github.com/sinui0/enum-try-as-inner" }
 
 [dev-dependencies]
 rstest.workspace = true

@@ -23,7 +23,7 @@ clmul = { path = "clmul" }
 matrix-transpose = { path = "matrix-transpose" }
 
 tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils" }
-tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils" }
+tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils", branch = "feature/duplex" }
 
 # rand
 rand_chacha = "0.3"
