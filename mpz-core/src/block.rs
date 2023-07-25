@@ -167,13 +167,20 @@ mod tests {
 
     #[test]
     fn test_set_lsb() {
+        let zero = [0; 16];
         let mut one = [0; 16];
         one[0] = 1;
+        let mut three = [0; 16];
+        three[0] = 3;
 
-        let mut b = Block::new([0; 16]);
+        let mut b = Block::new(zero);
         b.set_lsb();
-
         assert_eq!(Block::new(one), b);
+
+        // no-op when the bit is already set
+        let mut b = Block::new(three);
+        b.set_lsb();
+        assert_eq!(Block::new(three), b);
     }
 
     #[test]
@@ -185,6 +192,18 @@ mod tests {
         one[0] = 1;
 
         let a = Block::new(one);
+        assert_eq!(a.lsb(), 1);
+
+        let mut two = [0; 16];
+        two[0] = 2;
+
+        let a = Block::new(two);
+        assert_eq!(a.lsb(), 0);
+
+        let mut three = [0; 16];
+        three[0] = 3;
+
+        let a = Block::new(three);
         assert_eq!(a.lsb(), 1);
     }
 }
