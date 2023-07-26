@@ -6,7 +6,7 @@ use once_cell::sync::Lazy;
 
 use crate::Block;
 
-/// AES fixed key
+/// A fixed AES key (arbitrarily chosen).
 pub const FIXED_KEY: [u8; 16] = [
     69, 42, 69, 42, 69, 42, 69, 42, 69, 42, 69, 42, 69, 42, 69, 42,
 ];
@@ -25,9 +25,9 @@ impl FixedKeyAes {
     /// Tweakable circular correlation-robust hash function instantiated
     /// using fixed-key AES.
     ///
-    /// See <https://eprint.iacr.org/2019/074>
+    /// See <https://eprint.iacr.org/2019/074> (Section 7.4)
     ///
-    /// `π(π(x) ⊕ i) ⊕ π(x)`
+    /// `π(π(x) ⊕ i) ⊕ π(x)`, where `π` is instantiated using fixed-key AES.
     #[inline]
     pub fn tccr(&self, tweak: Block, block: Block) -> Block {
         let tweak = GenericArray::from(tweak);
