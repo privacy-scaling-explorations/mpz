@@ -7,17 +7,21 @@ edition = "2021"
 name = "mpz_core"
 
 [features]
-default = []
+default = ["cointoss"]
+cointoss = ["dep:rand_chacha"]
 
 [dependencies]
 aes = { workspace = true, features = [] }
 cipher.workspace = true
 blake3.workspace = true
+clmul.workspace = true
 rand.workspace = true
+rand_chacha = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 once_cell.workspace = true
 itybity.workspace = true
+opaque-debug.workspace = true
 bcs = "0.1.5"
 
 [dev-dependencies]
