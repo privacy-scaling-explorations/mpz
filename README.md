@@ -1,18 +1,39 @@
 [![CI](https://github.com/tlsnotary/mpz/actions/workflows/rust.yml/badge.svg)](https://github.com/tlsnotary/mpz/actions)
 
-<p align="center">
-    <img src="./tlsn-banner.png" width=1280 />
-</p>
-
 # MPZ
 
-Multi Party computation made eaZy in Rust
+mpz is a collection of multi-party computation libraries written in Rust 🦀.
 
-MPC crates for the development of [TLSNotary](https://github.com/tlsnotary/tlsn)
+This project strives to provide safe, performant, modular and portable MPC software with a focus on usability.
+
+See [our design doc](./DESIGN.md) for information on design choices, standards and project structure.
 
 ## ⚠️ Notice
 
-This project is currently under active development and should not be used in production. Expect bugs and regular major breaking changes.
+This project is currently under active development and should not be used in production. Expect bugs and regular major breaking changes. Use at your own risk.
+
+## Crates
+
+**Core**
+  - `mpz-core` - Assortment of low-level primitives.
+  - `matrix-transpose` - Bit-wise matrix transposition.
+  - `clmul` - Carry-less multiplication
+
+**Circuits**
+  - `mpz-circuits` - Boolean circuit DSL
+  - `mpz-circuits-macros` - Proc-macros for `mpz-circuits`
+
+**Oblivious Transfer**
+  - `mpz-ot` - High-level async APIs
+  - `mpz-ot-core` - Low-level types for OT, and core implementations of OT protocols.
+  
+**Garbled Circuits**
+  - `mpz-garble` - High-level APIs for boolean garbled circuit protocols, including VM abstractions.
+  - `mpz-garble-core` - Low-level types for boolean half-gate garbling algorithm.
+
+**Share Conversion**
+  - `mpz-share-conversion` - High-level APIs for Multiplicative-to-Additive and Additive-to-Multiplicative share conversion protocols for a variety of fields.
+  - `mpz-share-conversion-core` - Low-level types for share conversion protocols.
 
 ## License
 All crates in this repository are licensed under either of
@@ -22,18 +43,6 @@ All crates in this repository are licensed under either of
 
 at your option.
 
-## Overview
-
-Home of multi-party computation libraries:
-
-  - oblivious transfer: Core building block used a lot in our codebase.
-  - garbling: We use several variants of garbled circuit executions in our codebase
-    (DEAP, Dual-Ex, ZK)
-  - circuits: code to build circuits, with some basic circuit components
-    available.
-  - share-conversion: supports converting between additive and multiplicative
-    shares for performing finite-field arithmetic in 2PC.
-
 ## Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
@@ -41,3 +50,12 @@ for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Contributors
+
+- [TLSNotary](https://github.com/tlsnotary)
+
+
+### Pronounciation
+
+mpz is pronounced "em-peasy".
