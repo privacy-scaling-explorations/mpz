@@ -5,6 +5,8 @@ First off, thank you for contributing to `mpz`.
 If your contribution is not straightforward, please first discuss the change you
 wish to make by creating a new issue.
 
+See [our design doc](./DESIGN.md) for information on design choices, standards and project structure.
+
 ## Reporting issues
 
 Before reporting an issue on the
