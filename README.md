@@ -1,4 +1,4 @@
-[![CI](https://github.com/tlsnotary/mpz/actions/workflows/rust.yml/badge.svg)](https://github.com/tlsnotary/mpz/actions)
+[![CI](https://github.com/privacy-scaling-explorations/mpz/actions/workflows/rust.yml/badge.svg)](https://github.com/privacy-scaling-explorations/mpz/actions)
 
 # MPZ
 
