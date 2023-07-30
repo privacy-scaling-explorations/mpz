@@ -14,7 +14,7 @@ use utils_aio::{
     stream::{ExpectStreamExt, IoStream},
 };
 
-use crate::{OTError, OTReceiver, RevealChoices};
+use crate::{CommittedOTReceiver, OTError, OTReceiver};
 
 use super::ReceiverError;
 
@@ -142,7 +142,7 @@ where
 }
 
 #[async_trait]
-impl RevealChoices for Receiver {
+impl CommittedOTReceiver<bool, Block> for Receiver {
     async fn reveal_choices<
         Si: IoSink<Self::Msg> + Send + Unpin,
         St: IoStream<Self::Msg> + Send + Unpin,

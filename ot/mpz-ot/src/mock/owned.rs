@@ -1,6 +1,7 @@
 use crate::{
-    OTError, OTReceiver, OTReceiverWithIo, OTSender, OTSenderWithIo, RevealChoices, RevealMessages,
-    RevealMessagesWithIo, VerifyChoices, VerifyMessages, VerifyMessagesWithIo,
+    CommittedOTReceiver, CommittedOTSender, CommittedOTSenderWithIo, OTError, OTReceiver,
+    OTReceiverWithIo, OTSender, OTSenderWithIo, VerifiableOTReceiver, VerifiableOTReceiverWithIo,
+    VerifiableOTSender,
 };
 use async_trait::async_trait;
 use futures::{
@@ -129,23 +130,24 @@ where
 }
 
 #[async_trait]
-impl<T> VerifyMessages<[T; 2]> for MockOTReceiver<T>
+impl<U, V> VerifiableOTReceiver<bool, U, V> for MockOTReceiver<U>
 where
-    T: Send + Sync + 'static,
+    U: Send + Sync + 'static,
+    V: Send + Sync + 'static,
 {
     async fn verify<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
         &mut self,
         _sink: &mut Si,
         _stream: &mut St,
         _index: usize,
-        _msgs: &[[T; 2]],
+        _msgs: &[V],
     ) -> Result<(), OTError> {
         Ok(())
     }
 }
 
 #[async_trait]
-impl<T> VerifyMessagesWithIo<[T; 2]> for MockOTReceiver<T>
+impl<T> VerifiableOTReceiverWithIo<[T; 2]> for MockOTReceiver<T>
 where
     T: Send + Sync + 'static,
 {
@@ -155,9 +157,9 @@ where
 }
 
 #[async_trait]
-impl<T> RevealMessages for MockOTSender<T>
+impl<T> CommittedOTSender<[T; 2]> for MockOTSender<T>
 where
-    T: Send + 'static,
+    T: Send + Sync + Clone + 'static,
 {
     async fn reveal<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
         &mut self,
@@ -169,7 +171,7 @@ where
 }
 
 #[async_trait]
-impl<T> RevealMessagesWithIo for MockOTSender<T>
+impl<T> CommittedOTSenderWithIo for MockOTSender<T>
 where
     T: Send + 'static,
 {
@@ -179,9 +181,9 @@ where
 }
 
 #[async_trait]
-impl<T> RevealChoices for MockOTReceiver<T>
+impl<T> CommittedOTReceiver<bool, T> for MockOTReceiver<T>
 where
-    T: Send,
+    T: Send + Sync + 'static,
 {
     async fn reveal_choices<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
         &mut self,
@@ -199,9 +201,9 @@ where
 }
 
 #[async_trait]
-impl<T> VerifyChoices<Vec<bool>> for MockOTSender<T>
+impl<T> VerifiableOTSender<bool, [T; 2]> for MockOTSender<T>
 where
-    T: Send,
+    T: Send + Sync + Clone + 'static,
 {
     async fn verify_choices<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
         &mut self,

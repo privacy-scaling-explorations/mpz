@@ -1,4 +1,4 @@
-use crate::{chou_orlandi::SenderError, OTError, OTSender, VerifyChoices};
+use crate::{chou_orlandi::SenderError, OTError, OTSender, VerifiableOTSender};
 
 use async_trait::async_trait;
 use futures_util::SinkExt;
@@ -127,7 +127,7 @@ impl OTSender<[Block; 2]> for Sender {
 }
 
 #[async_trait]
-impl VerifyChoices<Vec<bool>> for Sender {
+impl VerifiableOTSender<bool, [Block; 2]> for Sender {
     async fn verify_choices<
         Si: IoSink<Message> + Send + Unpin,
         St: IoStream<Message> + Send + Unpin,

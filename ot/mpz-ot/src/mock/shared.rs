@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use futures::channel::oneshot;
 
 use crate::{
-    OTError, OTReceiverShared, OTSenderShared, RevealMessagesShared, VerifyMessagesShared,
+    CommittedOTSenderShared, OTError, OTReceiverShared, OTSenderShared, VerifiableOTReceiverShared,
 };
 
 /// Creates a mock sender and receiver pair.
@@ -58,7 +58,9 @@ impl<T: Clone + std::fmt::Debug + Send + Sync + 'static> OTSenderShared<[T; 2]>
 }
 
 #[async_trait]
-impl RevealMessagesShared for MockSharedOTSender {
+impl<T: Clone + std::fmt::Debug + Send + Sync + 'static> CommittedOTSenderShared<[T; 2]>
+    for MockSharedOTSender
+{
     async fn reveal(&self) -> Result<(), OTError> {
         Ok(())
     }
@@ -108,7 +110,9 @@ impl<T: Send + Copy + 'static> OTReceiverShared<bool, T> for MockSharedOTReceive
 }
 
 #[async_trait]
-impl<T: Send + 'static> VerifyMessagesShared<[T; 2]> for MockSharedOTReceiver {
+impl<T: Send + Copy + 'static> VerifiableOTReceiverShared<bool, T, [T; 2]>
+    for MockSharedOTReceiver
+{
     async fn verify(&self, _id: &str, _msgs: &[[T; 2]]) -> Result<(), OTError> {
         // MockOT is always honest
         Ok(())

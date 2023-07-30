@@ -71,9 +71,13 @@ where
     ) -> Result<Vec<U>, OTError>;
 }
 
-/// An oblivious transfer sender that can reveal its messages.
+/// An oblivious transfer sender that is committed to its messages and can reveal them
+/// to the receiver to verify them.
 #[async_trait]
-pub trait RevealMessages: ProtocolMessage {
+pub trait CommittedOTSender<T>: OTSender<T>
+where
+    T: Send + Sync,
+{
     /// Reveals all messages sent to the receiver.
     ///
     /// # Warning
@@ -93,7 +97,10 @@ pub trait RevealMessages: ProtocolMessage {
 
 /// An oblivious transfer sender that can verify the receiver's choices.
 #[async_trait]
-pub trait VerifyChoices<T>: ProtocolMessage {
+pub trait VerifiableOTSender<T, U>: OTSender<U>
+where
+    U: Send + Sync,
+{
     /// Receives the purported choices made by the receiver and verifies them.
     ///
     /// # Arguments
@@ -107,12 +114,17 @@ pub trait VerifyChoices<T>: ProtocolMessage {
         &mut self,
         sink: &mut Si,
         stream: &mut St,
-    ) -> Result<T, OTError>;
+    ) -> Result<Vec<T>, OTError>;
 }
 
-/// An oblivious transfer receiver that can reveal its choices.
+/// An oblivious transfer receiver that is committed to its choices and can reveal them
+/// to the sender to verify them.
 #[async_trait]
-pub trait RevealChoices: ProtocolMessage {
+pub trait CommittedOTReceiver<T, U>: OTReceiver<T, U>
+where
+    T: Send + Sync,
+    U: Send + Sync,
+{
     /// Reveals the choices made by the receiver.
     ///
     /// # Warning
@@ -135,9 +147,11 @@ pub trait RevealChoices: ProtocolMessage {
 
 /// An oblivious transfer receiver that can verify the sender's messages.
 #[async_trait]
-pub trait VerifyMessages<T>: ProtocolMessage
+pub trait VerifiableOTReceiver<T, U, V>: OTReceiver<T, U>
 where
     T: Send + Sync,
+    U: Send + Sync,
+    V: Send + Sync,
 {
     /// Verifies purported messages sent by the sender.
     ///
@@ -152,7 +166,7 @@ where
         sink: &mut Si,
         stream: &mut St,
         index: usize,
-        msgs: &[T],
+        msgs: &[V],
     ) -> Result<(), OTError>;
 }
 
@@ -184,9 +198,10 @@ pub trait OTReceiverShared<T, U> {
     async fn receive(&self, id: &str, choices: &[T]) -> Result<Vec<U>, OTError>;
 }
 
-/// An oblivious transfer sender that can reveal its messages and can be used via a shared reference.
+/// An oblivious transfer sender that is committed to its messages and can reveal them
+/// to the receiver to verify them.
 #[async_trait]
-pub trait RevealMessagesShared {
+pub trait CommittedOTSenderShared<T>: OTSenderShared<T> {
     /// Reveals all messages sent to the receiver.
     ///
     /// # Warning
@@ -199,14 +214,14 @@ pub trait RevealMessagesShared {
 
 /// An oblivious transfer receiver that can verify the sender's messages and can be used via a shared reference.
 #[async_trait]
-pub trait VerifyMessagesShared<T> {
+pub trait VerifiableOTReceiverShared<T, U, V>: OTReceiverShared<T, U> {
     /// Verifies purported messages sent by the sender.
     ///
     /// # Arguments
     ///
     /// * `id` - The unique identifier for the transfer corresponding to the messages.
     /// * `msgs` - The purported messages sent by the sender.
-    async fn verify(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
+    async fn verify(&self, id: &str, msgs: &[V]) -> Result<(), OTError>;
 }
 
 // ########################################################################
@@ -230,7 +245,7 @@ where
 /// An oblivious transfer sender that owns its own IO channels, and
 /// can reveal its messages.
 #[async_trait]
-pub trait RevealMessagesWithIo {
+pub trait CommittedOTSenderWithIo {
     /// Reveals all messages sent to the receiver.
     ///
     /// # Warning
@@ -242,7 +257,7 @@ pub trait RevealMessagesWithIo {
 /// An oblivious transfer sender that owns its own IO Channels,
 /// and can verify the receiver's choices.
 #[async_trait]
-pub trait VerifyChoicesWithIo<T> {
+pub trait VerifiableOTSenderWithIo<T> {
     /// Receives the purported choices made by the receiver and verifies them.
     async fn verify_choices(&mut self) -> Result<T, OTError>;
 }
@@ -264,7 +279,7 @@ where
 
 /// An oblivious transfer receiver that can reveal its choices.
 #[async_trait]
-pub trait RevealChoicesWithIo {
+pub trait CommittedOTReceiverWithIo {
     /// Reveals the choices made by the receiver.
     ///
     /// # Warning
@@ -276,7 +291,7 @@ pub trait RevealChoicesWithIo {
 /// An oblivious transfer receiver that owns its own IO channels, and
 /// can verify the sender's messages.
 #[async_trait]
-pub trait VerifyMessagesWithIo<T>
+pub trait VerifiableOTReceiverWithIo<T>
 where
     T: Send + Sync,
 {

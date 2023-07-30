@@ -54,7 +54,7 @@
 //! ```
 //! use utils_aio::duplex::MpscDuplex;
 //! use mpz_ot::chou_orlandi::{Receiver, Sender, SenderConfig, ReceiverConfig};
-//! use mpz_ot::{OTReceiver, OTSender, RevealChoices, VerifyChoices};
+//! use mpz_ot::{OTReceiver, OTSender, CommittedOTReceiver, VerifiableOTSender};
 //! use mpz_core::Block;
 //! use futures::StreamExt;
 //!
@@ -128,7 +128,7 @@ mod tests {
     use rand_core::SeedableRng;
     use utils_aio::{duplex::MpscDuplex, sink::IoSink, stream::IoStream};
 
-    use crate::{OTReceiver, OTSender, RevealChoices, VerifyChoices};
+    use crate::{CommittedOTReceiver, OTReceiver, OTSender, VerifiableOTSender};
 
     use super::*;
     use rstest::*;
