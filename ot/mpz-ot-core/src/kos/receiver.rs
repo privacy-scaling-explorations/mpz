@@ -306,7 +306,7 @@ impl Receiver<state::Extension> {
                 .map(|(setup_choice, new_choice)| setup_choice ^ new_choice),
         );
 
-        self.state.choices.copy_from_slice(choices);
+        self.state.choices[..choices.len()].copy_from_slice(choices);
 
         Derandomize { flip }
     }
