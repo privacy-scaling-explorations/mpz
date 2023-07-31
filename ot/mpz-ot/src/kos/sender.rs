@@ -1,4 +1,6 @@
-use crate::{kos::SenderError, OTError, OTReceiver, OTSender, RevealChoices, RevealMessages};
+use crate::{
+    kos::SenderError, CommittedOTReceiver, CommittedOTSender, OTError, OTReceiver, OTSender,
+};
 
 use async_trait::async_trait;
 use futures_util::SinkExt;
@@ -205,9 +207,9 @@ where
 }
 
 #[async_trait]
-impl<BaseOT> RevealMessages for Sender<BaseOT>
+impl<BaseOT> CommittedOTSender<[Block; 2]> for Sender<BaseOT>
 where
-    BaseOT: RevealChoices + ProtocolMessage + Send,
+    BaseOT: CommittedOTReceiver<bool, Block> + ProtocolMessage + Send,
 {
     async fn reveal<
         Si: IoSink<Self::Msg> + Send + Unpin,

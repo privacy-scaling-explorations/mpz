@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use futures::SinkExt;
-use itybity::{BitIterable, FromBitIterator, IntoBitIterator};
+use itybity::{FromBitIterator, IntoBitIterator};
 use mpz_core::{cointoss, Block, ProtocolMessage};
 use mpz_ot_core::kos::{
     msgs::Message, receiver_state as state, Receiver as ReceiverCore, ReceiverConfig, CSP, SSP,
@@ -14,7 +14,7 @@ use utils_aio::{
     stream::{ExpectStreamExt, IoStream},
 };
 
-use crate::{OTError, OTReceiver, OTSender, VerifyChoices, VerifyMessages};
+use crate::{OTError, OTReceiver, OTSender, VerifiableOTReceiver, VerifiableOTSender};
 
 use super::{into_base_sink, into_base_stream, ReceiverError};
 
@@ -171,10 +171,9 @@ where
 }
 
 #[async_trait]
-impl<BaseOT, T> OTReceiver<T, Block> for Receiver<BaseOT>
+impl<BaseOT> OTReceiver<bool, Block> for Receiver<BaseOT>
 where
     BaseOT: ProtocolMessage + Send,
-    T: BitIterable + Send + Sync + 'static,
 {
     async fn receive<
         Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
@@ -183,7 +182,7 @@ where
         &mut self,
         sink: &mut Si,
         stream: &mut St,
-        choices: &[T],
+        choices: &[bool],
     ) -> Result<Vec<Block>, OTError> {
         let mut receiver = self
             .state
@@ -219,9 +218,9 @@ where
 }
 
 #[async_trait]
-impl<BaseOT> VerifyMessages<[Block; 2]> for Receiver<BaseOT>
+impl<BaseOT> VerifiableOTReceiver<bool, Block, [Block; 2]> for Receiver<BaseOT>
 where
-    BaseOT: VerifyChoices<Vec<bool>> + ProtocolMessage + Send,
+    BaseOT: VerifiableOTSender<bool, [Block; 2]> + ProtocolMessage + Send,
 {
     async fn verify<
         Si: IoSink<Self::Msg> + Send + Unpin,
