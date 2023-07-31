@@ -9,14 +9,13 @@ use crate::{
     msgs::Derandomize,
 };
 
-use itybity::{FromBitIterator, ToBits};
+use itybity::{FromBitIterator, IntoBits, ToBits};
 use mpz_core::{aes::FIXED_KEY_AES, Block};
 
 use blake3::Hasher;
 use rand::{thread_rng, Rng as _, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use rand_core::RngCore;
-use utils::bits::ToBitsIter;
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
@@ -140,7 +139,7 @@ impl Receiver<state::Extension> {
 
         let mut rng = thread_rng();
         let choices = (0..row_width)
-            .flat_map(|_| rng.gen::<u8>().into_lsb0_iter())
+            .flat_map(|_| rng.gen::<u8>().into_iter_lsb0())
             .collect::<Vec<_>>();
 
         let choice_vector = Vec::<u8>::from_lsb0_iter(choices.iter().copied());
@@ -157,7 +156,7 @@ impl Receiver<state::Extension> {
                 let iter = self.state.rngs
                     .iter_mut()
                     .zip(ts.chunks_exact_mut(row_width))
-                    .zip(uss.chunks_exact_mut(row_width));
+                    .zip(us.chunks_exact_mut(row_width));
             }
         }
 
@@ -241,8 +240,6 @@ impl Receiver<state::Extension> {
                         },
                     );
             } else {
-                use itybity::ToBits;
-
                 let (x, t0, t1) = unchecked_choices.iter()
                     .zip(&unchecked_ts)
                     .zip(chis)
