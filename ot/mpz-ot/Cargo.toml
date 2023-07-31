@@ -35,6 +35,7 @@ tokio = { workspace = true, features = [
 rayon = { workspace = true }
 itybity.workspace = true
 enum-try-as-inner = { tag = "0.1.0", git = "https://github.com/sinui0/enum-try-as-inner" }
+opaque-debug.workspace = true
 
 [dev-dependencies]
 rstest = { workspace = true }

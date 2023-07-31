@@ -2,10 +2,11 @@ use crate::{chou_orlandi::SenderError, OTError, OTSender, VerifiableOTSender};
 
 use async_trait::async_trait;
 use futures_util::SinkExt;
-use mpz_core::{Block, ProtocolMessage};
+use mpz_core::{cointoss, Block, ProtocolMessage};
 use mpz_ot_core::chou_orlandi::{
     msgs::Message, sender_state as state, Sender as SenderCore, SenderConfig,
 };
+use rand::{thread_rng, Rng};
 use utils_aio::{
     non_blocking_backend::{Backend, NonBlockingBackend},
     sink::IoSink,
@@ -32,6 +33,7 @@ impl From<enum_try_as_inner::Error<State>> for SenderError {
 #[derive(Debug)]
 pub struct Sender {
     state: State,
+    cointoss_receiver: Option<cointoss::Receiver<cointoss::receiver_state::Received>>,
 }
 
 impl Sender {
@@ -43,6 +45,7 @@ impl Sender {
     pub fn new(config: SenderConfig) -> Self {
         Self {
             state: State::Initialized(SenderCore::new(config)),
+            cointoss_receiver: None,
         }
     }
 
@@ -55,6 +58,7 @@ impl Sender {
     pub fn new_with_seed(config: SenderConfig, seed: [u8; 32]) -> Self {
         Self {
             state: State::Initialized(SenderCore::new_with_seed(config, seed)),
+            cointoss_receiver: None,
         }
     }
 
@@ -71,18 +75,40 @@ impl Sender {
     ) -> Result<(), SenderError> {
         let sender = self.state.replace(State::Error).into_initialized()?;
 
+        // If the receiver is committed, we run the cointoss protocol
+        if sender.config().receiver_commit() {
+            self.cointoss_receiver = Some(execute_cointoss(sink, stream).await?);
+        }
+
         let (msg, sender) = sender.setup();
 
         sink.send(Message::SenderSetup(msg)).await?;
-
-        let receiver_setup = stream.expect_next().await?.into_receiver_setup()?;
-
-        let sender = Backend::spawn(|| sender.receive_setup(receiver_setup)).await?;
 
         self.state = State::Setup(sender);
 
         Ok(())
     }
+}
+
+async fn execute_cointoss<
+    Si: IoSink<Message> + Send + Unpin,
+    St: IoStream<Message> + Send + Unpin,
+>(
+    sink: &mut Si,
+    stream: &mut St,
+) -> Result<cointoss::Receiver<cointoss::receiver_state::Received>, SenderError> {
+    let receiver = cointoss::Receiver::new(vec![thread_rng().gen()]);
+
+    let commitment = stream
+        .expect_next()
+        .await?
+        .into_cointoss_sender_commitment()?;
+
+    let (receiver, payload) = receiver.reveal(commitment)?;
+
+    sink.send(Message::CointossReceiverPayload(payload)).await?;
+
+    Ok(receiver)
 }
 
 impl ProtocolMessage for Sender {
@@ -142,13 +168,32 @@ impl VerifiableOTSender<bool, [Block; 2]> for Sender {
             .into_setup()
             .map_err(SenderError::from)?;
 
+        let Some(cointoss_receiver) = self.cointoss_receiver.take() else {
+            Err(SenderError::InvalidConfig(
+                "receiver commitment not enabled".to_string(),
+            ))?
+        };
+
+        let cointoss_payload = stream
+            .expect_next()
+            .await?
+            .into_cointoss_sender_payload()
+            .map_err(SenderError::from)?;
+
         let receiver_reveal = stream
             .expect_next()
             .await?
             .into_receiver_reveal()
             .map_err(SenderError::from)?;
 
-        Backend::spawn(move || sender.verify_choices(receiver_reveal))
+        let cointoss_seed = cointoss_receiver
+            .finalize(cointoss_payload)
+            .map_err(SenderError::from)?[0];
+        let mut receiver_seed = [0u8; 32];
+        receiver_seed[..16].copy_from_slice(&cointoss_seed.to_bytes());
+        receiver_seed[16..].copy_from_slice(&cointoss_seed.to_bytes());
+
+        Backend::spawn(move || sender.verify_choices(receiver_seed, receiver_reveal))
             .await
             .map_err(SenderError::from)
             .map_err(OTError::from)

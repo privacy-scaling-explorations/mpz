@@ -16,9 +16,8 @@ fn chou_orlandi(c: &mut Criterion) {
                 let sender = chou_orlandi::Sender::default();
                 let receiver = chou_orlandi::Receiver::default();
 
-                let (sender_setup, sender) = sender.setup();
-                let (receiver_setup, mut receiver) = receiver.setup(sender_setup);
-                let mut sender = sender.receive_setup(receiver_setup).unwrap();
+                let (sender_setup, mut sender) = sender.setup();
+                let mut receiver = receiver.setup(sender_setup);
 
                 let receiver_payload = receiver.receive_random(choices.as_slice());
                 let sender_payload = sender.send(&msgs, receiver_payload).unwrap();

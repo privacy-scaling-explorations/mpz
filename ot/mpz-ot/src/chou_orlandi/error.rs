@@ -12,6 +12,10 @@ pub enum SenderError {
     CoreError(#[from] mpz_ot_core::chou_orlandi::SenderError),
     #[error("invalid state: expected {0}")]
     StateError(String),
+    #[error(transparent)]
+    CointossError(#[from] mpz_core::cointoss::CointossError),
+    #[error("invalid configuration: {0}")]
+    InvalidConfig(String),
 }
 
 impl From<SenderError> for OTError {
@@ -42,6 +46,10 @@ pub enum ReceiverError {
     CoreError(#[from] mpz_ot_core::chou_orlandi::ReceiverError),
     #[error("invalid state: expected {0}")]
     StateError(String),
+    #[error(transparent)]
+    CointossError(#[from] mpz_core::cointoss::CointossError),
+    #[error("invalid configuration: {0}")]
+    InvalidConfig(String),
 }
 
 impl From<ReceiverError> for OTError {

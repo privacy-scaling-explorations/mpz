@@ -43,6 +43,9 @@ mod tests {
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
 
+    const SENDER_SEED: [u8; 32] = [0u8; 32];
+    const RECEIVER_SEED: [u8; 32] = [1u8; 32];
+
     #[fixture]
     fn choices() -> Vec<bool> {
         let mut rng = ChaCha12Rng::seed_from_u64(0);
@@ -69,12 +72,11 @@ mod tests {
         sender_config: SenderConfig,
         receiver_config: ReceiverConfig,
     ) -> (Sender<sender_state::Setup>, Receiver<receiver_state::Setup>) {
-        let sender = Sender::new_with_seed(sender_config, [0u8; 32]);
-        let receiver = Receiver::new_with_seed(receiver_config, [1u8; 32]);
+        let sender = Sender::new_with_seed(sender_config, SENDER_SEED);
+        let receiver = Receiver::new_with_seed(receiver_config, RECEIVER_SEED);
 
         let (sender_setup, sender) = sender.setup();
-        let (receiver_setup, receiver) = receiver.setup(sender_setup);
-        let sender = sender.receive_setup(receiver_setup).unwrap();
+        let receiver = receiver.setup(sender_setup);
 
         (sender, receiver)
     }
@@ -130,7 +132,9 @@ mod tests {
 
         let receiver_reveal = receiver.reveal_choices().unwrap();
 
-        let verified_choices = sender.verify_choices(receiver_reveal).unwrap();
+        let verified_choices = sender
+            .verify_choices(RECEIVER_SEED, receiver_reveal)
+            .unwrap();
 
         assert_eq!(choices, verified_choices.into_lsb0_vec());
     }
@@ -158,7 +162,9 @@ mod tests {
         // Flip a bit
         receiver_reveal.choices[0] ^= 1;
 
-        let err = sender.verify_choices(receiver_reveal).unwrap_err();
+        let err = sender
+            .verify_choices(RECEIVER_SEED, receiver_reveal)
+            .unwrap_err();
 
         assert!(matches!(
             err,

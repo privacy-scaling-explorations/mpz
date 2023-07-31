@@ -2,7 +2,7 @@
 
 use curve25519_dalek::RistrettoPoint;
 use enum_try_as_inner::EnumTryAsInner;
-use mpz_core::{commit::Decommitment, hash::Hash, Block};
+use mpz_core::{cointoss, Block};
 use serde::{Deserialize, Serialize};
 
 /// A CO15 protocol message.
@@ -11,9 +11,11 @@ use serde::{Deserialize, Serialize};
 pub enum Message {
     SenderSetup(SenderSetup),
     SenderPayload(SenderPayload),
-    ReceiverSetup(ReceiverSetup),
     ReceiverPayload(ReceiverPayload),
     ReceiverReveal(ReceiverReveal),
+    CointossSenderCommitment(cointoss::msgs::SenderCommitment),
+    CointossSenderPayload(cointoss::msgs::SenderPayload),
+    CointossReceiverPayload(cointoss::msgs::ReceiverPayload),
 }
 
 /// Sender setup message.
@@ -30,13 +32,6 @@ pub struct SenderPayload {
     pub payload: Vec<[Block; 2]>,
 }
 
-/// Receiver setup message.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ReceiverSetup {
-    /// Optional commitment to the receiver's RNG seed.
-    pub commitment: Option<Hash>,
-}
-
 /// Receiver payload message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReceiverPayload {
@@ -47,8 +42,6 @@ pub struct ReceiverPayload {
 /// Receiver reveal message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReceiverReveal {
-    /// The receiver's decommitment to their RNG seed.
-    pub seed_decommit: Decommitment<[u8; 32]>,
     /// The receiver's choices.
     pub choices: Vec<u8>,
 }

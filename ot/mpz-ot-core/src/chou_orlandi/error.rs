@@ -6,8 +6,6 @@ pub enum SenderError {
     InvalidState(String),
     #[error("count mismatch: receiver expected {0} but sender sent {1}")]
     CountMismatch(usize, usize),
-    #[error("receiver did not send a commitment")]
-    NoCommitment,
     #[error(transparent)]
     VerifyError(#[from] SenderVerifyError),
 }
@@ -20,8 +18,6 @@ pub enum ReceiverError {
     InvalidState(String),
     #[error("count mismatch: receiver expected {0} but sender sent {1}")]
     CountMismatch(usize, usize),
-    #[error("receiver commitment not configured")]
-    NoReceiverCommit,
 }
 
 /// Errors that can occur during verification of the receiver's choices.
@@ -34,10 +30,6 @@ pub enum SenderVerifyError {
     KeyCountMismatch(usize, usize),
     #[error("receiver's choices are inconsistent")]
     InconsistentChoice,
-    #[error("receiver did not send a commitment")]
-    NoCommitment,
-    #[error(transparent)]
-    CommitmentError(#[from] mpz_core::commit::CommitmentError),
     #[error("tape was not recorded")]
     TapeNotRecorded,
 }

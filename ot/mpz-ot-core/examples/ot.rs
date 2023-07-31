@@ -12,29 +12,18 @@ pub fn main() {
     println!("Receiver choices: {:?}", &choices);
 
     // Sender messages the receiver chooses from
-    let inputs = [
-        [Block::ZERO, Block::ONES],
-        [Block::ZERO, Block::ONES],
-        [Block::ZERO, Block::ONES],
-        [Block::ZERO, Block::ONES],
-        [Block::ZERO, Block::ONES],
-        [Block::ZERO, Block::ONES],
-        [Block::ZERO, Block::ONES],
-        [Block::ZERO, Block::ONES],
-    ];
+    let inputs = [[Block::ZERO, Block::ONES]; 8];
 
     println!("Sender inputs: {:?}", &inputs);
 
     // First the sender creates a setup message and passes it to receiver
-    let (sender_setup, sender) = Sender::default().setup();
+    let (sender_setup, mut sender) = Sender::default().setup();
 
-    // Receiver takes sender's setup and creates its own setup message, and
-    // generates the receiver payload
-    let (receiver_setup, mut receiver) = Receiver::default().setup(sender_setup);
+    // Receiver takes sender's setup and generates the receiver payload
+    let mut receiver = Receiver::default().setup(sender_setup);
     let receiver_payload = receiver.receive_random(&choices);
 
     // Finally, sender encrypts their inputs and sends them to receiver
-    let mut sender = sender.receive_setup(receiver_setup).unwrap();
     let sender_payload = sender.send(&inputs, receiver_payload).unwrap();
 
     // Receiver takes the encrypted inputs and is able to decrypt according to their choice bits
