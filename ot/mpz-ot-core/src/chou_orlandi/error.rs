@@ -4,7 +4,7 @@
 pub enum SenderError {
     #[error("invalid state: expected {0}")]
     InvalidState(String),
-    #[error("count mismatch: receiver expected {0} but sender sent {1}")]
+    #[error("count mismatch: sender expected {0} but receiver sent {1}")]
     CountMismatch(usize, usize),
     #[error(transparent)]
     VerifyError(#[from] SenderVerifyError),

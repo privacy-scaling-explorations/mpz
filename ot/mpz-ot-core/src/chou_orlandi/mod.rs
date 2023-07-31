@@ -19,6 +19,8 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 use mpz_core::Block;
 
 /// Hashes a ristretto point to a symmetric key
+///
+/// Prepending a tweak is suggested in Section 2, "Non-Malleability in Practice"
 pub(crate) fn hash_point(point: &RistrettoPoint, tweak: u128) -> Block {
     // Compute H(tweak || point)
     let mut h = Hasher::new();

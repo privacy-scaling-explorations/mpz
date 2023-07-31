@@ -133,8 +133,8 @@ impl Sender<state::Setup> {
         // Check that the number of inputs matches the number of choices
         if inputs.len() != blinded_choices.len() {
             return Err(SenderError::CountMismatch(
-                blinded_choices.len(),
                 inputs.len(),
+                blinded_choices.len(),
             ));
         }
 
