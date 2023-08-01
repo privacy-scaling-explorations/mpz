@@ -16,6 +16,8 @@ pub enum SenderError {
     CointossError(#[from] mpz_core::cointoss::CointossError),
     #[error("invalid state: expected {0}")]
     StateError(String),
+    #[error("configuration error: {0}")]
+    ConfigError(String),
 }
 
 impl From<SenderError> for OTError {
@@ -50,6 +52,10 @@ pub enum ReceiverError {
     CointossError(#[from] mpz_core::cointoss::CointossError),
     #[error("invalid state: expected {0}")]
     StateError(String),
+    #[error("configuration error: {0}")]
+    ConfigError(String),
+    #[error(transparent)]
+    VerifyError(#[from] ReceiverVerifyError),
 }
 
 impl From<ReceiverError> for OTError {
@@ -68,4 +74,11 @@ impl<BaseMsg> From<enum_try_as_inner::Error<Message<BaseMsg>>> for ReceiverError
             value.to_string(),
         ))
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[allow(missing_docs)]
+pub enum ReceiverVerifyError {
+    #[error("delta value is not inconsistent")]
+    InconsistentDelta,
 }

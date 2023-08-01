@@ -43,6 +43,16 @@ pub struct Receiver<T: state::State = state::Initialized> {
     tape: Option<Tape>,
 }
 
+impl<T> Receiver<T>
+where
+    T: state::State,
+{
+    /// Returns the Receiver's configuration
+    pub fn config(&self) -> &ReceiverConfig {
+        &self.config
+    }
+}
+
 impl Receiver {
     /// Creates a new Sender
     ///

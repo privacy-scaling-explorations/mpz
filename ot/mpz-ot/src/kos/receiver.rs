@@ -16,7 +16,7 @@ use utils_aio::{
 
 use crate::{OTError, OTReceiver, OTSender, VerifiableOTReceiver, VerifiableOTSender};
 
-use super::{into_base_sink, into_base_stream, ReceiverError};
+use super::{into_base_sink, into_base_stream, ReceiverError, ReceiverVerifyError};
 
 #[derive(Debug, EnumTryAsInner)]
 enum State {
@@ -37,6 +37,7 @@ pub struct Receiver<BaseOT> {
     state: State,
     base: BaseOT,
 
+    cointoss_receiver: Option<cointoss::Receiver<cointoss::receiver_state::Received>>,
     /// The verified delta value used by the sender, if revealed.
     delta: Option<Block>,
 }
@@ -54,6 +55,7 @@ where
         Self {
             state: State::Initialized(Box::new(ReceiverCore::new(config))),
             base,
+            cointoss_receiver: None,
             delta: None,
         }
     }
@@ -78,6 +80,18 @@ where
         stream: &mut St,
     ) -> Result<(), ReceiverError> {
         let ext_receiver = self.state.replace(State::Error).into_initialized()?;
+
+        // If the sender is committed, we run a cointoss
+        if ext_receiver.config().sender_commit() {
+            let commitment = stream.expect_next().await?.into_cointoss_commit()?;
+
+            let (cointoss_receiver, payload) =
+                cointoss::Receiver::new(vec![thread_rng().gen()]).reveal(commitment)?;
+
+            sink.send(Message::CointossReceiverPayload(payload)).await?;
+
+            self.cointoss_receiver = Some(cointoss_receiver);
+        }
 
         let mut rng = thread_rng();
         let seeds: [[Block; 2]; CSP] = std::array::from_fn(|_| [rng.gen(), rng.gen()]);
@@ -237,17 +251,38 @@ where
         let delta = if let Some(delta) = self.delta {
             delta
         } else {
+            // Finalize cointoss to determine expected delta
+            let cointoss_payload = stream
+                .expect_next()
+                .await?
+                .into_cointoss_sender_payload()
+                .map_err(ReceiverError::from)?;
+
+            let Some(cointoss_receiver) = self.cointoss_receiver.take() else {
+                return Err(ReceiverError::ConfigError(
+                    "committed sender not configured".to_string(),
+                ))?;
+            };
+
+            let expected_delta = cointoss_receiver
+                .finalize(cointoss_payload)
+                .map_err(ReceiverError::from)?[0];
+
             // Receive delta by verifying the sender's base OT choices.
             let choices = self
                 .base
                 .verify_choices(&mut into_base_sink(sink), &mut into_base_stream(stream))
                 .await?;
 
-            let delta = <[u8; 16]>::from_lsb0_iter(choices).into();
+            let actual_delta = <[u8; 16]>::from_lsb0_iter(choices).into();
 
-            self.delta = Some(delta);
+            if expected_delta != actual_delta {
+                return Err(ReceiverVerifyError::InconsistentDelta).map_err(ReceiverError::from)?;
+            }
 
-            delta
+            self.delta = Some(actual_delta);
+
+            actual_delta
         };
 
         receiver

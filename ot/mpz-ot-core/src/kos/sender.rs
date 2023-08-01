@@ -83,6 +83,16 @@ impl Keys {
     }
 }
 
+impl<T> Sender<T>
+where
+    T: state::State,
+{
+    /// Returns the Sender's configuration
+    pub fn config(&self) -> &SenderConfig {
+        &self.config
+    }
+}
+
 impl Sender {
     /// Creates a new Sender
     ///

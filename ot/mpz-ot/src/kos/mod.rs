@@ -4,7 +4,7 @@ mod error;
 mod receiver;
 mod sender;
 
-pub use error::{ReceiverError, SenderError};
+pub use error::{ReceiverError, ReceiverVerifyError, SenderError};
 use futures_util::{SinkExt, StreamExt};
 pub use receiver::Receiver;
 pub use sender::Sender;
@@ -99,7 +99,7 @@ mod tests {
         let mut receiver = Receiver::new(receiver_config, base_sender);
 
         let (sender_res, receiver_res) = tokio::join!(
-            sender.setup_with_delta(sender_sink, sender_stream, Block::ONES),
+            sender.setup(sender_sink, sender_stream),
             receiver.setup(receiver_sink, receiver_stream)
         );
 
