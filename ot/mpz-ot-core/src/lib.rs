@@ -1,7 +1,8 @@
-pub mod base;
-pub mod config;
-pub mod extension;
-pub mod msgs;
+//! Low-level crate containing core functionalities for oblivious transfer protocols.
 
-pub use base::*;
-pub use extension::*;
+#![deny(missing_docs, unreachable_pub, unused_must_use)]
+#![deny(unsafe_code)]
+#![deny(clippy::all)]
+
+pub mod chou_orlandi;
+pub mod msgs;
