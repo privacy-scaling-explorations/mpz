@@ -89,7 +89,7 @@ impl Receiver {
         let receiver = if config.receiver_commit() {
             if seed.is_some() {
                 return Err(ReceiverError::InvalidConfig(
-                    "committed receiver seed must be generated using cointoss".to_string(),
+                    "committed receiver seed must be generated using coin toss".to_string(),
                 ));
             }
 
