@@ -112,6 +112,8 @@ impl Receiver {
     }
 }
 
+/// Executes the coin toss protocol as the sender up until the point when we should send
+/// a decommitment. The decommitment will be sent later during verification.
 async fn execute_cointoss<
     Si: IoSink<Message> + Send + Unpin,
     St: IoStream<Message> + Send + Unpin,
@@ -204,7 +206,7 @@ impl CommittedOTReceiver<bool, Block> for Receiver {
     ) -> Result<(), OTError> {
         let receiver = self
             .state
-            .replace(State::Complete)
+            .replace(State::Error)
             .into_setup()
             .map_err(ReceiverError::from)?;
 
@@ -220,6 +222,8 @@ impl CommittedOTReceiver<bool, Block> for Receiver {
             .await?;
         sink.feed(Message::ReceiverReveal(reveal)).await?;
         sink.flush().await?;
+
+        self.state = State::Complete;
 
         Ok(())
     }

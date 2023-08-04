@@ -33,6 +33,8 @@ impl From<enum_try_as_inner::Error<State>> for SenderError {
 #[derive(Debug)]
 pub struct Sender {
     state: State,
+    /// The coin toss receiver after revealing one's own seed but before receiving a decommitment
+    /// from the coin toss sender.
     cointoss_receiver: Option<cointoss::Receiver<cointoss::receiver_state::Received>>,
 }
 
@@ -90,6 +92,8 @@ impl Sender {
     }
 }
 
+/// Executes the coin toss protocol as the receiver up until the point when the sender should send
+/// a decommitment. The decommitment will be sent later during verification.
 async fn execute_cointoss<
     Si: IoSink<Message> + Send + Unpin,
     St: IoStream<Message> + Send + Unpin,
@@ -164,7 +168,7 @@ impl VerifiableOTSender<bool, [Block; 2]> for Sender {
     ) -> Result<Vec<bool>, OTError> {
         let sender = self
             .state
-            .replace(State::Complete)
+            .replace(State::Error)
             .into_setup()
             .map_err(SenderError::from)?;
 
@@ -193,9 +197,13 @@ impl VerifiableOTSender<bool, [Block; 2]> for Sender {
         receiver_seed[..16].copy_from_slice(&cointoss_seed.to_bytes());
         receiver_seed[16..].copy_from_slice(&cointoss_seed.to_bytes());
 
-        Backend::spawn(move || sender.verify_choices(receiver_seed, receiver_reveal))
-            .await
-            .map_err(SenderError::from)
-            .map_err(OTError::from)
+        let verified_choices =
+            Backend::spawn(move || sender.verify_choices(receiver_seed, receiver_reveal))
+                .await
+                .map_err(SenderError::from)?;
+
+        self.state = State::Complete;
+
+        Ok(verified_choices)
     }
 }
