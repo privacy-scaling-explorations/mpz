@@ -105,7 +105,7 @@ where
             )
             .await?;
 
-        let ext_receiver = ext_receiver.base_setup(seeds);
+        let ext_receiver = ext_receiver.setup(seeds);
 
         self.state = State::Extension(Box::new(ext_receiver));
 

@@ -106,16 +106,17 @@ impl Sender {
         }
     }
 
-    /// Complete the base setup phase of the protocol.
+    /// Complete the setup phase of the protocol.
     ///
     /// # Arguments
     ///
-    /// * `delta` - The sender's base OT choices
-    /// * `seeds` - The receiver's rng seeds received via base OT
-    pub fn base_setup(self, delta: Block, seeds: [Block; CSP]) -> Sender<state::Extension> {
+    /// * `delta` - The sender's base OT choice bits
+    /// * `seeds` - The rng seeds chosen during base OT
+    pub fn setup(self, delta: Block, seeds: [Block; CSP]) -> Sender<state::Extension> {
         let rngs = seeds
             .iter()
             .map(|seed| {
+                // Stretch the Block-sized seed to a 32-byte seed.
                 let mut seed_ = RngSeed::default();
                 seed_
                     .iter_mut()
@@ -202,14 +203,17 @@ impl Sender<state::Extension> {
             }
         }
 
+        // Figure 3, step 4.
         let zero = vec![0u8; row_width];
         iter.for_each(|(((b, rng), q), u)| {
+            // Reuse `q` to avoid memory allocation for tⁱ_∆ᵢ
             rng.fill_bytes(q);
-            // If `b` is true, xor `u` into `q`, otherwise xor 0 into `q` (constant time).
+            // If `b` (i.e. ∆ᵢ) is true, xor `u` into `q`, otherwise xor 0 into `q` (constant time).
             let u = if b { u } else { &zero };
             q.iter_mut().zip(u).for_each(|(q, u)| *q ^= u);
         });
 
+        // Figure 3, step 5.
         matrix_transpose::transpose_bits(&mut qs, NROWS).expect("matrix is rectangular");
 
         cfg_if::cfg_if! {
@@ -241,7 +245,7 @@ impl Sender<state::Extension> {
         Ok(())
     }
 
-    /// Checks the consistency of the receiver's choice vectors for all outstanding OTs.
+    /// Performs the correlation check for all outstanding OTS.
     ///
     /// See section 3.1 of the paper for more details.
     ///
@@ -302,6 +306,8 @@ impl Sender<state::Extension> {
         let tmp = x.clmul(self.state.delta);
         let check = (check.0 ^ tmp.0, check.1 ^ tmp.1);
 
+        // The Receiver is malicious.
+        //
         // Call the police!
         if check != (t0, t1) {
             return Err(SenderError::ConsistencyCheckFailed);
@@ -370,11 +376,11 @@ pub mod state {
 
     opaque_debug::implement!(Initialized);
 
-    /// The sender's state after base setup
+    /// The sender's state after base OT setup
     pub struct Extension {
         /// Sender's base OT choices
         pub(super) delta: Block,
-        /// Receiver's rngs seeded from base OT
+        /// Receiver's rngs seeded from seeds obliviously received from base OT
         pub(super) rngs: Vec<ChaCha20Rng>,
         /// Sender's keys
         pub(super) keys: Vec<[Block; 2]>,

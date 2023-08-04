@@ -23,6 +23,7 @@ use rayon::prelude::*;
 #[derive(Debug, Default)]
 struct PayloadRecord {
     counter: usize,
+    /// The receiver's random choices from the OT extension.
     choices: Vec<u8>,
     ts: Vec<Block>,
     keys: Vec<Block>,
@@ -73,12 +74,12 @@ impl Receiver {
         }
     }
 
-    /// Complete the base setup phase of the protocol.
+    /// Complete the setup phase of the protocol.
     ///
     /// # Arguments
     ///
     /// * `seeds` - The receiver's rng seeds
-    pub fn base_setup(self, seeds: [[Block; 2]; CSP]) -> Receiver<state::Extension> {
+    pub fn setup(self, seeds: [[Block; 2]; CSP]) -> Receiver<state::Extension> {
         let rngs = seeds
             .iter()
             .map(|seeds| {
@@ -126,7 +127,7 @@ impl Receiver<state::Extension> {
     ///
     /// # Sacrificial OTs
     ///
-    /// Performing the consistency check sacrifices 256 OTs for the consistency check, so be sure to
+    /// Performing the consistency check sacrifices 256 OTs, so be sure to
     /// extend enough OTs to compensate for this.
     ///
     /// # Streaming
@@ -139,7 +140,7 @@ impl Receiver<state::Extension> {
     ///
     /// # Arguments
     ///
-    /// * `choices` - The receiver's choices
+    /// * `count` - The number of OTs to extend.
     pub fn extend(&mut self, count: usize) -> Extend {
         // Round up the OTs to extend to the nearest multiple of 64 (matrix transpose optimization).
         let count = (count + 63) & !63;
@@ -148,12 +149,15 @@ impl Receiver<state::Extension> {
         let row_width = count / 8;
 
         let mut rng = thread_rng();
+        // x₁,...,xₗ bits in Figure 3, step 1.
         let choices = (0..row_width)
             .flat_map(|_| rng.gen::<u8>().into_iter_lsb0())
             .collect::<Vec<_>>();
 
+        // 𝐱ⁱ in Figure 3. Note that it is the same for all i = 1,...,k.
         let choice_vector = Vec::<u8>::from_lsb0_iter(choices.iter().copied());
 
+        // 𝐭₀ⁱ in Figure 3.
         let mut ts = vec![0u8; NROWS * row_width];
         let mut us = vec![0u8; NROWS * row_width];
         cfg_if::cfg_if! {
@@ -170,18 +174,19 @@ impl Receiver<state::Extension> {
             }
         }
 
-        iter.for_each(|((rngs, t), u)| {
+        iter.for_each(|((rngs, t_0), u)| {
             // Figure 3, step 2.
-            rngs[0].fill_bytes(t);
+            rngs[0].fill_bytes(t_0);
+            // reuse u to avoid memory allocation for 𝐭₁ⁱ
             rngs[1].fill_bytes(u);
 
             // Figure 3, step 3.
             // Computing `u = t_0 + t_1 + x`.
             u.iter_mut()
-                .zip(t)
+                .zip(t_0)
                 .zip(&choice_vector)
-                .for_each(|((u, t), r)| {
-                    *u ^= *t ^ r;
+                .for_each(|((u, t_0), x)| {
+                    *u ^= *t_0 ^ x;
                 });
         });
 
@@ -196,7 +201,7 @@ impl Receiver<state::Extension> {
         Extend { count, us }
     }
 
-    /// Checks the consistency of the receiver's choice vectors for all outstanding OTs.
+    /// Performs the correlation check for all outstanding OTS.
     ///
     /// See section 3.1 of the paper for more details.
     ///
@@ -299,7 +304,7 @@ impl Receiver<state::Extension> {
         Check { x, t0, t1 }
     }
 
-    /// Derandomize the receiver's choices from the setup phase.
+    /// Derandomize the receiver's choices from the OT extension.
     ///
     /// # Arguments
     ///
@@ -378,12 +383,12 @@ impl Receiver<state::Extension> {
     /// # ⚠️ Warning ⚠️
     ///
     /// The authenticity of `delta` must be established outside the context of this function. This
-    /// can be achieved using verifiable OT for the base choices.
+    /// can be achieved using verifiable base OT.
     ///
     /// # Arguments
     ///
     /// * `index` - The index of the payload.
-    /// * `delta` - The sender's base choices.
+    /// * `delta` - The sender's base OT choice bits.
     /// * `purported_msgs` - The purported messages sent by the sender.
     pub fn verify(
         &self,

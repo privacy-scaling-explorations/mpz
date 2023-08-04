@@ -31,11 +31,11 @@ pub enum Message<BaseMsg> {
 pub struct Extend {
     /// The number of OTs to set up.
     pub count: usize,
-    /// The receiver's setup vectors.
+    /// The receiver's extension vectors.
     pub us: Vec<u8>,
 }
 
-/// Consistency check sent by the receiver.
+/// Values for the correlation check sent by the receiver.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[allow(missing_docs)]
 pub struct Check {

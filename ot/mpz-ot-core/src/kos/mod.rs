@@ -101,8 +101,8 @@ mod tests {
         let sender = Sender::new(SenderConfig::default());
         let receiver = Receiver::new(ReceiverConfig::default());
 
-        let mut sender = sender.base_setup(delta, sender_seeds);
-        let mut receiver = receiver.base_setup(receiver_seeds);
+        let mut sender = sender.setup(delta, sender_seeds);
+        let mut receiver = receiver.setup(receiver_seeds);
 
         let receiver_setup = receiver.extend(choices.len() + 256);
         sender.extend(data.len() + 256, receiver_setup).unwrap();
@@ -130,8 +130,8 @@ mod tests {
         let sender = Sender::new(SenderConfig::default());
         let receiver = Receiver::new(ReceiverConfig::default());
 
-        let mut sender = sender.base_setup(delta, sender_seeds);
-        let mut receiver = receiver.base_setup(receiver_seeds);
+        let mut sender = sender.setup(delta, sender_seeds);
+        let mut receiver = receiver.setup(receiver_seeds);
 
         let receiver_setup = receiver.extend(choices.len() + 256);
         sender.extend(data.len() + 256, receiver_setup).unwrap();
@@ -169,8 +169,8 @@ mod tests {
         let sender = Sender::new(SenderConfig::default());
         let receiver = Receiver::new(ReceiverConfig::default());
 
-        let mut sender = sender.base_setup(delta, sender_seeds);
-        let mut receiver = receiver.base_setup(receiver_seeds);
+        let mut sender = sender.setup(delta, sender_seeds);
+        let mut receiver = receiver.setup(receiver_seeds);
 
         let mut receiver_setup = receiver.extend(choices.len() + 256);
 
@@ -198,8 +198,8 @@ mod tests {
         let sender = Sender::new(SenderConfig::default());
         let receiver = Receiver::new(ReceiverConfig::builder().sender_commit().build().unwrap());
 
-        let mut sender = sender.base_setup(delta, sender_seeds);
-        let mut receiver = receiver.base_setup(receiver_seeds);
+        let mut sender = sender.setup(delta, sender_seeds);
+        let mut receiver = receiver.setup(receiver_seeds);
 
         let receiver_setup = receiver.extend(choices.len() + 256);
         sender.extend(data.len() + 256, receiver_setup).unwrap();
@@ -229,8 +229,8 @@ mod tests {
         let sender = Sender::new(SenderConfig::default());
         let receiver = Receiver::new(ReceiverConfig::builder().sender_commit().build().unwrap());
 
-        let mut sender = sender.base_setup(delta, sender_seeds);
-        let mut receiver = receiver.base_setup(receiver_seeds);
+        let mut sender = sender.setup(delta, sender_seeds);
+        let mut receiver = receiver.setup(receiver_seeds);
 
         let receiver_setup = receiver.extend(choices.len() + 256);
         sender.extend(data.len() + 256, receiver_setup).unwrap();

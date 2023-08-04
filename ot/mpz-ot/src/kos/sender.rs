@@ -151,7 +151,7 @@ where
 
         let seeds: [Block; CSP] = seeds.try_into().expect("seeds should be CSP length");
 
-        let ext_sender = ext_sender.base_setup(delta, seeds);
+        let ext_sender = ext_sender.setup(delta, seeds);
 
         self.state = State::Extension(ext_sender);
 
