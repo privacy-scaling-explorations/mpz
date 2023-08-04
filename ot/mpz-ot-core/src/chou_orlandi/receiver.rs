@@ -126,7 +126,7 @@ impl Receiver<state::Setup> {
 
         // If configured, log the choices
         if self.config.receiver_commit() {
-            choice_log.extend(Vec::<u8>::from_lsb0_iter(choices.iter_lsb0()));
+            choice_log.extend(choices.iter_lsb0());
         }
 
         ReceiverPayload { blinded_choices }
@@ -171,12 +171,11 @@ impl Receiver<state::Setup> {
 
     /// Reveals the receiver's choices to the Sender
     pub fn reveal_choices(self) -> Result<ReceiverReveal, ReceiverError> {
-        let state::Setup {
-            choice_log: choices,
-            ..
-        } = self.state;
+        let state::Setup { choice_log, .. } = self.state;
 
-        Ok(ReceiverReveal { choices })
+        Ok(ReceiverReveal {
+            choices: Vec::<u8>::from_lsb0_iter(choice_log),
+        })
     }
 }
 
@@ -196,7 +195,8 @@ fn compute_decryption_keys<T: BitIterable + Sync>(
     offset: usize,
 ) -> (Vec<RistrettoPoint>, Vec<(bool, Block)>) {
     let zero = &Scalar::ZERO * base_table;
-    let one = &Scalar::ONE * base_table;
+    // a is A in [ref1]
+    let a = &Scalar::ONE * base_table;
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "rayon")] {
@@ -217,7 +217,7 @@ fn compute_decryption_keys<T: BitIterable + Sync>(
         //
         // when choice is 0, we add the zero element to keep constant time.
         let blinded_choice = if c {
-            one + b * RISTRETTO_BASEPOINT_TABLE
+            a + b * RISTRETTO_BASEPOINT_TABLE
         } else {
             zero + b * RISTRETTO_BASEPOINT_TABLE
         };
@@ -265,7 +265,7 @@ pub mod state {
         pub(super) rng: ChaCha20Rng,
         pub(super) sender_base_table: RistrettoBasepointTable,
         pub(super) counter: usize,
-        pub(super) choice_log: Vec<u8>,
+        pub(super) choice_log: Vec<bool>,
 
         /// The decryption key for each OT, with the corresponding choice bit
         pub(super) decryption_keys: Vec<(bool, Block)>,
