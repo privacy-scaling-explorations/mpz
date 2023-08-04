@@ -186,7 +186,7 @@ impl Receiver<state::Setup> {
 /// * `base_table` - A Ristretto basepoint table from the sender's public key
 /// * `receiver_private_keys` - The private keys of the OT receiver
 /// * `choices` - The choices of the OT receiver
-/// * `offset` - The number of OTs that have already been performed
+/// * `offset` - The number of decryption keys that have already been computed
 ///              (used for the key derivation tweak)
 fn compute_decryption_keys<T: BitIterable + Sync>(
     base_table: &RistrettoBasepointTable,
@@ -245,6 +245,7 @@ pub mod state {
 
     /// The receiver's initial state.
     pub struct Initialized {
+        /// RNG used to generate the receiver's keys
         pub(super) rng: ChaCha20Rng,
     }
 
@@ -262,9 +263,13 @@ pub mod state {
 
     /// The receiver's state after setup.
     pub struct Setup {
+        /// RNG used to generate the receiver's keys
         pub(super) rng: ChaCha20Rng,
+        /// Sender's public key (precomputed table)
         pub(super) sender_base_table: RistrettoBasepointTable,
+        /// Counts how many decryption keys we've computed so far
         pub(super) counter: usize,
+        /// Log of the receiver's choice bits
         pub(super) choice_log: Vec<bool>,
 
         /// The decryption key for each OT, with the corresponding choice bit
