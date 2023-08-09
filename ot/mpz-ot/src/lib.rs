@@ -160,13 +160,13 @@ where
     ///
     /// * `sink` - The IO sink to the sender.
     /// * `stream` - The IO stream from the sender.
-    /// * `index` - The index of the messages to verify.
+    /// * `id` - The transfer id of the messages to verify.
     /// * `msgs` - The purported messages sent by the sender.
     async fn verify<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
         &mut self,
         sink: &mut Si,
         stream: &mut St,
-        index: usize,
+        id: usize,
         msgs: &[V],
     ) -> Result<(), OTError>;
 }

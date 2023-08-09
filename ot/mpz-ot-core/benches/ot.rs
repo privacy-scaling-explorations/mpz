@@ -56,15 +56,20 @@ fn kos(c: &mut Criterion) {
                 let mut sender = sender.setup(delta, sender_seeds);
                 let mut receiver = receiver.setup(receiver_seeds);
 
-                let receiver_setup = receiver.extend(choices.len() + 256);
+                let receiver_setup = receiver.extend(choices.len() + 256).unwrap();
                 sender.extend(msgs.len() + 256, receiver_setup).unwrap();
 
                 let receiver_check = receiver.check(chi_seed);
                 sender.check(chi_seed, receiver_check).unwrap();
 
-                let derandomize = receiver.derandomize(&choices);
-                let payload = sender.send(&msgs, derandomize).unwrap();
-                let received = receiver.receive(payload).unwrap();
+                let mut receiver_keys = receiver.keys(choices.len()).unwrap();
+                let derandomize = receiver_keys.derandomize(&choices).unwrap();
+
+                let mut sender_keys = sender.keys(msgs.len()).unwrap();
+                sender_keys.derandomize(derandomize).unwrap();
+                let payload = sender_keys.encrypt(&msgs).unwrap();
+
+                let received = receiver_keys.decrypt(payload).unwrap();
 
                 black_box(received)
             })

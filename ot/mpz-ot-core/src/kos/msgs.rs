@@ -47,6 +47,8 @@ pub struct Check {
 /// Sender payload message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SenderPayload {
+    /// Transfer ID
+    pub id: u32,
     /// Sender's ciphertexts
     pub ciphertexts: Vec<Block>,
 }

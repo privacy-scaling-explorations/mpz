@@ -13,8 +13,8 @@ pub use config::{
 pub use error::{ReceiverError, ReceiverVerifyError, SenderError};
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
-pub use receiver::{state as receiver_state, Receiver};
-pub use sender::{state as sender_state, Keys, Sender};
+pub use receiver::{state as receiver_state, Receiver, ReceiverKeys};
+pub use sender::{state as sender_state, Sender, SenderKeys};
 
 /// Computational security parameter
 pub const CSP: usize = 128;
@@ -104,28 +104,33 @@ mod tests {
         let mut sender = sender.setup(delta, sender_seeds);
         let mut receiver = receiver.setup(receiver_seeds);
 
-        let receiver_setup = receiver.extend(choices.len() + 256);
+        let receiver_setup = receiver.extend(choices.len() + 256).unwrap();
         sender.extend(data.len() + 256, receiver_setup).unwrap();
 
         let receiver_check = receiver.check(chi_seed);
         sender.check(chi_seed, receiver_check).unwrap();
 
-        let derandomize = receiver.derandomize(&choices);
-        let payload = sender.send(&data, derandomize).unwrap();
-        let received = receiver.receive(payload).unwrap();
+        let mut receiver_keys = receiver.keys(choices.len()).unwrap();
+        let derandomize = receiver_keys.derandomize(&choices).unwrap();
+
+        let mut sender_keys = sender.keys(data.len()).unwrap();
+        sender_keys.derandomize(derandomize).unwrap();
+        let payload = sender_keys.encrypt(&data).unwrap();
+
+        let received = receiver_keys.decrypt(payload).unwrap();
 
         assert_eq!(received, expected);
     }
 
     #[rstest]
-    fn test_kos_extension_multiple_extends(
+    fn test_kos_extension_stream_extends(
         delta: Block,
         sender_seeds: [Block; CSP],
         receiver_seeds: [[Block; 2]; CSP],
         chi_seed: Block,
-        mut choices: Vec<bool>,
-        mut data: Vec<[Block; 2]>,
-        mut expected: Vec<Block>,
+        choices: Vec<bool>,
+        data: Vec<[Block; 2]>,
+        expected: Vec<Block>,
     ) {
         let sender = Sender::new(SenderConfig::default());
         let receiver = Receiver::new(ReceiverConfig::default());
@@ -133,28 +138,52 @@ mod tests {
         let mut sender = sender.setup(delta, sender_seeds);
         let mut receiver = receiver.setup(receiver_seeds);
 
-        let receiver_setup = receiver.extend(choices.len() + 256);
-        sender.extend(data.len() + 256, receiver_setup).unwrap();
+        let receiver_setup = receiver.extend(choices.len()).unwrap();
+        sender.extend(choices.len(), receiver_setup).unwrap();
 
-        let more_choices = choices[..7].to_vec();
-        let more_data = data[..7].to_vec();
-        let more_expected = expected[..7].to_vec();
-
-        let receiver_setup = receiver.extend(7);
-        sender.extend(7, receiver_setup).unwrap();
+        // Extend 256 more
+        let receiver_setup = receiver.extend(256).unwrap();
+        sender.extend(256, receiver_setup).unwrap();
 
         let receiver_check = receiver.check(chi_seed);
         sender.check(chi_seed, receiver_check).unwrap();
 
-        choices.extend(more_choices);
-        data.extend(more_data);
-        expected.extend(more_expected);
+        let mut receiver_keys = receiver.keys(choices.len()).unwrap();
+        let derandomize = receiver_keys.derandomize(&choices).unwrap();
 
-        let derandomize = receiver.derandomize(&choices);
-        let payload = sender.send(&data, derandomize).unwrap();
-        let received = receiver.receive(payload).unwrap();
+        let mut sender_keys = sender.keys(data.len()).unwrap();
+        sender_keys.derandomize(derandomize).unwrap();
+        let payload = sender_keys.encrypt(&data).unwrap();
+
+        let received = receiver_keys.decrypt(payload).unwrap();
 
         assert_eq!(received, expected);
+    }
+
+    #[rstest]
+    fn test_kos_extension_multiple_extends_fail(
+        delta: Block,
+        sender_seeds: [Block; CSP],
+        receiver_seeds: [[Block; 2]; CSP],
+        chi_seed: Block,
+    ) {
+        let sender = Sender::new(SenderConfig::default());
+        let receiver = Receiver::new(ReceiverConfig::default());
+
+        let mut sender = sender.setup(delta, sender_seeds);
+        let mut receiver = receiver.setup(receiver_seeds);
+
+        let receiver_setup = receiver.extend(256).unwrap();
+        sender.extend(256, receiver_setup).unwrap();
+
+        // Perform check
+        let receiver_check = receiver.check(chi_seed);
+        sender.check(chi_seed, receiver_check).unwrap();
+
+        // Extending more should fail
+        let receiver_setup = receiver.extend(256).unwrap_err();
+
+        assert!(matches!(receiver_setup, ReceiverError::InvalidState(_)));
     }
 
     #[rstest]
@@ -163,8 +192,6 @@ mod tests {
         sender_seeds: [Block; CSP],
         receiver_seeds: [[Block; 2]; CSP],
         chi_seed: Block,
-        choices: Vec<bool>,
-        data: Vec<[Block; 2]>,
     ) {
         let sender = Sender::new(SenderConfig::default());
         let receiver = Receiver::new(ReceiverConfig::default());
@@ -172,12 +199,12 @@ mod tests {
         let mut sender = sender.setup(delta, sender_seeds);
         let mut receiver = receiver.setup(receiver_seeds);
 
-        let mut receiver_setup = receiver.extend(choices.len() + 256);
+        let mut receiver_setup = receiver.extend(512).unwrap();
 
         // Flip a bit in the receiver's extension message (breaking the mono-chrome choice vector)
         *receiver_setup.us.first_mut().unwrap() ^= 1;
 
-        sender.extend(data.len() + 256, receiver_setup).unwrap();
+        sender.extend(512, receiver_setup).unwrap();
 
         let receiver_check = receiver.check(chi_seed);
         let err = sender.check(chi_seed, receiver_check).unwrap_err();
@@ -201,15 +228,20 @@ mod tests {
         let mut sender = sender.setup(delta, sender_seeds);
         let mut receiver = receiver.setup(receiver_seeds);
 
-        let receiver_setup = receiver.extend(choices.len() + 256);
+        let receiver_setup = receiver.extend(choices.len() + 256).unwrap();
         sender.extend(data.len() + 256, receiver_setup).unwrap();
 
         let receiver_check = receiver.check(chi_seed);
         sender.check(chi_seed, receiver_check).unwrap();
 
-        let derandomize = receiver.derandomize(&choices);
-        let payload = sender.send(&data, derandomize).unwrap();
-        let received = receiver.receive(payload).unwrap();
+        let mut receiver_keys = receiver.keys(choices.len()).unwrap();
+        let derandomize = receiver_keys.derandomize(&choices).unwrap();
+
+        let mut sender_keys = sender.keys(data.len()).unwrap();
+        sender_keys.derandomize(derandomize).unwrap();
+        let payload = sender_keys.encrypt(&data).unwrap();
+
+        let received = receiver_keys.decrypt(payload).unwrap();
 
         assert_eq!(received, expected);
 
@@ -232,15 +264,20 @@ mod tests {
         let mut sender = sender.setup(delta, sender_seeds);
         let mut receiver = receiver.setup(receiver_seeds);
 
-        let receiver_setup = receiver.extend(choices.len() + 256);
+        let receiver_setup = receiver.extend(choices.len() + 256).unwrap();
         sender.extend(data.len() + 256, receiver_setup).unwrap();
 
         let receiver_check = receiver.check(chi_seed);
         sender.check(chi_seed, receiver_check).unwrap();
 
-        let derandomize = receiver.derandomize(&choices);
-        let payload = sender.send(&data, derandomize).unwrap();
-        let received = receiver.receive(payload).unwrap();
+        let mut receiver_keys = receiver.keys(choices.len()).unwrap();
+        let derandomize = receiver_keys.derandomize(&choices).unwrap();
+
+        let mut sender_keys = sender.keys(data.len()).unwrap();
+        sender_keys.derandomize(derandomize).unwrap();
+        let payload = sender_keys.encrypt(&data).unwrap();
+
+        let received = receiver_keys.decrypt(payload).unwrap();
 
         assert_eq!(received, expected);
 

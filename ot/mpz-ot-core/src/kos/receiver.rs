@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     kos::{
@@ -22,7 +25,7 @@ use rayon::prelude::*;
 
 #[derive(Debug, Default)]
 struct PayloadRecord {
-    counter: usize,
+    index: usize,
     /// The receiver's random choices from the OT extension.
     choices: Vec<u8>,
     ts: Vec<Block>,
@@ -32,7 +35,7 @@ struct PayloadRecord {
 
 #[derive(Debug, Default)]
 struct Tape {
-    records: HashMap<usize, PayloadRecord>,
+    records: HashMap<u32, PayloadRecord>,
 }
 
 /// KOS15 receiver.
@@ -41,7 +44,7 @@ pub struct Receiver<T: state::State = state::Initialized> {
     config: ReceiverConfig,
     state: T,
     /// Protocol tape
-    tape: Option<Tape>,
+    tape: Option<Arc<Mutex<Tape>>>,
 }
 
 impl<T> Receiver<T>
@@ -62,7 +65,7 @@ impl Receiver {
     /// * `config` - The Sender's configuration
     pub fn new(config: ReceiverConfig) -> Self {
         let tape = if config.sender_commit() {
-            Some(Tape::default())
+            Some(Default::default())
         } else {
             None
         };
@@ -101,9 +104,9 @@ impl Receiver {
                 ts: Vec::default(),
                 keys: Vec::default(),
                 choices: Vec::default(),
-                key_counter: 0,
-                ot_counter: 0,
-                payload_counter: 0,
+                index: 0,
+                transfer_id: 0,
+                extended: false,
                 unchecked_ts: Vec::default(),
                 unchecked_choices: Vec::default(),
             },
@@ -113,9 +116,9 @@ impl Receiver {
 }
 
 impl Receiver<state::Extension> {
-    /// Returns the number of payloads that have been received.
-    pub fn payload_count(&self) -> usize {
-        self.state.payload_counter
+    /// Returns the current transfer id.
+    pub fn current_transfer_id(&self) -> u32 {
+        self.state.transfer_id
     }
 
     /// The number of remaining OTs which can be consumed.
@@ -141,7 +144,13 @@ impl Receiver<state::Extension> {
     /// # Arguments
     ///
     /// * `count` - The number of OTs to extend.
-    pub fn extend(&mut self, count: usize) -> Extend {
+    pub fn extend(&mut self, count: usize) -> Result<Extend, ReceiverError> {
+        if self.state.extended {
+            return Err(ReceiverError::InvalidState(
+                "extending more than once is currently disabled".to_string(),
+            ));
+        }
+
         // Round up the OTs to extend to the nearest multiple of 64 (matrix transpose optimization).
         let count = (count + 63) & !63;
 
@@ -198,7 +207,7 @@ impl Receiver<state::Extension> {
         );
         self.state.unchecked_choices.extend(choices);
 
-        Extend { count, us }
+        Ok(Extend { count, us })
     }
 
     /// Performs the correlation check for all outstanding OTS.
@@ -285,12 +294,12 @@ impl Receiver<state::Extension> {
         let cipher = &(*FIXED_KEY_AES);
         let keys = iter
             .map(|(j, t)| {
-                let j = Block::from(((self.state.key_counter + j) as u128).to_be_bytes());
+                let j = Block::from(((self.state.index + j) as u128).to_be_bytes());
                 cipher.tccr(j, *t)
             })
             .collect::<Vec<_>>();
 
-        self.state.key_counter += keys.len();
+        self.state.index += keys.len();
 
         // Add to existing keys.
         self.state.keys.extend(keys);
@@ -301,80 +310,42 @@ impl Receiver<state::Extension> {
             self.state.ts.extend(unchecked_ts);
         }
 
+        // Disable any further extensions.
+        self.state.extended = true;
+
         Check { x, t0, t1 }
     }
 
-    /// Derandomize the receiver's choices from the OT extension.
+    /// Returns receiver's keys for the given number of OTs.
     ///
     /// # Arguments
     ///
-    /// * `choices` - The receiver's corrected choices.
-    pub fn derandomize(&mut self, choices: &[bool]) -> Derandomize {
-        let flip = Vec::<u8>::from_lsb0_iter(
-            self.state
-                .choices
-                .iter()
-                .zip(choices)
-                .map(|(setup_choice, new_choice)| setup_choice ^ new_choice),
-        );
-
-        self.state.choices[..choices.len()].copy_from_slice(choices);
-
-        Derandomize { flip }
-    }
-
-    /// Obliviously receive the sender's messages.
-    ///
-    /// # Arguments
-    ///
-    /// * `payload` - The sender's payload
-    pub fn receive(&mut self, payload: SenderPayload) -> Result<Vec<Block>, ReceiverError> {
-        let SenderPayload { ciphertexts } = payload;
-
-        if ciphertexts.len() % 2 != 0 {
-            return Err(ReceiverError::InvalidPayload);
-        }
-
-        let count = ciphertexts.len() / 2;
-
+    /// * `count` - The number of keys to take.
+    pub fn keys(&mut self, count: usize) -> Result<ReceiverKeys, ReceiverError> {
         if count > self.state.keys.len() {
-            return Err(ReceiverError::CountMismatch(self.state.keys.len(), count));
+            return Err(ReceiverError::InsufficientSetup(
+                count,
+                self.state.keys.len(),
+            ));
         }
 
-        let keys = Vec::from_iter(self.state.keys.drain(..count));
-        let choices = Vec::from_iter(self.state.choices.drain(..count));
+        let id = self.state.transfer_id;
+        let index = self.state.index - self.state.keys.len();
 
-        if let Some(tape) = &mut self.tape {
-            let ts = Vec::from_iter(self.state.ts.drain(..count));
+        self.state.transfer_id += 1;
 
-            let mut hasher = Hasher::default();
-            ciphertexts.iter().for_each(|ct| {
-                hasher.update(&ct.to_bytes());
-            });
-
-            tape.records.insert(
-                self.state.payload_counter,
-                PayloadRecord {
-                    counter: self.state.ot_counter,
-                    choices: Vec::from_lsb0_iter(choices.iter().copied()),
-                    ts,
-                    keys: keys.clone(),
-                    ciphertext_digest: hasher.finalize().into(),
-                },
-            );
-        }
-
-        let plaintexts = keys
-            .into_iter()
-            .zip(choices)
-            .zip(ciphertexts.chunks(2))
-            .map(|((key, c), ct)| if c { key ^ ct[1] } else { key ^ ct[0] })
-            .collect();
-
-        self.state.ot_counter += count;
-        self.state.payload_counter += 1;
-
-        Ok(plaintexts)
+        Ok(ReceiverKeys {
+            id,
+            index,
+            keys: self.state.keys.drain(..count).collect(),
+            choices: self.state.choices.drain(..count).collect(),
+            ts: if self.tape.is_some() {
+                Some(self.state.ts.drain(..count).collect())
+            } else {
+                None
+            },
+            tape: self.tape.clone(),
+        })
     }
 
     /// Checks the purported messages against the receiver's protocol tape, using the sender's
@@ -387,12 +358,12 @@ impl Receiver<state::Extension> {
     ///
     /// # Arguments
     ///
-    /// * `index` - The index of the payload.
+    /// * `id` - The transfer id
     /// * `delta` - The sender's base OT choice bits.
     /// * `purported_msgs` - The purported messages sent by the sender.
     pub fn verify(
         &self,
-        index: usize,
+        id: u32,
         delta: Block,
         purported_msgs: &[[Block; 2]],
     ) -> Result<(), ReceiverError> {
@@ -400,17 +371,19 @@ impl Receiver<state::Extension> {
             return Err(ReceiverVerifyError::TapeNotRecorded)?;
         };
 
-        let Some(record) = tape.records.get(&index) else {
-            return Err(ReceiverVerifyError::InvalidPayloadIndex)?;
-        };
-
         let PayloadRecord {
-            counter,
+            index: counter,
             choices,
             ts,
             keys,
             ciphertext_digest,
-        } = record;
+        } = tape
+            .lock()
+            .unwrap()
+            .records
+            .remove(&id)
+            .ok_or(ReceiverVerifyError::InvalidTransferId(id))
+            .map_err(ReceiverError::from)?;
 
         // Here we compute the complementary key to the one used earlier in the protocol.
         //
@@ -425,12 +398,12 @@ impl Receiver<state::Extension> {
             .enumerate()
         {
             let j = Block::new(((counter + j) as u128).to_be_bytes());
-            let key_ = cipher.tccr(j, *t ^ delta);
+            let key_ = cipher.tccr(j, t ^ delta);
 
             let (ct0, ct1) = if c {
-                (msgs[0] ^ key_, msgs[1] ^ *key)
+                (msgs[0] ^ key_, msgs[1] ^ key)
             } else {
-                (msgs[0] ^ *key, msgs[1] ^ key_)
+                (msgs[0] ^ key, msgs[1] ^ key_)
             };
 
             hasher.update(&ct0.to_bytes());
@@ -439,11 +412,110 @@ impl Receiver<state::Extension> {
 
         let digest: [u8; 32] = hasher.finalize().into();
 
-        if *ciphertext_digest != digest {
+        if ciphertext_digest != digest {
             return Err(ReceiverVerifyError::InconsistentPayload)?;
         }
 
         Ok(())
+    }
+}
+
+/// KOS receiver's keys for a single transfer.
+///
+/// Returned by the [`Receiver::keys`] method, used in cases where the receiver
+/// wishes to reserve a set of keys for a transfer, but hasn't yet received the
+/// payload.
+pub struct ReceiverKeys {
+    /// Transfer ID
+    id: u32,
+    /// Start index of the OTs
+    index: usize,
+    /// Decryption keys
+    keys: Vec<Block>,
+    /// Choices
+    choices: Vec<bool>,
+
+    /// Receiver `ts`
+    ts: Option<Vec<Block>>,
+    /// Receiver tape
+    tape: Option<Arc<Mutex<Tape>>>,
+}
+
+opaque_debug::implement!(ReceiverKeys);
+
+impl ReceiverKeys {
+    /// Returns the transfer ID.
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
+    /// Derandomizes the receiver's choices.
+    pub fn derandomize(&mut self, choices: &[bool]) -> Result<Derandomize, ReceiverError> {
+        if choices.len() != self.choices.len() {
+            return Err(ReceiverError::CountMismatch(
+                self.choices.len(),
+                choices.len(),
+            ));
+        }
+
+        let derandomize = Derandomize {
+            id: self.id,
+            count: self.choices.len() as u32,
+            flip: Vec::<u8>::from_lsb0_iter(
+                self.choices
+                    .iter()
+                    .zip(choices)
+                    .map(|(setup_choice, new_choice)| setup_choice ^ new_choice),
+            ),
+        };
+
+        self.choices.copy_from_slice(choices);
+
+        Ok(derandomize)
+    }
+
+    /// Decrypts the sender's payload.
+    pub fn decrypt(mut self, payload: SenderPayload) -> Result<Vec<Block>, ReceiverError> {
+        let SenderPayload { id, ciphertexts } = payload;
+
+        if id != self.id {
+            return Err(ReceiverError::IdMismatch(self.id, id));
+        }
+
+        if ciphertexts.len() / 2 != self.keys.len() {
+            return Err(ReceiverError::CountMismatch(
+                self.keys.len(),
+                ciphertexts.len(),
+            ));
+        }
+
+        if let Some(tape) = self.tape.take() {
+            let ts = self.ts.take().expect("ts set if tape is set");
+
+            let mut hasher = Hasher::default();
+            ciphertexts.iter().for_each(|ct| {
+                hasher.update(&ct.to_bytes());
+            });
+
+            tape.lock().unwrap().records.insert(
+                id,
+                PayloadRecord {
+                    index: self.index,
+                    choices: Vec::from_lsb0_iter(self.choices.iter().copied()),
+                    ts,
+                    keys: self.keys.clone(),
+                    ciphertext_digest: hasher.finalize().into(),
+                },
+            );
+        }
+
+        Ok(self
+            .keys
+            .into_iter()
+            .zip(self.choices)
+            .zip(ciphertexts.chunks(2))
+            .map(|((key, c), ct)| if c { key ^ ct[1] } else { key ^ ct[0] })
+            .collect())
     }
 }
 
@@ -479,12 +551,15 @@ pub mod state {
         pub(super) keys: Vec<Block>,
         /// Receiver's random choices
         pub(super) choices: Vec<bool>,
-        /// Keys computed so far
-        pub(super) key_counter: usize,
-        /// OTs received so far
-        pub(super) ot_counter: usize,
-        /// Payloads received so far
-        pub(super) payload_counter: usize,
+        /// Current OT index
+        pub(super) index: usize,
+        /// Current transfer id
+        pub(super) transfer_id: u32,
+
+        /// Whether extension has occurred yet
+        ///
+        /// This is to prevent the receiver from extending twice
+        pub(super) extended: bool,
 
         /// Receiver's unchecked ts
         pub(super) unchecked_ts: Vec<Block>,

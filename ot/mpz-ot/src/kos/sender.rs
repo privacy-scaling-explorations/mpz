@@ -255,7 +255,11 @@ where
             .into_derandomize()
             .map_err(SenderError::from)?;
 
-        let payload = sender.send(msgs, derandomize).map_err(SenderError::from)?;
+        let mut sender_keys = sender.keys(msgs.len()).map_err(SenderError::from)?;
+        sender_keys
+            .derandomize(derandomize)
+            .map_err(SenderError::from)?;
+        let payload = sender_keys.encrypt(msgs).map_err(SenderError::from)?;
 
         sink.send(Message::SenderPayload(payload))
             .await

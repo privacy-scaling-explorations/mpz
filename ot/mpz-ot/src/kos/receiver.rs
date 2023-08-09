@@ -138,6 +138,8 @@ where
         })
         .await;
 
+        let extend = extend?;
+
         // Commit to cointoss seed
         let seed: Block = thread_rng().gen();
         let (cointoss_sender, cointoss_commitment) = cointoss::Sender::new(vec![seed]).send();
@@ -198,14 +200,14 @@ where
         stream: &mut St,
         choices: &[bool],
     ) -> Result<Vec<Block>, OTError> {
-        let mut receiver = self
-            .state
-            .replace(State::Error)
-            .into_extension()
-            .map_err(ReceiverError::from)?;
+        let receiver = self.state.as_extension_mut().map_err(ReceiverError::from)?;
+
+        let mut receiver_keys = receiver.keys(choices.len()).map_err(ReceiverError::from)?;
 
         let choices = choices.into_lsb0_vec();
-        let derandomize = receiver.derandomize(&choices);
+        let derandomize = receiver_keys
+            .derandomize(&choices)
+            .map_err(ReceiverError::from)?;
 
         // Send derandomize message
         sink.send(Message::Derandomize(derandomize)).await?;
@@ -217,15 +219,9 @@ where
             .into_sender_payload()
             .map_err(ReceiverError::from)?;
 
-        let (receiver, received) = Backend::spawn(move || {
-            receiver
-                .receive(payload)
-                .map(|received| (receiver, received))
-                .map_err(ReceiverError::from)
-        })
-        .await?;
-
-        self.state = State::Extension(receiver);
+        let received =
+            Backend::spawn(move || receiver_keys.decrypt(payload).map_err(ReceiverError::from))
+                .await?;
 
         Ok(received)
     }
@@ -243,7 +239,7 @@ where
         &mut self,
         sink: &mut Si,
         stream: &mut St,
-        index: usize,
+        id: usize,
         msgs: &[[Block; 2]],
     ) -> Result<(), OTError> {
         let receiver = self.state.as_extension().map_err(ReceiverError::from)?;
@@ -286,7 +282,7 @@ where
         };
 
         receiver
-            .verify(index, delta, msgs)
+            .verify(id as u32, delta, msgs)
             .map_err(ReceiverError::from)?;
 
         Ok(())

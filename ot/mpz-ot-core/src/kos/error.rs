@@ -4,8 +4,10 @@
 pub enum SenderError {
     #[error("invalid state: expected {0}")]
     InvalidState(String),
-    #[error("count mismatch: receiver expected {0}, got {1}")]
+    #[error("count mismatch: expected {0}, got {1}")]
     CountMismatch(usize, usize),
+    #[error("id mismatch: expected {0}, got {1}")]
+    IdMismatch(u32, u32),
     #[error("invalid extend")]
     InvalidExtend,
     #[error("consistency check failed")]
@@ -20,8 +22,12 @@ pub enum SenderError {
 pub enum ReceiverError {
     #[error("invalid state: expected {0}")]
     InvalidState(String),
-    #[error("count mismatch: receiver expected {0} but sender sent {1}")]
+    #[error("count mismatch: expected {0}, got {1}")]
     CountMismatch(usize, usize),
+    #[error("id mismatch: expected {0}, got {1}")]
+    IdMismatch(u32, u32),
+    #[error("not enough OTs are setup: expected {0}, actual {1}")]
+    InsufficientSetup(usize, usize),
     #[error("invalid payload")]
     InvalidPayload,
     #[error(transparent)]
@@ -34,8 +40,8 @@ pub enum ReceiverError {
 pub enum ReceiverVerifyError {
     #[error("tape was not recorded")]
     TapeNotRecorded,
-    #[error("invalid payload index")]
-    InvalidPayloadIndex,
+    #[error("invalid transfer id: {0}")]
+    InvalidTransferId(u32),
     #[error("payload inconsistent")]
     InconsistentPayload,
 }

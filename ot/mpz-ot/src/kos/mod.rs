@@ -10,8 +10,8 @@ pub use receiver::Receiver;
 pub use sender::Sender;
 
 pub use mpz_ot_core::kos::{
-    msgs, Keys, ReceiverConfig, ReceiverConfigBuilder, ReceiverConfigBuilderError, SenderConfig,
-    SenderConfigBuilder, SenderConfigBuilderError,
+    msgs, ReceiverConfig, ReceiverConfigBuilder, ReceiverConfigBuilderError, SenderConfig,
+    SenderConfigBuilder, SenderConfigBuilderError, SenderKeys,
 };
 use utils_aio::{sink::IoSink, stream::IoStream};
 

@@ -6,7 +6,7 @@ use crate::{
     msgs::Derandomize,
 };
 
-use itybity::IntoBitIterator;
+use itybity::ToBits;
 use mpz_core::{aes::FIXED_KEY_AES, Block};
 
 use rand::{Rng as _, SeedableRng};
@@ -27,60 +27,6 @@ cfg_if::cfg_if! {
 pub struct Sender<T: state::State = state::Initialized> {
     config: SenderConfig,
     state: T,
-}
-
-/// Returned by the `Sender::keys` method, used in cases where the sender
-/// wishes to reserve a set of keys for use later, while still being able to process
-/// other payloads.
-///
-/// A set of keys which can be used to encrypt a payload.
-pub struct Keys {
-    keys: Vec<[Block; 2]>,
-}
-
-impl Keys {
-    /// Encrypts the provided messages using the keys, performing Beaver derandomization.
-    ///
-    /// # Arguments
-    ///
-    /// * `msgs` - The messages to encrypt
-    /// * `derandomize` - The receiver's derandomized choices.
-    pub fn send(
-        self,
-        msgs: &[[Block; 2]],
-        derandomize: Derandomize,
-    ) -> Result<SenderPayload, SenderError> {
-        let Derandomize { flip } = derandomize;
-
-        let flip = flip.into_lsb0_vec();
-
-        if msgs.len() > flip.len() {
-            return Err(SenderError::CountMismatch(flip.len(), msgs.len()));
-        }
-
-        if msgs.len() > self.keys.len() {
-            return Err(SenderError::InsufficientSetup(msgs.len(), self.keys.len()));
-        }
-
-        // Encrypt the chosen messages using the generated keys from ROT.
-        let ciphertexts = self
-            .keys
-            .into_iter()
-            .zip(msgs)
-            .zip(flip)
-            .flat_map(|(([k0, k1], [m0, m1]), flip)| {
-                // Use Beaver derandomization to correct the receiver's choices
-                // from the extension phase.
-                if flip {
-                    [k1 ^ *m0, k0 ^ *m1]
-                } else {
-                    [k0 ^ *m0, k1 ^ *m1]
-                }
-            })
-            .collect();
-
-        Ok(SenderPayload { ciphertexts })
-    }
 }
 
 impl<T> Sender<T>
@@ -132,9 +78,10 @@ impl Sender {
                 delta,
                 rngs,
                 keys: Vec::default(),
+                transfer_id: 0,
                 counter: 0,
+                extended: false,
                 unchecked_qs: Vec::default(),
-                unchecked_keys: Vec::default(),
             },
         }
     }
@@ -166,6 +113,12 @@ impl Sender<state::Extension> {
     /// * `count` - The number of additional OTs to extend
     /// * `extend` - The receiver's setup message
     pub fn extend(&mut self, count: usize, extend: Extend) -> Result<(), SenderError> {
+        if self.state.extended {
+            return Err(SenderError::InvalidState(
+                "extending more than once is currently disabled".to_string(),
+            ));
+        }
+
         // Round up the OTs to extend to the nearest multiple of 64 (matrix transpose optimization).
         let count = (count + 63) & !63;
 
@@ -216,31 +169,12 @@ impl Sender<state::Extension> {
         // Figure 3, step 5.
         matrix_transpose::transpose_bits(&mut qs, NROWS).expect("matrix is rectangular");
 
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "rayon")] {
-                let iter = qs.par_chunks_exact(NROWS / 8).enumerate();
-            } else {
-                let iter = qs.chunks_exact(NROWS / 8).enumerate();
-            }
-        }
-
-        let cipher = &(*FIXED_KEY_AES);
-        let (qs, keys): (Vec<_>, Vec<_>) = iter
-            .map(|(j, q)| {
+        self.state
+            .unchecked_qs
+            .extend(qs.chunks_exact(NROWS / 8).map(|q| {
                 let q: Block = q.try_into().unwrap();
-                let j = Block::new(((self.state.counter + j) as u128).to_be_bytes());
-
-                let k0 = cipher.tccr(j, q);
-                let k1 = cipher.tccr(j, q ^ self.state.delta);
-
-                (q, [k0, k1])
-            })
-            .unzip();
-
-        self.state.counter += count;
-
-        self.state.unchecked_qs.extend(qs);
-        self.state.unchecked_keys.extend(keys);
+                q
+            }));
 
         Ok(())
     }
@@ -272,8 +206,7 @@ impl Sender<state::Extension> {
 
         let mut rng = Rng::from_seed(seed);
 
-        let unchecked_qs = std::mem::take(&mut self.state.unchecked_qs);
-        let mut unchecked_keys = std::mem::take(&mut self.state.unchecked_keys);
+        let mut unchecked_qs = std::mem::take(&mut self.state.unchecked_qs);
 
         // Figure 7, "Check correlation", point 1.
         // Sample random weights for the consistency check.
@@ -285,7 +218,7 @@ impl Sender<state::Extension> {
         // Compute the random linear combinations.
         cfg_if::cfg_if! {
             if #[cfg(feature = "rayon")] {
-                let check = unchecked_qs.into_par_iter()
+                let check = unchecked_qs.par_iter()
                     .zip(chis)
                     .map(|(q, chi)| q.clmul(chi))
                     .reduce(
@@ -293,7 +226,7 @@ impl Sender<state::Extension> {
                         |(_a, _b), (a, b)| (a ^ _a, b ^ _b),
                     );
             } else {
-                let check = unchecked_qs.into_iter()
+                let check = unchecked_qs.iter()
                     .zip(chis)
                     .map(|(q, chi)| q.clmul(chi))
                     .reduce(
@@ -314,11 +247,33 @@ impl Sender<state::Extension> {
         }
 
         // Strip off the rows sacrificed for the consistency check.
-        let nrows = unchecked_keys.len() - (CSP + SSP);
-        unchecked_keys.truncate(nrows);
+        let nrows = unchecked_qs.len() - (CSP + SSP);
+        unchecked_qs.truncate(nrows);
 
-        // Add to existing qs.
-        self.state.keys.extend(unchecked_keys);
+        // Figure 7, "Randomization"
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "rayon")] {
+                let iter = unchecked_qs.into_par_iter().enumerate();
+            } else {
+                let iter = unchecked_qs.into_iter().enumerate();
+            }
+        }
+
+        let cipher = &(*FIXED_KEY_AES);
+        let keys = iter
+            .map(|(j, q)| {
+                let j = Block::new(((self.state.counter + j) as u128).to_be_bytes());
+
+                let k0 = cipher.tccr(j, q);
+                let k1 = cipher.tccr(j, q ^ self.state.delta);
+
+                [k0, k1]
+            })
+            .collect::<Vec<_>>();
+
+        self.state.counter += keys.len();
+        self.state.keys.extend(keys);
+        self.state.extended = true;
 
         Ok(())
     }
@@ -328,29 +283,98 @@ impl Sender<state::Extension> {
     /// # Arguments
     ///
     /// * `count` - The number of keys to reserve.
-    pub fn keys(&mut self, count: usize) -> Result<Keys, SenderError> {
+    pub fn keys(&mut self, count: usize) -> Result<SenderKeys, SenderError> {
         if count > self.state.keys.len() {
             return Err(SenderError::InsufficientSetup(count, self.state.keys.len()));
         }
 
-        Ok(Keys {
+        let id = self.state.transfer_id;
+        self.state.transfer_id += 1;
+
+        Ok(SenderKeys {
+            id,
             keys: self.state.keys.drain(..count).collect(),
+            derandomize: None,
         })
     }
+}
 
-    /// Obliviously transfers the provided messages to the receiver, applying Beaver
-    /// derandomization to correct the receiver's choices made during extension.
+/// KOS sender's keys for a single transfer.
+///
+/// Returned by the [`Sender::keys`] method, used in cases where the sender
+/// wishes to reserve a set of keys for use later, while still being able to process
+/// other payloads.
+pub struct SenderKeys {
+    /// Transfer ID
+    id: u32,
+    /// Encryption keys
+    keys: Vec<[Block; 2]>,
+    /// Derandomization
+    derandomize: Option<Derandomize>,
+}
+
+impl SenderKeys {
+    /// Returns the transfer ID.
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
+    /// Applies Beaver derandomization to correct the receiver's choices made during extension.
+    pub fn derandomize(&mut self, derandomize: Derandomize) -> Result<(), SenderError> {
+        if derandomize.id != self.id {
+            return Err(SenderError::IdMismatch(self.id, derandomize.id));
+        }
+
+        if derandomize.count as usize != self.keys.len() {
+            return Err(SenderError::CountMismatch(
+                self.keys.len(),
+                derandomize.count as usize,
+            ));
+        }
+
+        self.derandomize = Some(derandomize);
+
+        Ok(())
+    }
+
+    /// Encrypts the provided messages using the keys.
     ///
     /// # Arguments
     ///
-    /// * `msgs` - The messages to obliviously transfer
-    /// * `derandomize` - The receiver's derandomization choices
-    pub fn send(
-        &mut self,
-        msgs: &[[Block; 2]],
-        derandomize: Derandomize,
-    ) -> Result<SenderPayload, SenderError> {
-        self.keys(msgs.len())?.send(msgs, derandomize)
+    /// * `msgs` - The messages to encrypt
+    pub fn encrypt(self, msgs: &[[Block; 2]]) -> Result<SenderPayload, SenderError> {
+        if msgs.len() != self.keys.len() {
+            return Err(SenderError::InsufficientSetup(msgs.len(), self.keys.len()));
+        }
+
+        // Encrypt the chosen messages using the generated keys from ROT.
+        let ciphertexts = if let Some(Derandomize { flip, .. }) = self.derandomize {
+            self.keys
+                .into_iter()
+                .zip(msgs)
+                .zip(flip.iter_lsb0())
+                .flat_map(|(([k0, k1], [m0, m1]), flip)| {
+                    // Use Beaver derandomization to correct the receiver's choices
+                    // from the extension phase.
+                    if flip {
+                        [k1 ^ *m0, k0 ^ *m1]
+                    } else {
+                        [k0 ^ *m0, k1 ^ *m1]
+                    }
+                })
+                .collect()
+        } else {
+            self.keys
+                .into_iter()
+                .zip(msgs)
+                .flat_map(|([k0, k1], [m0, m1])| [k0 ^ *m0, k1 ^ *m1])
+                .collect()
+        };
+
+        Ok(SenderPayload {
+            id: self.id,
+            ciphertexts,
+        })
     }
 }
 
@@ -384,13 +408,19 @@ pub mod state {
         pub(super) rngs: Vec<ChaCha20Rng>,
         /// Sender's keys
         pub(super) keys: Vec<[Block; 2]>,
-        /// Number of OTs sent so far
+
+        /// Current transfer id
+        pub(super) transfer_id: u32,
+        /// Current OT counter
         pub(super) counter: usize,
+
+        /// Whether extension has occurred yet
+        ///
+        /// This is to prevent the receiver from extending twice
+        pub(super) extended: bool,
 
         /// Sender's unchecked qs
         pub(super) unchecked_qs: Vec<Block>,
-        /// Sender's unchecked keys
-        pub(super) unchecked_keys: Vec<[Block; 2]>,
     }
 
     impl State for Extension {}
