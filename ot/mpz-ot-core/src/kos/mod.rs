@@ -13,7 +13,7 @@ pub use config::{
 pub use error::{ReceiverError, ReceiverVerifyError, SenderError};
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
-pub use receiver::{state as receiver_state, Receiver, ReceiverKeys};
+pub use receiver::{state as receiver_state, PayloadRecord, Receiver, ReceiverKeys};
 pub use sender::{state as sender_state, Sender, SenderKeys};
 
 /// Computational security parameter
@@ -267,7 +267,11 @@ mod tests {
 
         assert_eq!(received, expected);
 
-        receiver.verify(0, delta, &data).unwrap();
+        receiver
+            .remove_record(0)
+            .unwrap()
+            .verify(delta, &data)
+            .unwrap();
     }
 
     #[rstest]
@@ -305,7 +309,11 @@ mod tests {
 
         data[0][0] = Block::default();
 
-        let err = receiver.verify(0, delta, &data).unwrap_err();
+        let err = receiver
+            .remove_record(0)
+            .unwrap()
+            .verify(delta, &data)
+            .unwrap_err();
 
         assert!(matches!(
             err,

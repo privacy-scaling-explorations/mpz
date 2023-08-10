@@ -283,8 +283,13 @@ where
             actual_delta
         };
 
-        receiver
-            .verify(id as u32, delta, msgs)
+        let record = receiver
+            .remove_record(id as u32)
+            .map_err(ReceiverError::from)?;
+
+        let msgs = msgs.to_vec();
+        Backend::spawn(move || record.verify(delta, &msgs))
+            .await
             .map_err(ReceiverError::from)?;
 
         Ok(())

@@ -24,16 +24,6 @@ use rand_core::RngCore;
 use rayon::prelude::*;
 
 #[derive(Debug, Default)]
-struct PayloadRecord {
-    index: usize,
-    /// The receiver's random choices from the OT extension.
-    choices: Vec<u8>,
-    ts: Vec<Block>,
-    keys: Vec<Block>,
-    ciphertext_digest: [u8; 32],
-}
-
-#[derive(Debug, Default)]
 struct Tape {
     records: HashMap<u32, PayloadRecord>,
 }
@@ -356,75 +346,27 @@ impl Receiver<state::Extension> {
         })
     }
 
-    /// Checks the purported messages against the receiver's protocol tape, using the sender's
-    /// base choices `delta`.
+    /// Returns the [`PayloadRecord`] for the given transfer id if it exists.
     ///
-    /// # ⚠️ Warning ⚠️
+    /// # Errors
     ///
-    /// The authenticity of `delta` must be established outside the context of this function. This
-    /// can be achieved using verifiable base OT.
+    /// Returns an error if the tape is not being recorded, or if the record does
+    /// not exist.
     ///
     /// # Arguments
     ///
     /// * `id` - The transfer id
-    /// * `delta` - The sender's base OT choice bits.
-    /// * `purported_msgs` - The purported messages sent by the sender.
-    pub fn verify(
-        &self,
-        id: u32,
-        delta: Block,
-        purported_msgs: &[[Block; 2]],
-    ) -> Result<(), ReceiverError> {
+    pub fn remove_record(&self, id: u32) -> Result<PayloadRecord, ReceiverError> {
         let Some(tape) = &self.tape else {
             return Err(ReceiverVerifyError::TapeNotRecorded)?;
         };
 
-        let PayloadRecord {
-            index: counter,
-            choices,
-            ts,
-            keys,
-            ciphertext_digest,
-        } = tape
-            .lock()
+        tape.lock()
             .unwrap()
             .records
             .remove(&id)
             .ok_or(ReceiverVerifyError::InvalidTransferId(id))
-            .map_err(ReceiverError::from)?;
-
-        // Here we compute the complementary key to the one used earlier in the protocol.
-        //
-        // From this, we encrypt the purported messages and check that the ciphertext digests match.
-        let cipher = &(*FIXED_KEY_AES);
-        let mut hasher = Hasher::default();
-        for (j, (((c, t), key), msgs)) in choices
-            .iter_lsb0()
-            .zip(ts)
-            .zip(keys)
-            .zip(purported_msgs)
-            .enumerate()
-        {
-            let j = Block::new(((counter + j) as u128).to_be_bytes());
-            let key_ = cipher.tccr(j, t ^ delta);
-
-            let (ct0, ct1) = if c {
-                (msgs[0] ^ key_, msgs[1] ^ key)
-            } else {
-                (msgs[0] ^ key, msgs[1] ^ key_)
-            };
-
-            hasher.update(&ct0.to_bytes());
-            hasher.update(&ct1.to_bytes());
-        }
-
-        let digest: [u8; 32] = hasher.finalize().into();
-
-        if ciphertext_digest != digest {
-            return Err(ReceiverVerifyError::InconsistentPayload)?;
-        }
-
-        Ok(())
+            .map_err(ReceiverError::from)
     }
 }
 
@@ -524,6 +466,77 @@ impl ReceiverKeys {
             .zip(ciphertexts.chunks(2))
             .map(|((key, c), ct)| if c { key ^ ct[1] } else { key ^ ct[0] })
             .collect())
+    }
+}
+
+/// A record of a transfer's payload.
+pub struct PayloadRecord {
+    /// The starting index for the corresponding OTs. This is used to compute the
+    /// "tweak" for the randomization.
+    index: usize,
+    /// The receiver's choices for the transfer.
+    choices: Vec<u8>,
+    ts: Vec<Block>,
+    keys: Vec<Block>,
+    ciphertext_digest: [u8; 32],
+}
+
+opaque_debug::implement!(PayloadRecord);
+
+impl PayloadRecord {
+    /// Checks the purported messages against the record, using the sender's
+    /// base choices `delta`.
+    ///
+    /// # ⚠️ Warning ⚠️
+    ///
+    /// The authenticity of `delta` must be established outside the context of this function. This
+    /// can be achieved using verifiable base OT.
+    ///
+    /// # Arguments
+    ///
+    /// * `delta` - The sender's base OT choice bits.
+    /// * `purported_msgs` - The purported messages sent by the sender.
+    pub fn verify(self, delta: Block, purported_msgs: &[[Block; 2]]) -> Result<(), ReceiverError> {
+        let PayloadRecord {
+            index: counter,
+            choices,
+            ts,
+            keys,
+            ciphertext_digest,
+        } = self;
+
+        // Here we compute the complementary key to the one used earlier in the protocol.
+        //
+        // From this, we encrypt the purported messages and check that the ciphertext digests match.
+        let cipher = &(*FIXED_KEY_AES);
+        let mut hasher = Hasher::default();
+        for (j, (((c, t), key), msgs)) in choices
+            .iter_lsb0()
+            .zip(ts)
+            .zip(keys)
+            .zip(purported_msgs)
+            .enumerate()
+        {
+            let j = Block::new(((counter + j) as u128).to_be_bytes());
+            let key_ = cipher.tccr(j, t ^ delta);
+
+            let (ct0, ct1) = if c {
+                (msgs[0] ^ key_, msgs[1] ^ key)
+            } else {
+                (msgs[0] ^ key, msgs[1] ^ key_)
+            };
+
+            hasher.update(&ct0.to_bytes());
+            hasher.update(&ct1.to_bytes());
+        }
+
+        let digest: [u8; 32] = hasher.finalize().into();
+
+        if ciphertext_digest != digest {
+            return Err(ReceiverVerifyError::InconsistentPayload)?;
+        }
+
+        Ok(())
     }
 }
 
