@@ -107,7 +107,7 @@ mod tests {
         let receiver_setup = receiver.extend(choices.len() + 256).unwrap();
         sender.extend(data.len() + 256, receiver_setup).unwrap();
 
-        let receiver_check = receiver.check(chi_seed);
+        let receiver_check = receiver.check(chi_seed).unwrap();
         sender.check(chi_seed, receiver_check).unwrap();
 
         let mut receiver_keys = receiver.keys(choices.len()).unwrap();
@@ -145,7 +145,7 @@ mod tests {
         let receiver_setup = receiver.extend(256).unwrap();
         sender.extend(256, receiver_setup).unwrap();
 
-        let receiver_check = receiver.check(chi_seed);
+        let receiver_check = receiver.check(chi_seed).unwrap();
         sender.check(chi_seed, receiver_check).unwrap();
 
         let mut receiver_keys = receiver.keys(choices.len()).unwrap();
@@ -177,13 +177,35 @@ mod tests {
         sender.extend(256, receiver_setup).unwrap();
 
         // Perform check
-        let receiver_check = receiver.check(chi_seed);
+        let receiver_check = receiver.check(chi_seed).unwrap();
         sender.check(chi_seed, receiver_check).unwrap();
 
         // Extending more should fail
         let receiver_setup = receiver.extend(256).unwrap_err();
 
         assert!(matches!(receiver_setup, ReceiverError::InvalidState(_)));
+    }
+
+    #[rstest]
+    fn test_kos_extension_insufficient_setup(
+        delta: Block,
+        sender_seeds: [Block; CSP],
+        receiver_seeds: [[Block; 2]; CSP],
+        chi_seed: Block,
+    ) {
+        let sender = Sender::new(SenderConfig::default());
+        let receiver = Receiver::new(ReceiverConfig::default());
+
+        let mut sender = sender.setup(delta, sender_seeds);
+        let mut receiver = receiver.setup(receiver_seeds);
+
+        let receiver_setup = receiver.extend(64).unwrap();
+        sender.extend(64, receiver_setup).unwrap();
+
+        // Perform check
+        let err = receiver.check(chi_seed).unwrap_err();
+
+        assert!(matches!(err, ReceiverError::InsufficientSetup(_, _)));
     }
 
     #[rstest]
@@ -206,7 +228,7 @@ mod tests {
 
         sender.extend(512, receiver_setup).unwrap();
 
-        let receiver_check = receiver.check(chi_seed);
+        let receiver_check = receiver.check(chi_seed).unwrap();
         let err = sender.check(chi_seed, receiver_check).unwrap_err();
 
         assert!(matches!(err, SenderError::ConsistencyCheckFailed));
@@ -231,7 +253,7 @@ mod tests {
         let receiver_setup = receiver.extend(choices.len() + 256).unwrap();
         sender.extend(data.len() + 256, receiver_setup).unwrap();
 
-        let receiver_check = receiver.check(chi_seed);
+        let receiver_check = receiver.check(chi_seed).unwrap();
         sender.check(chi_seed, receiver_check).unwrap();
 
         let mut receiver_keys = receiver.keys(choices.len()).unwrap();
@@ -267,7 +289,7 @@ mod tests {
         let receiver_setup = receiver.extend(choices.len() + 256).unwrap();
         sender.extend(data.len() + 256, receiver_setup).unwrap();
 
-        let receiver_check = receiver.check(chi_seed);
+        let receiver_check = receiver.check(chi_seed).unwrap();
         sender.check(chi_seed, receiver_check).unwrap();
 
         let mut receiver_keys = receiver.keys(choices.len()).unwrap();

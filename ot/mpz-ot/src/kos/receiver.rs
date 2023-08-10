@@ -168,6 +168,8 @@ where
         })
         .await;
 
+        let check = check?;
+
         // Send consistency check
         sink.feed(Message::CointossSenderPayload(payload)).await?;
         sink.feed(Message::Check(check)).await?;

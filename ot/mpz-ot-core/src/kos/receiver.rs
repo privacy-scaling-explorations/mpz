@@ -228,7 +228,15 @@ impl Receiver<state::Extension> {
     /// # Arguments
     ///
     /// * `chi_seed` - The seed used to generate the consistency check weights.
-    pub fn check(&mut self, chi_seed: Block) -> Check {
+    pub fn check(&mut self, chi_seed: Block) -> Result<Check, ReceiverError> {
+        // Make sure we have enough sacrifical OTs to perform the consistency check.
+        if self.state.unchecked_ts.len() < CSP + SSP {
+            return Err(ReceiverError::InsufficientSetup(
+                CSP + SSP,
+                self.state.unchecked_ts.len(),
+            ));
+        }
+
         let mut seed = RngSeed::default();
         seed.iter_mut()
             .zip(chi_seed.to_bytes().into_iter().cycle())
@@ -313,7 +321,7 @@ impl Receiver<state::Extension> {
         // Disable any further extensions.
         self.state.extended = true;
 
-        Check { x, t0, t1 }
+        Ok(Check { x, t0, t1 })
     }
 
     /// Returns receiver's keys for the given number of OTs.

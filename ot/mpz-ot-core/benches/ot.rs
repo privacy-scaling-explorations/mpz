@@ -59,7 +59,7 @@ fn kos(c: &mut Criterion) {
                 let receiver_setup = receiver.extend(choices.len() + 256).unwrap();
                 sender.extend(msgs.len() + 256, receiver_setup).unwrap();
 
-                let receiver_check = receiver.check(chi_seed);
+                let receiver_check = receiver.check(chi_seed).unwrap();
                 sender.check(chi_seed, receiver_check).unwrap();
 
                 let mut receiver_keys = receiver.keys(choices.len()).unwrap();
