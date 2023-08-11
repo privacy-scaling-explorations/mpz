@@ -170,7 +170,7 @@ where
 
         let check = check?;
 
-        // Send consistency check
+        // Send cointoss decommitment and correlation check value.
         sink.feed(Message::CointossSenderPayload(payload)).await?;
         sink.feed(Message::Check(check)).await?;
         sink.flush().await?;

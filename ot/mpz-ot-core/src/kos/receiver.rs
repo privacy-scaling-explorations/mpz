@@ -48,11 +48,11 @@ where
 }
 
 impl Receiver {
-    /// Creates a new Sender
+    /// Creates a new Receiver
     ///
     /// # Arguments
     ///
-    /// * `config` - The Sender's configuration
+    /// * `config` - The Receiver's configuration
     pub fn new(config: ReceiverConfig) -> Self {
         let tape = if config.sender_commit() {
             Some(Default::default())
@@ -77,6 +77,7 @@ impl Receiver {
             .iter()
             .map(|seeds| {
                 seeds.map(|seed| {
+                    // Stretch the Block-sized seed to a 32-byte seed.
                     let mut seed_ = RngSeed::default();
                     seed_
                         .iter_mut()
@@ -382,7 +383,8 @@ pub struct ReceiverKeys {
     index: usize,
     /// Decryption keys
     keys: Vec<Block>,
-    /// Choices
+    /// The Receiver's choices. If derandomization is performed, these are the overwritten
+    /// with the derandomized choices.
     choices: Vec<bool>,
 
     /// Receiver `ts`
