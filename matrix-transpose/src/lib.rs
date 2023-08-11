@@ -102,7 +102,10 @@ mod tests {
             }
         }
 
-        bits_.into_iter().flat_map(Vec::<u8>::from_lsb0).collect()
+        bits_
+            .into_iter()
+            .flat_map(Vec::<u8>::from_lsb0_iter)
+            .collect()
     }
 
     #[test]
