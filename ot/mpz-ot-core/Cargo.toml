@@ -8,7 +8,7 @@ name = "mpz_ot_core"
 
 [features]
 default = ["rayon"]
-rayon = ["dep:rayon", "itybity/rayon"]
+rayon = ["dep:rayon", "itybity/rayon", "blake3/rayon"]
 
 [dependencies]
 mpz-core.workspace = true
