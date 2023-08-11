@@ -32,6 +32,7 @@ use thiserror::Error;
 
 /// This function transposes a matrix on the bit-level.
 ///
+/// Assumes an LSB0 bit encoding of the matrix.
 /// This implementation requires that the number of rows is a power of 2
 /// and that the number of columns is a multiple of 8
 pub fn transpose_bits(matrix: &mut [u8], rows: usize) -> Result<(), TransposeError> {
@@ -87,17 +88,65 @@ mod tests {
         (0..elements).map(|_| rng.gen::<T>()).collect()
     }
 
+    fn transpose_naive(data: &[u8], row_width: usize) -> Vec<u8> {
+        use itybity::*;
+
+        let bits: Vec<Vec<bool>> = data.chunks(row_width).map(|x| x.to_lsb0_vec()).collect();
+        let col_count = bits[0].len();
+        let row_count = bits.len();
+
+        let mut bits_: Vec<Vec<bool>> = vec![vec![false; row_count]; col_count];
+        for j in 0..row_count {
+            for i in 0..col_count {
+                bits_[i][j] = bits[j][i];
+            }
+        }
+
+        bits_.into_iter().flat_map(Vec::<u8>::from_lsb0).collect()
+    }
+
     #[test]
     fn test_transpose_bits() {
-        let mut rows = 512;
+        let rows = 512;
         let columns = 256;
 
         let mut matrix: Vec<u8> = random_vec::<u8>(columns * rows);
-        let original = matrix.clone();
+        let naive = transpose_naive(&matrix, columns);
+
         transpose_bits(&mut matrix, rows).unwrap();
-        rows = columns;
-        transpose_bits(&mut matrix, 8 * rows).unwrap();
-        assert_eq!(original, matrix);
+
+        assert_eq!(naive, matrix);
+    }
+
+    #[test]
+    fn test_transpose_naive() {
+        let matrix = [
+            // ------- bits in lsb0
+            3u8,   // 1 1 0 0 0 0 0 0
+            76u8,  // 0 0 1 1 0 0 1 0
+            120u8, // 0 0 0 1 1 1 1 0
+            9u8,   // 1 0 0 1 0 0 0 0
+            17u8,  // 1 0 0 0 1 0 0 0
+            102u8, // 0 1 1 0 0 1 1 0
+            53u8,  // 1 0 1 0 1 1 0 0
+            125u8, // 1 0 1 1 1 1 1 0
+        ];
+
+        let expected = [
+            // ------- bits in lsb0
+            217u8, // 1 0 0 1 1 0 1 1
+            33u8,  // 1 0 0 0 0 1 0 0
+            226u8, // 0 1 0 0 0 1 1 1
+            142u8, // 0 1 1 1 0 0 0 1
+            212u8, // 0 0 1 0 1 0 1 1
+            228u8, // 0 0 1 0 0 1 1 1
+            166u8, // 0 1 1 0 0 1 0 1
+            0u8,   // 0 0 0 0 0 0 0 0
+        ];
+
+        let naive = transpose_naive(&matrix, 1);
+
+        assert_eq!(naive, expected);
     }
 
     #[test]
@@ -141,12 +190,12 @@ mod tests {
             for k in 0..8 {
                 for (l, chunk) in row.chunks(8).enumerate() {
                     let expected: u8 = chunk.iter().enumerate().fold(0, |acc, (m, element)| {
-                        acc + (element >> 7) * 2_u8.pow(7_u32 - m as u32)
+                        acc + (element & 1) * 2_u8.pow(m as u32)
                     });
                     let actual = matrix[row_index * columns + columns / 8 * k + l];
                     assert_eq!(expected, actual);
                 }
-                let shifted_row = row.iter_mut().map(|el| *el << 1).collect::<Vec<u8>>();
+                let shifted_row = row.iter_mut().map(|el| *el >> 1).collect::<Vec<u8>>();
                 row.copy_from_slice(&shifted_row);
             }
         }
