@@ -6,6 +6,7 @@ use std::{
 
 /// SIMD version for bit-level transposition
 ///
+/// Assumes an LSB0 bit encoding of the matrix.
 /// This SIMD implementation additionally requires that the matrix has at least
 /// 16 (WASM) or 32 (x86_64) columns and rows
 #[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
@@ -73,6 +74,7 @@ where
 
 /// Unsafe single-row bit-mask shift
 ///
+/// Assumes an LSB0 bit encoding of the matrix.
 /// This function is an implementation of the bit-level transpose in
 /// https://docs.rs/oblivious-transfer/latest/oblivious_transfer/extension/fn.transpose128.html
 /// Caller has to make sure that columns is a multiple of 16 or 32
@@ -84,6 +86,7 @@ pub unsafe fn bitmask_shift_unchecked(matrix: &mut [u8], columns: usize) {
     #[cfg(target_arch = "x86_64")]
     use std::arch::x86_64::_mm256_movemask_epi8;
 
+    matrix.iter_mut().for_each(|b| *b = b.reverse_bits());
     let simd_one = Simd::<u8, LANE_COUNT>::splat(1);
     let mut s: Simd<u8, LANE_COUNT>;
     for row in matrix.chunks_mut(columns) {
@@ -95,7 +98,12 @@ pub unsafe fn bitmask_shift_unchecked(matrix: &mut [u8], columns: usize) {
                 let high_bits = _mm256_movemask_epi8(s.reverse().into());
                 #[cfg(target_arch = "wasm32")]
                 let high_bits = u8x16_bitmask(s.reverse().into());
-                shifted_row.extend_from_slice(&high_bits.to_be_bytes());
+                let high_bits: Vec<u8> = high_bits
+                    .to_be_bytes()
+                    .into_iter()
+                    .map(|b| b.reverse_bits())
+                    .collect();
+                shifted_row.extend_from_slice(&high_bits);
                 s.shl_assign(simd_one);
                 *chunk = s.to_array();
             }
