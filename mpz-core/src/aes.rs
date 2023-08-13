@@ -42,6 +42,27 @@ impl FixedKeyAes {
 
         Block::from(out)
     }
+
+    /// Correlation-robust hash function for 128-bit inputs
+    /// (cf. <https://eprint.iacr.org/2019/074>, §7.2).
+    /// The function computes `π(x) ⊕ x`.
+    /// π(x) = AES(fixedkey,x)
+    #[inline]
+    pub fn cr(&self, block: Block) -> Block {
+        let mut x = GenericArray::from(block);
+        self.aes.encrypt_block(&mut x);
+        Block::from(x) ^ block
+    }
+
+    /// Circular correlation-robust hash function
+    /// (cf.<https://eprint.iacr.org/2019/074>, §7.3).
+    ///
+    /// The function computes `H(sigma(x))`, where `H` is a correlation-robust hash
+    /// function and `sigma( x0 || x1 ) = (x0 xor x1) || x1`.
+    #[inline]
+    pub fn ccr(&self, block: Block) -> Block {
+        self.cr(Block::sigma(block))
+    }
 }
 
 /// A wrapper of aes, only for encryption.
@@ -50,7 +71,7 @@ pub struct AesEncryptor(Aes128Enc);
 
 impl AesEncryptor {
     /// AES_BLOCK_SIZE
-    pub const AES_BLOCK_SIZE:usize = 8;
+    pub const AES_BLOCK_SIZE: usize = 8;
 
     /// Initiate an AesEncryptor instance with key.
     #[inline(always)]
