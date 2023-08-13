@@ -83,6 +83,62 @@ impl ClmulArm {
 
         (ClmulArm(r0), ClmulArm(r1))
     }
+
+    #[inline(always)]
+    pub fn reduce(x: Self, y: Self) -> ClmulArm {
+        unsafe { Self::reduce_unsafe(&x, &y) }
+    }
+
+    #[inline]
+    #[target_feature(enable = "neon")]
+    unsafe fn reduce_unsafe(x: &Self, y: &Self) -> ClmulArm {
+        macro_rules! _mm_shuffle_epi32 {
+            ($a:expr,$IMM8:expr) => {{
+                let ret = vmovq_n_u32(vgetq_lane_u32(vreinterpretq_u32_u8($a), $IMM8 & (0x3)));
+                let ret = vsetq_lane_u32(
+                    vgetq_lane_u32(vreinterpretq_u32_u8($a), ($IMM8 >> 2) & (0x3)),
+                    ret,
+                    1,
+                );
+
+                let ret = vsetq_lane_u32(
+                    vgetq_lane_u32(vreinterpretq_u32_u8($a), ($IMM8 >> 4) & (0x3)),
+                    ret,
+                    2,
+                );
+                let ret = vreinterpretq_u8_u32(vsetq_lane_u32(
+                    vgetq_lane_u32(vreinterpretq_u32_u8($a), ($IMM8 >> 6) & (0x3)),
+                    ret,
+                    3,
+                ));
+                ret
+            }};
+        }
+
+        let tmp3 = x.0;
+        let tmp6 = y.0;
+        let xmmmask = vreinterpretq_u8_u32(vld1q_u32([0xffffffff, 0x0, 0x0, 0x0].as_ptr()));
+        let tmp7 = vreinterpretq_u8_u32(vshlq_u32(vreinterpretq_u32_u8(tmp6), vdupq_n_s32(-31)));
+        let tmp8 = vreinterpretq_u8_u32(vshlq_u32(vreinterpretq_u32_u8(tmp6), vdupq_n_s32(-30)));
+        let tmp9 = vreinterpretq_u8_u32(vshlq_u32(vreinterpretq_u32_u8(tmp6), vdupq_n_s32(-25)));
+
+        let tmp7 = veorq_u8(tmp7, tmp8);
+        let tmp7 = veorq_u8(tmp7, tmp9);
+        let tmp8 = _mm_shuffle_epi32!(tmp7, 147);
+
+        let tmp7 = vandq_u8(xmmmask, tmp8);
+        let tmp8 = vbicq_u8(tmp8, xmmmask);
+        let tmp3 = veorq_u8(tmp3, tmp8);
+        let tmp6 = veorq_u8(tmp6, tmp7);
+
+        let tmp10 = vreinterpretq_u8_u32(vshlq_u32(vreinterpretq_u32_u8(tmp6), vdupq_n_s32(1)));
+        let tmp3 = veorq_u8(tmp3, tmp10);
+        let tmp11 = vreinterpretq_u8_u32(vshlq_u32(vreinterpretq_u32_u8(tmp6), vdupq_n_s32(2)));
+        let tmp3 = veorq_u8(tmp3, tmp11);
+        let tmp12 = vreinterpretq_u8_u32(vshlq_u32(vreinterpretq_u32_u8(tmp6), vdupq_n_s32(7)));
+        let tmp3 = veorq_u8(tmp3, tmp12);
+        ClmulArm(veorq_u8(tmp3, tmp6))
+    }
 }
 
 /// Wrapper for the ARM64 `PMULL` instruction.

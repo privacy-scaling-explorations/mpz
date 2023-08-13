@@ -84,6 +84,41 @@ impl ClmulX86 {
             ClmulX86(_mm_unpacklo_epi64(v2, v3)),
         )
     }
+
+    #[inline(always)]
+    pub fn reduce(x: Self, y: Self) -> ClmulX86 {
+        unsafe { Self::reduce_unsafe(&x, &y) }
+    }
+
+    #[inline]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    unsafe fn reduce_unsafe(x: &Self, y: &Self) -> ClmulX86 {
+        let tmp3 = x.0;
+        let tmp6 = y.0;
+        let xmmmask = _mm_setr_epi32(-1, 0x0, 0x0, 0x0);
+        let tmp7 = _mm_srli_epi32(tmp6, 31);
+        let tmp8 = _mm_srli_epi32(tmp6, 30);
+        let tmp9 = _mm_srli_epi32(tmp6, 25);
+
+        let tmp7 = _mm_xor_si128(tmp7, tmp8);
+        let tmp7 = _mm_xor_si128(tmp7, tmp9);
+
+        let tmp8 = _mm_shuffle_epi32(tmp7, 147);
+
+        let tmp7 = _mm_and_si128(xmmmask, tmp8);
+        let tmp8 = _mm_andnot_si128(xmmmask, tmp8);
+        let tmp3 = _mm_xor_si128(tmp3, tmp8);
+        let tmp6 = _mm_xor_si128(tmp6, tmp7);
+
+        let tmp10 = _mm_slli_epi32(tmp6, 1);
+        let tmp3 = _mm_xor_si128(tmp3, tmp10);
+        let tmp11 = _mm_slli_epi32(tmp6, 2);
+        let tmp3 = _mm_xor_si128(tmp3, tmp11);
+        let tmp12 = _mm_slli_epi32(tmp6, 7);
+        let tmp3 = _mm_xor_si128(tmp3, tmp12);
+
+        ClmulX86(_mm_xor_si128(tmp3, tmp6))
+    }
 }
 
 #[cfg(test)]

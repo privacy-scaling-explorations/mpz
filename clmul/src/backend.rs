@@ -9,6 +9,36 @@ use core::ops::{BitXor, BitXorAssign};
 #[cfg_attr(target_pointer_width = "64", path = "backend/soft64.rs")]
 mod soft;
 
+impl soft::Clmul {
+    pub fn reduce(x: Self, y: Self) -> Self {
+        // This software implementation is from Swanky.
+        // Page 15 of https://is.gd/tOd246
+        // Reduce the polynomial represented in bits over x^128 + x^7 + x^2 + x + 1
+        fn sep(x: u128) -> (u64, u64) {
+            // (high, low)
+            ((x >> 64) as u64, x as u64)
+        }
+        fn join(u: u64, l: u64) -> u128 {
+            ((u as u128) << 64) | (l as u128)
+        }
+        let x: u128 = unsafe { core::mem::transmute(x) };
+        let y: u128 = unsafe { core::mem::transmute(y) };
+
+        let (x3, x2) = sep(y);
+        let (x1, x0) = sep(x);
+        let a = x3 >> 63;
+        let b = x3 >> 62;
+        let c = x3 >> 57;
+        let d = x2 ^ a ^ b ^ c;
+        let (e1, e0) = sep(join(x3, d) << 1);
+        let (f1, f0) = sep(join(x3, d) << 2);
+        let (g1, g0) = sep(join(x3, d) << 7);
+        let h1 = x3 ^ e1 ^ f1 ^ g1;
+        let h0 = d ^ e0 ^ f0 ^ g0;
+        unsafe { core::mem::transmute(join(x1 ^ h1, x0 ^ h0)) }
+    }
+}
+
 cfg_if! {
     if #[cfg(all(target_arch = "aarch64", feature = "armv8"))] {
         #[path = "backend/pmull.rs"]
@@ -150,6 +180,41 @@ impl Clmul {
             },
         }
     }
+
+    /// Performs reduce
+    pub fn reduce(x: Self, y: Self) -> Self {
+        match x.intrinsics {
+            Some(x_intr) => match y.intrinsics {
+                Some(y_intr) => {
+                    cfg_if! {
+                        if #[cfg(any(all(target_arch = "aarch64", feature = "armv8"), any(target_arch = "x86_64", target_arch = "x86")))]{
+                            let r = intrinsics::Clmul::reduce(x_intr, y_intr);
+                        }else{
+                            let r = soft::Clmul::reduce(x_intr, y_intr);
+                        }
+                    }
+                    Self {
+                        intrinsics: Some(r),
+                        soft: None,
+                    }
+                }
+                None => unreachable!(),
+            },
+            None => match x.soft {
+                Some(x_soft) => match y.soft {
+                    Some(y_soft) => {
+                        let r = soft::Clmul::reduce(x_soft, y_soft);
+                        Self {
+                            intrinsics: None,
+                            soft: Some(r),
+                        }
+                    }
+                    None => unreachable!(),
+                },
+                None => unreachable!(),
+            },
+        }
+    }
 }
 
 impl From<Clmul> for [u8; 16] {
@@ -231,4 +296,28 @@ impl PartialEq for Clmul {
             },
         }
     }
+}
+
+#[test]
+fn reduce_test() {
+    use rand::Rng;
+    use rand_chacha::{rand_core::SeedableRng, ChaCha12Rng};
+
+    let mut rng = ChaCha12Rng::from_entropy();
+    let x: [u8; 16] = rng.gen();
+    let y: [u8; 16] = rng.gen();
+
+    let xx = soft::Clmul::new(&x);
+    let yy = soft::Clmul::new(&y);
+
+    let zz = soft::Clmul::reduce(xx, yy);
+    let zz: [u8; 16] = zz.into();
+
+    let xxx = Clmul::new(&x);
+    let yyy = Clmul::new(&y);
+
+    let zzz = Clmul::reduce(xxx, yyy);
+    let zzz: [u8; 16] = zzz.into();
+
+    assert_eq!(zz, zzz);
 }
