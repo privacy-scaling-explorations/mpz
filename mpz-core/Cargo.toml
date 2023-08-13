@@ -23,6 +23,7 @@ once_cell.workspace = true
 itybity.workspace = true
 opaque-debug.workspace = true
 bcs = "0.1.5"
+rand_core = "0.6.4"
 
 [dev-dependencies]
 rstest.workspace = true

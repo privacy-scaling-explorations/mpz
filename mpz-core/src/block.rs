@@ -1,6 +1,6 @@
 use cipher::{consts::U16, generic_array::GenericArray};
 use clmul::Clmul;
-use core::ops::{BitAnd, BitXor};
+use core::ops::{BitAnd, BitAndAssign, BitXor, BitXorAssign};
 use itybity::{BitIterable, BitLength, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -68,6 +68,14 @@ impl Block {
     #[inline]
     pub fn lsb(&self) -> usize {
         ((self.0[0] & 1) == 1) as usize
+    }
+
+    ///Function ``sigma( x0 || x1 ) = (x0 xor x1) || x1``.
+    #[inline(always)]
+    pub fn sigma(a: Self) -> Self {
+        let mut x: [u64; 2] = unsafe { std::mem::transmute(a) };
+        x[0] = x[0] ^ x[1];
+        Block(unsafe { std::mem::transmute(x) })
     }
 }
 
@@ -146,6 +154,13 @@ impl BitXor for Block {
     }
 }
 
+impl BitXorAssign for Block {
+    #[inline(always)]
+    fn bitxor_assign(&mut self, rhs: Self) {
+        *self = *self ^ rhs;
+    }
+}
+
 impl BitAnd for Block {
     type Output = Self;
 
@@ -155,12 +170,25 @@ impl BitAnd for Block {
     }
 }
 
+impl BitAndAssign for Block {
+    #[inline(always)]
+    fn bitand_assign(&mut self, rhs: Self) {
+        *self = *self & rhs
+    }
+}
+
 impl Distribution<Block> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Block {
         Block::new(rng.gen())
     }
 }
 
+impl AsMut<[u8]> for Block {
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut [u8] {
+        unsafe { &mut *(self as *mut Block as *mut [u8; 16]) }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
