@@ -181,7 +181,7 @@ impl Clmul {
         }
     }
 
-    /// Performs reduce
+    /// Performs reduction
     pub fn reduce(x: Self, y: Self) -> Self {
         match x.intrinsics {
             Some(x_intr) => match y.intrinsics {
