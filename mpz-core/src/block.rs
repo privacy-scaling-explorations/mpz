@@ -58,6 +58,39 @@ impl Block {
         (Self::new(a.into()), Self::new(b.into()))
     }
 
+    #[inline]
+    /// Performs reduction
+    pub fn reduce(x: Self, y: Self) -> Self {
+        let r = Clmul::reduce(Clmul::new(&x.0), Clmul::new(&y.0));
+        Self::new(r.into())
+    }
+
+    /// The multiplication of two field elements.
+    #[inline]
+    pub fn gfmul(self, x: Self) -> Self {
+        let (a, b) = self.clmul(x);
+        Block::reduce(a, b)
+    }
+
+    /// Compute the inner product of two block vectors, without reducing the polynomial.
+    #[inline(always)]
+    pub fn inn_prdt_no_red(a: &Vec<Block>, b: &Vec<Block>) -> (Block, Block) {
+        assert_eq!(a.len(), b.len());
+        a.iter()
+            .zip(b.iter())
+            .fold((Block::default(), Block::default()), |acc, (x, y)| {
+                let t = x.clmul(*y);
+                (t.0 ^ acc.0, t.1 ^ acc.1)
+            })
+    }
+
+    /// Compute the inner product of two block vectors.
+    #[inline(always)]
+    pub fn inn_prdt_red(a: &Vec<Block>, b: &Vec<Block>) -> Block {
+        let (x, y) = Block::inn_prdt_no_red(a, b);
+        Block::reduce(x, y)
+    }
+
     /// Sets the least significant bit of the block
     #[inline]
     pub fn set_lsb(&mut self) {
@@ -233,5 +266,34 @@ mod tests {
 
         let a = Block::new(three);
         assert_eq!(a.lsb(), 1);
+    }
+
+    #[test]
+    fn inn_prdt_test() {
+        use rand::{Rng, SeedableRng};
+        use rand_chacha::ChaCha12Rng;
+        let mut rng = ChaCha12Rng::from_entropy();
+
+        const SIZE: usize = 1000;
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+        let mut c = (Block::default(), Block::default());
+        let mut d = Block::default();
+        for i in 0..SIZE {
+            let r: [u8; 16] = rng.gen();
+            a.push(Block::from(r));
+            let r: [u8; 16] = rng.gen();
+            b.push(Block::from(r));
+
+            let z = a[i].clmul(b[i]);
+            c.0 = c.0 ^ z.0;
+            c.1 = c.1 ^ z.1;
+
+            let x = a[i].gfmul(b[i]);
+            d ^= x;
+        }
+
+        assert_eq!(c, Block::inn_prdt_no_red(&a, &b));
+        assert_eq!(d, Block::inn_prdt_red(&a, &b));
     }
 }
