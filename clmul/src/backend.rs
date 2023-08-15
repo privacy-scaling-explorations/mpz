@@ -11,7 +11,7 @@ mod soft;
 
 impl soft::Clmul {
     pub fn reduce(x: Self, y: Self) -> Self {
-        // This software implementation is from Swanky.
+        // This software implementation is adopted from Swanky.
         // Page 15 of https://is.gd/tOd246
         // Reduce the polynomial represented in bits over x^128 + x^7 + x^2 + x + 1
         fn sep(x: u128) -> (u64, u64) {

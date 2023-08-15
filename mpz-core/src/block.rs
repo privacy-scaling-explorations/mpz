@@ -73,7 +73,7 @@ impl Block {
     }
 
     /// Compute the inner product of two block vectors, without reducing the polynomial.
-    #[inline(always)]
+    #[inline]
     pub fn inn_prdt_no_red(a: &Vec<Block>, b: &Vec<Block>) -> (Block, Block) {
         assert_eq!(a.len(), b.len());
         a.iter()
@@ -85,7 +85,7 @@ impl Block {
     }
 
     /// Compute the inner product of two block vectors.
-    #[inline(always)]
+    #[inline]
     pub fn inn_prdt_red(a: &Vec<Block>, b: &Vec<Block>) -> Block {
         let (x, y) = Block::inn_prdt_no_red(a, b);
         Block::reduce(x, y)

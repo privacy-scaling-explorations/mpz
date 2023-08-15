@@ -15,6 +15,8 @@ pub struct PrgCore {
     state: u64,
 }
 
+
+// This implementation is somehow standard, and is adopted from Swanky.
 impl BlockRngCore for PrgCore {
     type Item = u32;
     type Results = [u32; 4 * AesEncryptor::AES_BLOCK_SIZE];

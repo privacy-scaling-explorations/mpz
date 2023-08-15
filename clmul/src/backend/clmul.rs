@@ -90,6 +90,7 @@ impl ClmulX86 {
         unsafe { Self::reduce_unsafe(&x, &y) }
     }
 
+    // This implementation is adapted from EMP Toolkit.
     #[inline]
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     unsafe fn reduce_unsafe(x: &Self, y: &Self) -> ClmulX86 {

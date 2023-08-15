@@ -89,6 +89,7 @@ impl ClmulArm {
         unsafe { Self::reduce_unsafe(&x, &y) }
     }
 
+    // This implementation is adapted from EMP Toolkit.
     #[inline]
     #[target_feature(enable = "neon")]
     unsafe fn reduce_unsafe(x: &Self, y: &Self) -> ClmulArm {
