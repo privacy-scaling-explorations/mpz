@@ -37,6 +37,7 @@ where
 
 /// Single-row bit-mask shift
 ///
+/// Assumes an LSB0 bit encoding of the matrix.
 /// This function is an implementation of the bit-level transpose in
 /// https://docs.rs/oblivious-transfer/latest/oblivious_transfer/extension/fn.transpose128.html
 /// Caller has to make sure that columns is a multiple of 8
@@ -48,8 +49,8 @@ pub fn bitmask_shift(matrix: &mut [u8], columns: usize) {
             for bytes in row.chunks_mut(8) {
                 let mut high_bits: u8 = 0b00000000;
                 bytes.iter_mut().enumerate().for_each(|(k, b)| {
-                    high_bits |= (0b10000000 & *b) >> k;
-                    *b <<= 1;
+                    high_bits |= (0b00000001 & *b) << k;
+                    *b >>= 1;
                 });
                 shifted_row.push(high_bits);
             }
