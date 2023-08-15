@@ -20,6 +20,7 @@ impl GgmTree {
     /// Take as input a `seed`. \
     /// The generated tree is stored in `tree`. \
     /// Output two block slices used for OT.
+    /// This implementation is adopted from EMP Toolkit.
     pub fn gen(&self, seed: Block, tree: &mut [Block], k0: &mut [Block], k1: &mut [Block]) {
         let mut buf = vec![Block::ZERO; 8];
         self.tkprp.expand_1to2(tree, seed);

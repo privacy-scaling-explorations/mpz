@@ -3,6 +3,7 @@
 use crate::{aes::AesEncryptor, Block};
 
 /// Struct of two-key prp.
+/// This implementation is adopted from EMP toolkit.
 pub struct TwoKeyPrp([AesEncryptor; 2]);
 
 impl TwoKeyPrp {
