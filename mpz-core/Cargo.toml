@@ -28,3 +28,15 @@ rand_core = "0.6.4"
 [dev-dependencies]
 rstest.workspace = true
 criterion.workspace = true
+
+[[bench]]
+name = "aes"
+harness = false
+
+[[bench]]
+name = "ggm"
+harness = false
+
+[[bench]]
+name = "prg"
+harness = false

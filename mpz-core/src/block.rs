@@ -1,3 +1,5 @@
+//! A block of 128 bits and its operations.
+
 use cipher::{consts::U16, generic_array::GenericArray};
 use clmul::Clmul;
 use core::ops::{BitAnd, BitAndAssign, BitXor, BitXorAssign};

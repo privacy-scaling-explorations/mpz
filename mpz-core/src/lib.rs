@@ -3,10 +3,10 @@
 #![deny(clippy::all)]
 
 pub mod aes;
-mod block;
+pub mod block;
 pub mod cointoss;
 pub mod commit;
-pub mod ggm;
+pub mod ggm_tree;
 pub mod hash;
 pub mod prg;
 pub mod serialize;
