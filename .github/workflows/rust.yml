@@ -43,11 +43,31 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Nightly with rustfmt
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: nightly
           components: rustfmt
 
       - name: "Check formatting"
         run: cargo +nightly fmt --check --all
+
+  features:
+    name: Test optional features
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+
+      - name: "Run tests with simd-transpose"
+        run: cargo +nightly test  --lib --bins --tests --examples --workspace --features simd-transpose
+
+      - name: "Run tests with force-soft"
+        run: cargo +nightly test  --lib --bins --tests --examples --workspace --features force-soft
+
+      - name: "Run tests with all-features"
+        run: cargo +nightly test  --lib --bins --tests --examples --workspace --all-features
