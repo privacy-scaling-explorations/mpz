@@ -6,8 +6,6 @@ use rand_core::{
     block::{BlockRng, BlockRngCore},
     CryptoRng, RngCore, SeedableRng,
 };
-use std::mem;
-
 ///Struct of PRG Core
 #[derive(Clone)]
 pub struct PrgCore {
@@ -15,8 +13,7 @@ pub struct PrgCore {
     state: u64,
 }
 
-
-// This implementation is somehow standard, and is adopted from Swanky.
+// This implementation is somehow standard, and is adapted from Swanky.
 impl BlockRngCore for PrgCore {
     type Item = u32;
     type Results = [u32; 4 * AesEncryptor::AES_BLOCK_SIZE];
@@ -29,10 +26,10 @@ impl BlockRngCore for PrgCore {
             |_| {
                 let x = self.state;
                 self.state += 1;
-                Block::from(unsafe { mem::transmute::<_, [u8; 16]>([x, 0u64]) })
+                Block::from(bytemuck::cast::<_, [u8; 16]>([x, 0u64]))
             },
         );
-        *results = unsafe { mem::transmute(self.aes.encrypt_many_blocks(states)) }
+        *results = bytemuck::cast(self.aes.encrypt_many_blocks(states))
     }
 }
 
@@ -131,8 +128,7 @@ impl Prg {
     /// Fill a block slice with random block values.
     #[inline(always)]
     pub fn random_blocks(&mut self, buf: &mut [Block]) {
-        let bytes =
-            unsafe { core::slice::from_raw_parts_mut(buf.as_ptr() as *mut u8, buf.len() * 16) };
+        let bytes: &mut [u8] = bytemuck::cast_slice_mut(buf);
         self.fill_bytes(bytes);
     }
 }
@@ -147,7 +143,6 @@ impl Default for Prg {
 #[test]
 fn prg_test() {
     let mut prg = Prg::new();
-    // let x: bool = prg.gen();
     let mut x = vec![Block::ZERO; 2];
     prg.random_blocks(&mut x);
     assert_ne!(x[0], x[1]);

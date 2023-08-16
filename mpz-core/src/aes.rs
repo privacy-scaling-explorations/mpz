@@ -99,13 +99,17 @@ impl AesEncryptor {
     }
 
     /// Encrypt many blocks with many keys.
+    /// Input: `NK` AES keys `keys`, and `NK * NM` blocks `blks`
+    /// Output: use each AES key encrypts each bunch of `NM` blocks.
+    /// If the length of `blks` is larger than `NK * NM`, do not handle the rest part.
     #[inline(always)]
     pub fn para_encrypt<const NK: usize, const NM: usize>(keys: &[Self; NK], blks: &mut [Block]) {
-        let ptr = blks.as_mut_ptr() as *mut [Block; NM];
-        for i in 0..NK {
-            let ctxt = unsafe { &mut *ptr.add(i) };
-            *ctxt = keys[i].encrypt_many_blocks(*ctxt);
-        }
+        assert!(blks.len() >= NM * NK);
+        let mut ctxt = [Block::default(); NM];
+        keys.iter().enumerate().for_each(|(i, key)| {
+            ctxt.copy_from_slice(&blks[i * NM..(i + 1) * NM]);
+            blks[i * NM..(i + 1) * NM].copy_from_slice(&key.encrypt_many_blocks(ctxt))
+        });
     }
 }
 

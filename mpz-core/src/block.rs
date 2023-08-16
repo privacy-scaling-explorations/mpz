@@ -1,5 +1,6 @@
 //! A block of 128 bits and its operations.
 
+use bytemuck::{Pod, Zeroable};
 use cipher::{consts::U16, generic_array::GenericArray};
 use clmul::Clmul;
 use core::ops::{BitAnd, BitAndAssign, BitXor, BitXorAssign};
@@ -10,7 +11,7 @@ use std::convert::From;
 
 /// A block of 128 bits
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize, Pod, Zeroable)]
 pub struct Block([u8; 16]);
 
 impl Block {
@@ -76,7 +77,7 @@ impl Block {
 
     /// Compute the inner product of two block vectors, without reducing the polynomial.
     #[inline]
-    pub fn inn_prdt_no_red(a: &Vec<Block>, b: &Vec<Block>) -> (Block, Block) {
+    pub fn inn_prdt_no_red(a: &[Block], b: &[Block]) -> (Block, Block) {
         assert_eq!(a.len(), b.len());
         a.iter()
             .zip(b.iter())
@@ -88,7 +89,7 @@ impl Block {
 
     /// Compute the inner product of two block vectors.
     #[inline]
-    pub fn inn_prdt_red(a: &Vec<Block>, b: &Vec<Block>) -> Block {
+    pub fn inn_prdt_red(a: &[Block], b: &[Block]) -> Block {
         let (x, y) = Block::inn_prdt_no_red(a, b);
         Block::reduce(x, y)
     }
@@ -109,7 +110,7 @@ impl Block {
     #[inline(always)]
     pub fn sigma(a: Self) -> Self {
         let mut x: [u64; 2] = unsafe { std::mem::transmute(a) };
-        x[0] = x[0] ^ x[1];
+        x[0] ^= x[1];
         Block(unsafe { std::mem::transmute(x) })
     }
 }
@@ -221,9 +222,10 @@ impl Distribution<Block> for Standard {
 impl AsMut<[u8]> for Block {
     #[inline(always)]
     fn as_mut(&mut self) -> &mut [u8] {
-        unsafe { &mut *(self as *mut Block as *mut [u8; 16]) }
+        self.0.as_mut()
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

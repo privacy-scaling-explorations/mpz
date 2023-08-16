@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use mpz_core::{prg::Prg, block::Block};
+use mpz_core::{block::Block, prg::Prg};
 use rand_core::RngCore;
 
 fn criterion_benchmark(c: &mut Criterion) {

@@ -213,7 +213,8 @@ impl CommittedOTReceiver<bool, Block> for Receiver {
         let Some(cointoss_payload) = self.cointoss_payload.take() else {
             return Err(ReceiverError::InvalidConfig(
                 "receiver not configured to commit".to_string(),
-            ).into())
+            )
+            .into());
         };
 
         let reveal = receiver.reveal_choices().map_err(ReceiverError::from)?;
