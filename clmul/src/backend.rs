@@ -21,8 +21,9 @@ impl soft::Clmul {
         fn join(u: u64, l: u64) -> u128 {
             ((u as u128) << 64) | (l as u128)
         }
-        let x: u128 = unsafe { core::mem::transmute(x) };
-        let y: u128 = unsafe { core::mem::transmute(y) };
+
+        let x : u128 = bytemuck::cast(x);
+        let y : u128 = bytemuck::cast(y);
 
         let (x3, x2) = sep(y);
         let (x1, x0) = sep(x);

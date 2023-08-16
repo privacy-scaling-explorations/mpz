@@ -26,11 +26,12 @@
 //! bit-reverse (over 64 bits) the result.
 
 use core::{num::Wrapping, ops::BitXor};
-
+use bytemuck::{Pod, Zeroable};
 pub type Clmul = U32x4;
 
 /// 4 x `u32` values
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Pod, Zeroable)]
 pub struct U32x4(u32, u32, u32, u32);
 
 impl From<U32x4> for [u8; 16] {
