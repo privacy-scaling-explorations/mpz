@@ -6,11 +6,10 @@ edition = "2021"
 
 [dependencies]
 cfg-if.workspace = true
+bytemuck = {workspace = true, features = ["derive"]}
 
 [target.'cfg(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86"))'.dependencies]
 cpufeatures.workspace = true
-
-bytemuck = {workspace = true, features = ["derive"]}
 
 [dev-dependencies]
 rand_chacha.workspace = true
