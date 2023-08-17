@@ -6,9 +6,9 @@ use rand_core::{
     block::{BlockRng, BlockRngCore},
     CryptoRng, RngCore, SeedableRng,
 };
-///Struct of PRG Core
+/// Struct of PRG Core
 #[derive(Clone)]
-pub struct PrgCore {
+struct PrgCore {
     aes: AesEncryptor,
     state: u64,
 }
@@ -72,7 +72,7 @@ impl RngCore for Prg {
 }
 
 impl SeedableRng for Prg {
-    type Seed = <PrgCore as SeedableRng>::Seed;
+    type Seed = Block;
 
     #[inline(always)]
     fn from_seed(seed: Self::Seed) -> Self {

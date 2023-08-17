@@ -106,12 +106,12 @@ impl Block {
         ((self.0[0] & 1) == 1) as usize
     }
 
-    ///Function ``sigma( x0 || x1 ) = (x0 xor x1) || x1``.
+    /// Function ``sigma( x0 || x1 ) = (x0 xor x1) || x1``.
     #[inline(always)]
     pub fn sigma(a: Self) -> Self {
-        let mut x: [u64; 2] = unsafe { std::mem::transmute(a) };
+        let mut x: [u64; 2] = bytemuck::cast(a);
         x[0] ^= x[1];
-        Block(unsafe { std::mem::transmute(x) })
+        bytemuck::cast(x)
     }
 }
 
