@@ -25,8 +25,8 @@
 //! In other words, if we bit-reverse (over 32 bits) the operands, then we
 //! bit-reverse (over 64 bits) the result.
 
-use core::{num::Wrapping, ops::BitXor};
 use bytemuck::{Pod, Zeroable};
+use core::{num::Wrapping, ops::BitXor};
 pub type Clmul = U32x4;
 
 /// 4 x `u32` values
