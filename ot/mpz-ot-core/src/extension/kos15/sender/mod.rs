@@ -179,7 +179,7 @@ impl Kos15Sender<state::BaseReceive> {
 impl Kos15Sender<state::Setup> {
     pub fn send(&mut self, inputs: &[[Block; 2]]) -> Result<ExtSenderPayload, ExtSenderCoreError> {
         send_from(
-            &mut self.0.count,
+            &self.0.count,
             &mut self.0.sent,
             &mut self.0.table,
             &self.0.base_choices,
@@ -216,7 +216,7 @@ impl Kos15Sender<state::RandSetup> {
         derandomize: ExtDerandomize,
     ) -> Result<ExtSenderPayload, ExtSenderCoreError> {
         send_from(
-            &mut self.0.count,
+            &self.0.count,
             &mut self.0.sent,
             &mut self.0.table,
             &self.0.base_choices,
@@ -273,7 +273,7 @@ impl Kos15Sender<state::RandSetup> {
 }
 
 fn send_from(
-    count: &mut usize,
+    count: &usize,
     sent: &mut usize,
     table: &mut KosMatrix,
     base_choices: &[bool],
