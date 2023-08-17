@@ -22,7 +22,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          components: clippy
 
       - uses: Swatinem/rust-cache@v2.5.0
 
@@ -37,22 +36,20 @@ jobs:
         #   RUSTDOCFLAGS: -D warnings
         run: cargo doc --no-deps --workspace --lib --document-private-items --examples
 
-      - name: Run Clippy
-        # env:
-        #   RUSTDOCFLAGS: -D warnings
-        run: cargo clippy --all-targets --all-features
-
-  rustfmt:
-    name: Rustfmt
+  rustfmt_and_clippy:
+    name: Rustfmt and Clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: Nightly with rustfmt
+      - name: Nightly with rustfmt and clipy
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: nightly
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: "Check formatting"
         run: cargo +nightly fmt --check --all
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features
