@@ -2,7 +2,7 @@
 
 use std::ops::{Add, Mul, Neg};
 
-use itybity::{BitLength, FromBits, GetBit, Lsb0, Msb0};
+use itybity::{BitLength, FromBitIterator, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution};
 use serde::{Deserialize, Serialize};
 
@@ -33,13 +33,13 @@ impl Gf2_128 {
 
 impl From<Gf2_128> for Block {
     fn from(value: Gf2_128) -> Self {
-        Block::new(value.0)
+        Block::new(value.0.to_le_bytes())
     }
 }
 
 impl From<Block> for Gf2_128 {
     fn from(block: Block) -> Self {
-        Gf2_128(block.inner())
+        Gf2_128(u128::from_le_bytes(block.to_bytes()))
     }
 }
 
@@ -148,13 +148,13 @@ impl GetBit<Msb0> for Gf2_128 {
     }
 }
 
-impl FromBits for Gf2_128 {
-    fn from_lsb0(iter: impl IntoIterator<Item = bool>) -> Self {
-        Self(u128::from_lsb0(iter))
+impl FromBitIterator for Gf2_128 {
+    fn from_lsb0_iter(iter: impl IntoIterator<Item = bool>) -> Self {
+        Self(u128::from_lsb0_iter(iter))
     }
 
-    fn from_msb0(iter: impl IntoIterator<Item = bool>) -> Self {
-        Self(u128::from_msb0(iter))
+    fn from_msb0_iter(iter: impl IntoIterator<Item = bool>) -> Self {
+        Self(u128::from_msb0_iter(iter))
     }
 }
 
@@ -230,8 +230,8 @@ mod tests {
         let a = Block::random(&mut rng);
         let b = Block::random(&mut rng);
 
-        let mut g = GHash::new(&a.to_be_bytes().into());
-        g.update(&b.to_be_bytes().into());
+        let mut g = GHash::new(&a.to_bytes().into());
+        g.update(&b.to_bytes().into());
         let expected = Block::from(g.finalize().into_bytes());
 
         // GHASH reverses the bits of the blocks before performing multiplication
