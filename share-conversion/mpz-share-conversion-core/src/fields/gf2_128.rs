@@ -33,13 +33,13 @@ impl Gf2_128 {
 
 impl From<Gf2_128> for Block {
     fn from(value: Gf2_128) -> Self {
-        Block::new(value.0.to_le_bytes())
+        Block::new(value.0.to_be_bytes())
     }
 }
 
 impl From<Block> for Gf2_128 {
     fn from(block: Block) -> Self {
-        Gf2_128(u128::from_le_bytes(block.to_bytes()))
+        Gf2_128(u128::from_be_bytes(block.to_bytes()))
     }
 }
 
