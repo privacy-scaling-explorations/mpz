@@ -1,19 +1,17 @@
 use std::sync::Arc;
 
-use aes::{
-    cipher::{BlockEncrypt, KeyInit},
-    Aes128,
-};
 use blake3::Hasher;
-use cipher::{consts::U16, BlockCipher};
 
 use crate::{
     circuit::EncryptedGate,
     encoding::{state, EncodedValue, Label},
-    CIPHER_FIXED_KEY,
 };
 use mpz_circuits::{types::TypeError, Circuit, CircuitError, Gate};
-use mpz_core::{hash::Hash, Block};
+use mpz_core::{
+    aes::{FixedKeyAes, FIXED_KEY_AES},
+    hash::Hash,
+    Block,
+};
 
 /// Errors that can occur during garbled circuit evaluation.
 #[derive(Debug, thiserror::Error)]
@@ -29,8 +27,8 @@ pub enum EvaluatorError {
 
 /// Evaluates half-gate garbled AND gate
 #[inline]
-pub(crate) fn and_gate<C: BlockCipher<BlockSize = U16> + BlockEncrypt>(
-    cipher: &C,
+pub(crate) fn and_gate(
+    cipher: &FixedKeyAes,
     x: &Label,
     y: &Label,
     encrypted_gate: &EncryptedGate,
@@ -42,11 +40,11 @@ pub(crate) fn and_gate<C: BlockCipher<BlockSize = U16> + BlockEncrypt>(
     let s_a = x.lsb();
     let s_b = y.lsb();
 
-    let j = gid;
-    let k = gid + 1;
+    let j = Block::new((gid as u128).to_be_bytes());
+    let k = Block::new(((gid + 1) as u128).to_be_bytes());
 
-    let hx = x.hash_tweak(cipher, j);
-    let hy = y.hash_tweak(cipher, k);
+    let hx = cipher.tccr(j, x);
+    let hy = cipher.tccr(k, y);
 
     let w_g = hx ^ (encrypted_gate[0] & Block::SELECT_MASK[s_a]);
     let w_e = hy ^ (Block::SELECT_MASK[s_b] & (encrypted_gate[1] ^ x));
@@ -57,7 +55,7 @@ pub(crate) fn and_gate<C: BlockCipher<BlockSize = U16> + BlockEncrypt>(
 /// Core evaluator type for evaluating a garbled circuit.
 pub struct Evaluator {
     /// Cipher to use to encrypt the gates
-    cipher: Aes128,
+    cipher: &'static FixedKeyAes,
     /// Circuit to evaluate
     circ: Arc<Circuit>,
     /// Active label state
@@ -127,7 +125,7 @@ impl Evaluator {
         }
 
         let mut ev = Self {
-            cipher: Aes128::new_from_slice(&CIPHER_FIXED_KEY).expect("cipher should initialize"),
+            cipher: &(*FIXED_KEY_AES),
             circ,
             active_labels,
             pos: 0,
