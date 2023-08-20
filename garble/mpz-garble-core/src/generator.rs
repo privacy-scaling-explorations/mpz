@@ -222,12 +222,12 @@ impl Iterator for Generator {
                     let x_0 = low_labels[node_x.id()].expect("feed should be initialized");
                     let y_0 = low_labels[node_y.id()].expect("feed should be initialized");
                     let (z_0, encrypted_gate) =
-                        and_gate(&self.cipher, &x_0, &y_0, &self.delta, self.gid);
+                        and_gate(self.cipher, &x_0, &y_0, &self.delta, self.gid);
                     low_labels[node_z.id()] = Some(z_0);
                     self.gid += 2;
 
                     if let Some(hasher) = &mut self.hasher {
-                        hasher.update(&encrypted_gate.to_be_bytes());
+                        hasher.update(&encrypted_gate.to_bytes());
                     }
 
                     return Some(encrypted_gate);

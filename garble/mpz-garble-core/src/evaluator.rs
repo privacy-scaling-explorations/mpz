@@ -173,12 +173,12 @@ impl Evaluator {
                 } => {
                     if let Some(encrypted_gate) = encrypted_gates.next() {
                         if let Some(hasher) = &mut self.hasher {
-                            hasher.update(&encrypted_gate.to_be_bytes());
+                            hasher.update(&encrypted_gate.to_bytes());
                         }
 
                         let x = labels[node_x.id()].expect("feed should be initialized");
                         let y = labels[node_y.id()].expect("feed should be initialized");
-                        let z = and_gate(&self.cipher, &x, &y, encrypted_gate, self.gid);
+                        let z = and_gate(self.cipher, &x, &y, encrypted_gate, self.gid);
                         labels[node_z.id()] = Some(z);
                         self.gid += 2;
                     } else {
