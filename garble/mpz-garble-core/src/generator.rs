@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use aes::{Aes128, NewBlockCipher};
+use aes::{
+    cipher::{BlockEncrypt, KeyInit},
+    Aes128,
+};
 use blake3::Hasher;
-use cipher::{consts::U16, BlockCipher, BlockEncrypt};
+use cipher::{consts::U16, BlockCipher};
 
 use crate::{
     circuit::EncryptedGate,

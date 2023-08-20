@@ -75,7 +75,10 @@ pub(crate) static CIPHER_FIXED_KEY: [u8; 16] = [69u8; 16];
 
 #[cfg(test)]
 mod tests {
-    use aes::{Aes128, BlockEncrypt, NewBlockCipher};
+    use aes::{
+        cipher::{BlockEncrypt, KeyInit},
+        Aes128,
+    };
     use mpz_circuits::{circuits::AES128, types::Value};
     use rand::SeedableRng;
     use rand_chacha::ChaCha12Rng;
