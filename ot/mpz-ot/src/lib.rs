@@ -4,6 +4,8 @@
 #![deny(unsafe_code)]
 #![deny(clippy::all)]
 
+#[cfg(feature = "actor")]
+pub mod actor;
 pub mod chou_orlandi;
 pub mod kos;
 #[cfg(feature = "mock")]

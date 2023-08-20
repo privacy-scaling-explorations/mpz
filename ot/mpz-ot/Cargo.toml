@@ -7,8 +7,9 @@ edition = "2021"
 name = "mpz_ot"
 
 [features]
-default = ["mock", "rayon"]
+default = ["mock", "rayon", "actor"]
 rayon = ["mpz-ot-core/rayon"]
+actor = ["dep:serde"]
 mock = []
 
 [dependencies]

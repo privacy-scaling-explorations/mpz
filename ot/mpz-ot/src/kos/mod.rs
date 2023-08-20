@@ -9,6 +9,9 @@ use futures_util::{SinkExt, StreamExt};
 pub use receiver::Receiver;
 pub use sender::Sender;
 
+pub(crate) use receiver::State as ReceiverState;
+pub(crate) use sender::State as SenderState;
+
 pub use mpz_ot_core::kos::{
     msgs, PayloadRecord, ReceiverConfig, ReceiverConfigBuilder, ReceiverConfigBuilderError,
     ReceiverKeys, SenderConfig, SenderConfigBuilder, SenderConfigBuilderError, SenderKeys,

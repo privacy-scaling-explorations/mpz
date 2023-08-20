@@ -18,6 +18,8 @@ pub enum SenderError {
     StateError(String),
     #[error("configuration error: {0}")]
     ConfigError(String),
+    #[error("{0}")]
+    Other(String),
 }
 
 impl From<SenderError> for OTError {
@@ -26,6 +28,12 @@ impl From<SenderError> for OTError {
             SenderError::IOError(e) => e.into(),
             e => OTError::SenderError(Box::new(e)),
         }
+    }
+}
+
+impl From<mpz_ot_core::kos::SenderError> for OTError {
+    fn from(err: mpz_ot_core::kos::SenderError) -> Self {
+        SenderError::from(err).into()
     }
 }
 
@@ -56,6 +64,8 @@ pub enum ReceiverError {
     ConfigError(String),
     #[error(transparent)]
     VerifyError(#[from] ReceiverVerifyError),
+    #[error("{0}")]
+    Other(String),
 }
 
 impl From<ReceiverError> for OTError {
@@ -64,6 +74,12 @@ impl From<ReceiverError> for OTError {
             ReceiverError::IOError(e) => e.into(),
             e => OTError::ReceiverError(Box::new(e)),
         }
+    }
+}
+
+impl From<mpz_ot_core::kos::ReceiverError> for OTError {
+    fn from(err: mpz_ot_core::kos::ReceiverError) -> Self {
+        ReceiverError::from(err).into()
     }
 }
 

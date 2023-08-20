@@ -26,7 +26,7 @@ use rayon::prelude::*;
 
 #[derive(Debug, Default)]
 struct Tape {
-    records: HashMap<u32, PayloadRecord>,
+    records: HashMap<u32, PayloadRecordNoDelta>,
 }
 
 /// KOS15 receiver.
@@ -34,8 +34,6 @@ struct Tape {
 pub struct Receiver<T: state::State = state::Initialized> {
     config: ReceiverConfig,
     state: T,
-    /// Protocol tape
-    tape: Option<Arc<Mutex<Tape>>>,
 }
 
 impl<T> Receiver<T>
@@ -63,8 +61,7 @@ impl Receiver {
 
         Receiver {
             config,
-            state: state::Initialized::default(),
-            tape,
+            state: state::Initialized { tape },
         }
     }
 
@@ -101,8 +98,8 @@ impl Receiver {
                 extended: false,
                 unchecked_ts: Vec::default(),
                 unchecked_choices: Vec::default(),
+                tape: self.state.tape,
             },
-            tape: self.tape,
         }
     }
 }
@@ -306,7 +303,7 @@ impl Receiver<state::Extension> {
         self.state.choices.extend(unchecked_choices);
 
         // If we're recording, we track `ts` too
-        if self.tape.is_some() {
+        if self.state.tape.is_some() {
             self.state.ts.extend(unchecked_ts);
         }
 
@@ -339,36 +336,75 @@ impl Receiver<state::Extension> {
             index,
             keys: self.state.keys.drain(..count).collect(),
             choices: self.state.choices.drain(..count).collect(),
-            ts: if self.tape.is_some() {
+            ts: if self.state.tape.is_some() {
                 Some(self.state.ts.drain(..count).collect())
             } else {
                 None
             },
-            tape: self.tape.clone(),
+            tape: self.state.tape.clone(),
         })
     }
 
+    /// Enters the verification state for verifiable OT.
+    ///
+    /// # ⚠️ Warning ⚠️
+    ///
+    /// The authenticity of `delta` must be established outside the context of this function. This
+    /// can be achieved using verifiable base OT.
+    ///
+    /// # Arguments
+    ///
+    /// * `delta` - The sender's base OT choice bits.
+    pub fn start_verification(
+        mut self,
+        delta: Block,
+    ) -> Result<Receiver<state::Verify>, ReceiverError> {
+        let Some(tape) = self.state.tape.take() else {
+            return Err(ReceiverVerifyError::TapeNotRecorded)?;
+        };
+
+        Ok(Receiver {
+            config: self.config,
+            state: state::Verify { tape, delta },
+        })
+    }
+}
+
+impl Receiver<state::Verify> {
     /// Returns the [`PayloadRecord`] for the given transfer id if it exists.
     ///
     /// # Errors
     ///
-    /// Returns an error if the tape is not being recorded, or if the record does
-    /// not exist.
+    /// Returns an error if the record does not exist.
     ///
     /// # Arguments
     ///
     /// * `id` - The transfer id
     pub fn remove_record(&self, id: u32) -> Result<PayloadRecord, ReceiverError> {
-        let Some(tape) = &self.tape else {
-            return Err(ReceiverVerifyError::TapeNotRecorded)?;
-        };
-
-        tape.lock()
+        let PayloadRecordNoDelta {
+            index,
+            choices,
+            ts,
+            keys,
+            ciphertext_digest,
+        } = self
+            .state
+            .tape
+            .lock()
             .unwrap()
             .records
             .remove(&id)
             .ok_or(ReceiverVerifyError::InvalidTransferId(id))
-            .map_err(ReceiverError::from)
+            .map_err(ReceiverError::from)?;
+
+        Ok(PayloadRecord {
+            index,
+            choices,
+            ts,
+            keys,
+            delta: self.state.delta,
+            ciphertext_digest,
+        })
     }
 }
 
@@ -458,7 +494,7 @@ impl ReceiverKeys {
 
             tape.lock().unwrap().records.insert(
                 id,
-                PayloadRecord {
+                PayloadRecordNoDelta {
                     index: self.index,
                     choices: Vec::from_lsb0_iter(self.choices.iter().copied()),
                     ts,
@@ -547,8 +583,7 @@ impl ReceiverKeys {
     }
 }
 
-/// A record of a transfer's payload.
-pub struct PayloadRecord {
+struct PayloadRecordNoDelta {
     /// The starting index for the corresponding OTs. This is used to compute the
     /// "tweak" for the randomization.
     index: usize,
@@ -559,27 +594,37 @@ pub struct PayloadRecord {
     ciphertext_digest: [u8; 32],
 }
 
+opaque_debug::implement!(PayloadRecordNoDelta);
+
+/// A record of a transfer's payload.
+pub struct PayloadRecord {
+    /// The starting index for the corresponding OTs. This is used to compute the
+    /// "tweak" for the randomization.
+    index: usize,
+    /// The receiver's choices for the transfer.
+    choices: Vec<u8>,
+    ts: Vec<Block>,
+    keys: Vec<Block>,
+    /// The sender's base OT choice bits.
+    delta: Block,
+    ciphertext_digest: [u8; 32],
+}
+
 opaque_debug::implement!(PayloadRecord);
 
 impl PayloadRecord {
-    /// Checks the purported messages against the record, using the sender's
-    /// base choices `delta`.
-    ///
-    /// # ⚠️ Warning ⚠️
-    ///
-    /// The authenticity of `delta` must be established outside the context of this function. This
-    /// can be achieved using verifiable base OT.
+    /// Checks the purported messages against the record
     ///
     /// # Arguments
     ///
-    /// * `delta` - The sender's base OT choice bits.
     /// * `purported_msgs` - The purported messages sent by the sender.
-    pub fn verify(self, delta: Block, purported_msgs: &[[Block; 2]]) -> Result<(), ReceiverError> {
+    pub fn verify(self, purported_msgs: &[[Block; 2]]) -> Result<(), ReceiverError> {
         let PayloadRecord {
             index: counter,
             choices,
             ts,
             keys,
+            delta,
             ciphertext_digest,
         } = self;
 
@@ -627,6 +672,7 @@ pub mod state {
 
         impl Sealed for super::Initialized {}
         impl Sealed for super::Extension {}
+        impl Sealed for super::Verify {}
     }
 
     /// The receiver's state.
@@ -634,7 +680,10 @@ pub mod state {
 
     /// The receiver's initial state.
     #[derive(Default)]
-    pub struct Initialized {}
+    pub struct Initialized {
+        /// Protocol tape
+        pub(super) tape: Option<Arc<Mutex<Tape>>>,
+    }
 
     impl State for Initialized {}
 
@@ -664,9 +713,24 @@ pub mod state {
         pub(super) unchecked_ts: Vec<Block>,
         /// Receiver's unchecked choices
         pub(super) unchecked_choices: Vec<bool>,
+
+        /// Protocol tape
+        pub(super) tape: Option<Arc<Mutex<Tape>>>,
     }
 
     impl State for Extension {}
 
     opaque_debug::implement!(Extension);
+
+    /// The receiver's state after receiving the sender's base OT choice bits, a.k.a delta.
+    pub struct Verify {
+        /// Protocol tape
+        pub(super) tape: Arc<Mutex<Tape>>,
+        /// The sender's base OT choice bits.
+        pub(super) delta: Block,
+    }
+
+    impl State for Verify {}
+
+    opaque_debug::implement!(Verify);
 }
