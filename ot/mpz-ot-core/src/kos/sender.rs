@@ -366,9 +366,9 @@ impl SenderKeys {
                     // Use Beaver derandomization to correct the receiver's choices
                     // from the extension phase.
                     if flip {
-                        [(k1 ^ *m0), (k0 ^ *m1)]
+                        [k1 ^ *m0, k0 ^ *m1]
                     } else {
-                        [(k0 ^ *m0), (k1 ^ *m1)]
+                        [k0 ^ *m0, k1 ^ *m1]
                     }
                 })
                 .collect()
@@ -376,7 +376,7 @@ impl SenderKeys {
             self.keys
                 .into_iter()
                 .zip(msgs)
-                .flat_map(|([k0, k1], [m0, m1])| [(k0 ^ *m0), (k1 ^ *m1)])
+                .flat_map(|([k0, k1], [m0, m1])| [k0 ^ *m0, k1 ^ *m1])
                 .collect()
         };
 
