@@ -16,7 +16,7 @@ use mpz_circuits::{
 use mpz_core::value::ValueRef;
 use mpz_garble_core::{encoding_state::Active, msg::GarbleMessage, EncodedValue};
 use utils::id::NestedId;
-use utils_aio::{mux::MuxChannel, Channel};
+use utils_aio::{duplex::Duplex, mux::MuxChannel};
 
 use crate::{
     config::Role,
@@ -31,7 +31,7 @@ use super::{
 };
 
 type ChannelFactory = Box<dyn MuxChannel<GarbleMessage> + Send + 'static>;
-type GarbleChannel = Box<dyn Channel<GarbleMessage>>;
+type GarbleChannel = Box<dyn Duplex<GarbleMessage>>;
 
 /// A DEAP Vm.
 pub struct DEAPVm<OTS, OTR> {
@@ -487,15 +487,15 @@ mod tests {
     use crate::protocol::deap::mock::create_mock_deap_vm;
 
     use core::{future::Future, pin::Pin};
-    use mpz_ot::mock::{MockOTReceiver, MockOTSender};
+    use mpz_ot::mock::{MockSharedOTReceiver, MockSharedOTSender};
     use rstest::{fixture, rstest};
 
     // Leader and follower VMs in a set up state and the futures which need to be awaited
     // to trigger circuit execution.
     struct VmFixture {
-        leader_vm: DEAPVm<MockOTSender, MockOTReceiver>,
+        leader_vm: DEAPVm<MockSharedOTSender, MockSharedOTReceiver>,
         leader_fut: Pin<Box<dyn Future<Output = Vec<Value>>>>,
-        follower_vm: DEAPVm<MockOTSender, MockOTReceiver>,
+        follower_vm: DEAPVm<MockSharedOTSender, MockSharedOTReceiver>,
         follower_fut: Pin<Box<dyn Future<Output = Vec<Value>>>>,
     }
 

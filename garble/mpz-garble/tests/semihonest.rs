@@ -1,7 +1,7 @@
 use mpz_circuits::{circuits::AES128, types::StaticValueType};
 use mpz_garble_core::msg::GarbleMessage;
-use mpz_ot::mock::mock_ot_pair;
-use utils_aio::duplex::DuplexChannel;
+use mpz_ot::mock::mock_ot_shared_pair;
+use utils_aio::duplex::MpscDuplex;
 
 use mpz_garble::{
     config::ValueConfig, Evaluator, Generator, GeneratorConfigBuilder, ValueRegistry,
@@ -9,8 +9,8 @@ use mpz_garble::{
 
 #[tokio::test]
 async fn test_semi_honest() {
-    let (mut gen_channel, mut ev_channel) = DuplexChannel::<GarbleMessage>::new();
-    let (ot_send, ot_recv) = mock_ot_pair();
+    let (mut gen_channel, mut ev_channel) = MpscDuplex::<GarbleMessage>::new();
+    let (ot_send, ot_recv) = mock_ot_shared_pair();
 
     let gen = Generator::new(
         GeneratorConfigBuilder::default().build().unwrap(),
@@ -98,7 +98,10 @@ async fn test_semi_honest() {
         .unwrap();
 
     let expected: [u8; 16] = {
-        use aes::{Aes128, BlockEncrypt, NewBlockCipher};
+        use aes::{
+            cipher::{BlockEncrypt, KeyInit},
+            Aes128,
+        };
 
         let mut msg = msg.into();
 
