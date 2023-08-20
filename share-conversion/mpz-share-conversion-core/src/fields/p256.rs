@@ -2,52 +2,46 @@
 
 use std::ops::{Add, Mul, Neg};
 
-use ark_ff::{BigInt, BigInteger, Field as ArkField, FpConfig, MontBackend, One, PrimeField, Zero};
+use ark_ff::{BigInt, BigInteger, Field as ArkField, FpConfig, MontBackend, One, Zero};
 use ark_secp256r1::{fq::Fq, FqConfig};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use itybity::{BitLength, FromBitIterator, GetBit, Lsb0, Msb0};
 use num_bigint::ToBigUint;
 use rand::{distributions::Standard, prelude::Distribution};
-use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
-
-use mpz_core::{Block, BlockSerialize};
 
 use super::Field;
 
 /// A type for holding field elements of P256
-///
-/// Uses internally an MSB0 encoding
-#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(from = "[u64; 4]")]
-pub struct P256(#[serde(serialize_with = "serialize_p256")] pub(crate) Fq);
+#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
+pub struct P256(pub(crate) Fq);
 
 opaque_debug::implement!(P256);
 
 impl P256 {
-    /// Creates a new field element
-    pub fn new(input: impl ToBigUint) -> Self {
-        let input = input.to_biguint().expect("Unable to create field element");
-        P256(Fq::from(input))
+    /// Creates a new field element, returning `None` if the value is not a valid element.
+    pub fn new(value: impl ToBigUint) -> Option<Self> {
+        value.to_biguint().map(|input| P256(Fq::from(input)))
     }
 }
 
-fn serialize_p256<S>(value: &Fq, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let limbs = value.0 .0;
+impl From<P256> for [u8; 32] {
+    fn from(value: P256) -> Self {
+        let mut bytes = [0u8; 32];
 
-    let mut seq = serializer.serialize_seq(Some(4))?;
-    for e in limbs {
-        seq.serialize_element(&e)?;
+        value
+            .0
+            .serialize_with_mode(&mut bytes[..], Compress::No)
+            .expect("field element should be 32 bytes");
+
+        bytes
     }
-
-    seq.end()
 }
 
-impl From<[u64; 4]> for P256 {
-    fn from(value: [u64; 4]) -> Self {
-        P256(Fq::from(BigInt::new(value)))
+impl TryFrom<[u8; 32]> for P256 {
+    type Error = ark_serialize::SerializationError;
+
+    fn try_from(value: [u8; 32]) -> Result<Self, Self::Error> {
+        Fq::deserialize_with_mode(&value[..], Compress::No, Validate::Yes).map(P256)
     }
 }
 
@@ -140,32 +134,10 @@ impl FromBitIterator for P256 {
     }
 }
 
-impl BlockSerialize for P256 {
-    type Serialized = [Block; 2];
-
-    fn to_blocks(self) -> Self::Serialized {
-        let limbs = self.0 .0 .0;
-        let bytes: [u8; 32] = bytemuck::cast(limbs);
-
-        let block_0: [u8; 16] = bytes[..16].try_into().unwrap();
-        let block_1: [u8; 16] = bytes[16..].try_into().unwrap();
-
-        [Block::new(block_0), Block::new(block_1)]
-    }
-
-    fn from_blocks(blocks: Self::Serialized) -> Self {
-        let mut bytes = [0u8; 32];
-        bytes[..16].copy_from_slice(&blocks[0].to_bytes());
-        bytes[16..].copy_from_slice(&blocks[1].to_bytes());
-
-        let limbs: [u64; 4] = bytemuck::cast(bytes);
-
-        P256(Fq::from_bigint(BigInt::new(limbs)).unwrap())
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use rand::{Rng, SeedableRng};
+
     use super::*;
 
     use crate::fields::{
@@ -176,8 +148,8 @@ mod tests {
     #[test]
     fn test_p256_basic() {
         test_field_basic::<P256>();
-        assert_eq!(P256::new(0), P256::zero());
-        assert_eq!(P256::new(1), P256::one());
+        assert_eq!(P256::new(0).unwrap(), P256::zero());
+        assert_eq!(P256::new(1).unwrap(), P256::one());
     }
 
     #[test]
@@ -191,19 +163,15 @@ mod tests {
     }
 
     #[test]
-    fn test_p256_block_serialize() {
-        let a = P256::new(42);
-        let b = P256::from_blocks(a.to_blocks());
+    fn test_p256_serialize() {
+        let mut rng = rand_chacha::ChaCha20Rng::from_seed([0; 32]);
 
-        assert_eq!(a.0 .0, b.0 .0);
-    }
+        for _ in 0..32 {
+            let a = P256(rng.gen());
+            let bytes: [u8; 32] = a.into();
+            let b = P256::try_from(bytes).unwrap();
 
-    #[test]
-    fn test_bytemuck() {
-        let a = [42u8; 32];
-        let b: [u64; 4] = bytemuck::cast(a);
-        let c: [u8; 32] = bytemuck::cast(b);
-
-        assert_eq!(a, c);
+            assert_eq!(a, b);
+        }
     }
 }

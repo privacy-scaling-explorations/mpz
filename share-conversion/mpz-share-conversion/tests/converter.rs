@@ -2,12 +2,12 @@ use std::marker::PhantomData;
 
 use rstest::*;
 
-use mpz_ot::mock::mock_ot_pair;
+use mpz_ot::mock::{mock_ot_shared_pair, MockSharedOTReceiver, MockSharedOTSender};
 use mpz_share_conversion::{
     AdditiveToMultiplicative, ConverterReceiver, ConverterSender, Field, Gf2_128,
-    MultiplicativeToAdditive, ReceiverConfig, SenderConfig, P256,
+    MultiplicativeToAdditive, OTReceiveElement, OTSendElement, ReceiverConfig, SenderConfig, P256,
 };
-use utils_aio::duplex::DuplexChannel;
+use utils_aio::duplex::MpscDuplex;
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
@@ -16,11 +16,15 @@ use rand_chacha::ChaCha12Rng;
 #[case::gf2(PhantomData::<Gf2_128>)]
 #[case::p256(PhantomData::<P256>)]
 #[tokio::test]
-async fn test_converter<T: Field>(#[case] _pd: PhantomData<T>) {
+async fn test_converter<T: Field>(#[case] _pd: PhantomData<T>)
+where
+    MockSharedOTSender: OTSendElement<T>,
+    MockSharedOTReceiver: OTReceiveElement<T>,
+{
     let mut rng = ChaCha12Rng::seed_from_u64(0);
 
-    let (ot_sender, ot_receiver) = mock_ot_pair();
-    let (sender_channel, receiver_channel) = DuplexChannel::new();
+    let (ot_sender, ot_receiver) = mock_ot_shared_pair();
+    let (sender_channel, receiver_channel) = MpscDuplex::new();
 
     let mut sender = ConverterSender::<T, _>::new(
         SenderConfig::builder().id("test").record().build().unwrap(),

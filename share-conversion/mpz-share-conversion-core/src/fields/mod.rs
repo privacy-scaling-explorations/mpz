@@ -9,7 +9,6 @@ use std::{
 };
 
 use itybity::{BitLength, FromBitIterator, GetBit, Lsb0, Msb0};
-use mpz_core::BlockSerialize;
 use rand::{distributions::Standard, prelude::Distribution, Rng};
 
 /// A trait for finite fields
@@ -28,7 +27,6 @@ pub trait Field:
     + Ord
     + PartialEq
     + Eq
-    + BlockSerialize
     + FromBitIterator
     + GetBit<Lsb0>
     + GetBit<Msb0>

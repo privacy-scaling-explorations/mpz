@@ -6,7 +6,7 @@ use itybity::{BitLength, FromBitIterator, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution};
 use serde::{Deserialize, Serialize};
 
-use mpz_core::{Block, BlockSerialize};
+use mpz_core::Block;
 
 use super::Field;
 
@@ -155,18 +155,6 @@ impl FromBitIterator for Gf2_128 {
 
     fn from_msb0_iter(iter: impl IntoIterator<Item = bool>) -> Self {
         Self(u128::from_msb0_iter(iter))
-    }
-}
-
-impl BlockSerialize for Gf2_128 {
-    type Serialized = Block;
-
-    fn to_blocks(self) -> Self::Serialized {
-        self.into()
-    }
-
-    fn from_blocks(blocks: Self::Serialized) -> Self {
-        blocks.into()
     }
 }
 

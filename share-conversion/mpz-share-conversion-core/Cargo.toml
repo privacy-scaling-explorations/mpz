@@ -15,7 +15,6 @@ ark-ff.workspace = true
 ark-secp256r1.workspace = true
 ark-serialize.workspace = true
 num-bigint.workspace = true
-bytemuck.workspace = true
 opaque-debug.workspace = true
 serde.workspace = true
 itybity.workspace = true

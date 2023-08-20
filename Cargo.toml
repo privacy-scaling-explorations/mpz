@@ -55,7 +55,6 @@ tokio-util = "0.7"
 
 # serialization
 ark-serialize = "0.4"
-bytemuck = "1.13"
 serde = "1.0"
 serde_yaml = "0.9"
 serde_arrays = "0.1"
