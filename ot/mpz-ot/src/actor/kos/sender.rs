@@ -17,7 +17,7 @@ use crate::{
         msgs::{ActorMessage, Message, TransferPayload, TransferRequest},
     },
     kos::{Sender, SenderError, SenderKeys},
-    CommittedOTReceiver, OTError, OTReceiver, OTSenderShared,
+    CommittedOTReceiver, CommittedOTSenderShared, OTError, OTReceiver, OTSenderShared,
 };
 
 use super::SenderActorError;
@@ -314,5 +314,17 @@ impl<const N: usize> OTSenderShared<[[u8; N]; 2]> for SharedSender {
             .await
             .map_err(SenderError::from)?
             .map_err(OTError::from)
+    }
+}
+
+#[async_trait]
+impl<T> CommittedOTSenderShared<T> for SharedSender
+where
+    SharedSender: OTSenderShared<T>,
+{
+    async fn reveal(&self) -> Result<(), OTError> {
+        // this is no-op, as the reveal is performed using the actor struct after
+        // shutdown.
+        Ok(())
     }
 }
