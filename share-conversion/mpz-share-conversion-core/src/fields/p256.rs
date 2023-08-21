@@ -8,11 +8,14 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate
 use itybity::{BitLength, FromBitIterator, GetBit, Lsb0, Msb0};
 use num_bigint::ToBigUint;
 use rand::{distributions::Standard, prelude::Distribution};
+use serde::{Deserialize, Serialize};
 
 use super::Field;
 
 /// A type for holding field elements of P256
-#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(into = "[u8; 32]")]
+#[serde(try_from = "[u8; 32]")]
 pub struct P256(pub(crate) Fq);
 
 opaque_debug::implement!(P256);
