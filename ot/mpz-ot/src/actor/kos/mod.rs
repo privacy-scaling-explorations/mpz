@@ -76,7 +76,7 @@ mod tests {
     use mpz_ot_core::kos::{ReceiverConfig, SenderConfig};
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha12Rng;
-    use utils_aio::duplex::MpscDuplex;
+    use utils_aio::duplex::MemoryDuplex;
 
     #[fixture]
     fn choices() -> Vec<bool> {
@@ -108,16 +108,16 @@ mod tests {
     ) -> (
         SenderActor<
             MockOTReceiver<Block>,
-            SplitSink<MpscDuplex<Message<()>>, Message<()>>,
-            SplitStream<MpscDuplex<Message<()>>>,
+            SplitSink<MemoryDuplex<Message<()>>, Message<()>>,
+            SplitStream<MemoryDuplex<Message<()>>>,
         >,
         ReceiverActor<
             MockOTSender<Block>,
-            SplitSink<MpscDuplex<Message<()>>, Message<()>>,
-            SplitStream<MpscDuplex<Message<()>>>,
+            SplitSink<MemoryDuplex<Message<()>>, Message<()>>,
+            SplitStream<MemoryDuplex<Message<()>>>,
         >,
     ) {
-        let (sender_channel, receiver_channel) = MpscDuplex::new();
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
         let (sender_sink, sender_stream) = sender_channel.split();
         let (receiver_sink, receiver_stream) = receiver_channel.split();
