@@ -152,7 +152,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos_bytes(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MpscDuplex::new();
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
         let (mut sender_sink, mut sender_stream) = sender_channel.split();
         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
