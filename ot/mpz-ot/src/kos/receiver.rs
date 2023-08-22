@@ -14,7 +14,7 @@ use utils_aio::{
     stream::{ExpectStreamExt, IoStream},
 };
 
-use crate::{OTError, OTReceiver, OTSender, VerifiableOTReceiver, VerifiableOTSender};
+use crate::{OTError, OTReceiver, OTSender, OTSetup, VerifiableOTReceiver, VerifiableOTSender};
 
 use super::{into_base_sink, into_base_stream, ReceiverError, ReceiverVerifyError};
 
@@ -63,53 +63,6 @@ where
     /// The number of remaining OTs which can be consumed.
     pub fn remaining(&self) -> Result<usize, ReceiverError> {
         Ok(self.state.as_extension()?.remaining())
-    }
-
-    /// Performs the base OT setup.
-    ///
-    /// # Arguments
-    ///
-    /// * `sink` - The sink to send messages to the base OT receiver
-    /// * `stream` - The stream to receive messages from the base OT receiver
-    pub async fn setup<
-        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
-        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<(), ReceiverError> {
-        let ext_receiver = self.state.replace(State::Error).into_initialized()?;
-
-        // If the sender is committed, we run a cointoss
-        if ext_receiver.config().sender_commit() {
-            let commitment = stream.expect_next().await?.into_cointoss_commit()?;
-
-            let (cointoss_receiver, payload) =
-                cointoss::Receiver::new(vec![thread_rng().gen()]).reveal(commitment)?;
-
-            sink.send(Message::CointossReceiverPayload(payload)).await?;
-
-            self.cointoss_receiver = Some(cointoss_receiver);
-        }
-
-        let mut rng = thread_rng();
-        let seeds: [[Block; 2]; CSP] = std::array::from_fn(|_| [rng.gen(), rng.gen()]);
-
-        // Send seeds to sender
-        self.base
-            .send(
-                &mut into_base_sink(sink),
-                &mut into_base_stream(stream),
-                &seeds,
-            )
-            .await?;
-
-        let ext_receiver = ext_receiver.setup(seeds);
-
-        self.state = State::Extension(Box::new(ext_receiver));
-
-        Ok(())
     }
 
     /// Performs OT extension.
@@ -186,6 +139,70 @@ where
     BaseOT: ProtocolMessage,
 {
     type Msg = Message<BaseOT::Msg>;
+}
+
+#[async_trait]
+impl<BaseOT> OTSetup for Receiver<BaseOT>
+where
+    BaseOT: OTSetup + OTSender<[Block; 2]> + Send,
+{
+    async fn setup<
+        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
+        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+    ) -> Result<(), OTError> {
+        if self.state.is_extension() {
+            return Ok(());
+        }
+
+        let ext_receiver = self
+            .state
+            .replace(State::Error)
+            .into_initialized()
+            .map_err(ReceiverError::from)?;
+
+        // Set up base OT if not already done
+        self.base
+            .setup(&mut into_base_sink(sink), &mut into_base_stream(stream))
+            .await?;
+
+        // If the sender is committed, we run a cointoss
+        if ext_receiver.config().sender_commit() {
+            let commitment = stream
+                .expect_next()
+                .await?
+                .into_cointoss_commit()
+                .map_err(ReceiverError::from)?;
+
+            let (cointoss_receiver, payload) = cointoss::Receiver::new(vec![thread_rng().gen()])
+                .reveal(commitment)
+                .map_err(ReceiverError::from)?;
+
+            sink.send(Message::CointossReceiverPayload(payload)).await?;
+
+            self.cointoss_receiver = Some(cointoss_receiver);
+        }
+
+        let seeds: [[Block; 2]; CSP] = std::array::from_fn(|_| thread_rng().gen());
+
+        // Send seeds to sender
+        self.base
+            .send(
+                &mut into_base_sink(sink),
+                &mut into_base_stream(stream),
+                &seeds,
+            )
+            .await?;
+
+        let ext_receiver = ext_receiver.setup(seeds);
+
+        self.state = State::Extension(Box::new(ext_receiver));
+
+        Ok(())
+    }
 }
 
 #[async_trait]

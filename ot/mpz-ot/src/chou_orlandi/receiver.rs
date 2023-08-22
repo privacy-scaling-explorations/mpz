@@ -80,6 +80,10 @@ impl OTSetup for Receiver {
         sink: &mut Si,
         stream: &mut St,
     ) -> Result<(), OTError> {
+        if self.state.is_setup() {
+            return Ok(());
+        }
+
         let (config, seed) = self
             .state
             .replace(State::Error)

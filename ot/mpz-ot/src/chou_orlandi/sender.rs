@@ -72,6 +72,10 @@ impl OTSetup for Sender {
         sink: &mut Si,
         stream: &mut St,
     ) -> Result<(), OTError> {
+        if self.state.is_setup() {
+            return Ok(());
+        }
+
         let sender = self
             .state
             .replace(State::Error)
