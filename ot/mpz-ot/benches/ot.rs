@@ -5,7 +5,7 @@ use mpz_ot::{
     chou_orlandi::{Receiver, ReceiverConfig, Sender, SenderConfig},
     OTReceiver, OTSender,
 };
-use utils_aio::duplex::MpscDuplex;
+use utils_aio::duplex::MemoryDuplex;
 
 fn chou_orlandi(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -15,7 +15,7 @@ fn chou_orlandi(c: &mut Criterion) {
             let msgs = vec![[Block::ONES; 2]; n];
             let choices = vec![false; n];
             b.to_async(&rt).iter(|| async {
-                let (sender_channel, receiver_channel) = MpscDuplex::new();
+                let (sender_channel, receiver_channel) = MemoryDuplex::new();
                 let (mut sender_sink, mut sender_stream) = sender_channel.split();
                 let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
 
