@@ -14,7 +14,7 @@ use utils_aio::{
 
 use crate::{
     kos::{Receiver, ReceiverError, ReceiverKeys},
-    OTError, OTReceiverShared, VerifiableOTReceiverShared, VerifiableOTSender,
+    OTError, OTReceiverShared, OTSetup, VerifiableOTReceiverShared, VerifiableOTSender,
 };
 use mpz_core::{Block, ProtocolMessage};
 use mpz_ot_core::kos::{msgs::SenderPayload, PayloadRecord};
@@ -75,7 +75,7 @@ pub struct ReceiverActor<BaseOT, Si, St> {
 impl<BaseOT, Si, St> ReceiverActor<BaseOT, Si, St>
 where
     // TODO: Support non-verifiable base OT.
-    BaseOT: VerifiableOTSender<bool, [Block; 2]> + ProtocolMessage + Send,
+    BaseOT: OTSetup + VerifiableOTSender<bool, [Block; 2]> + ProtocolMessage + Send,
     Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
     St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
 {

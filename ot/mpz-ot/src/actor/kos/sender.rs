@@ -17,7 +17,7 @@ use crate::{
         msgs::{ActorMessage, Message, TransferPayload, TransferRequest},
     },
     kos::{Sender, SenderError, SenderKeys},
-    CommittedOTReceiver, CommittedOTSenderShared, OTError, OTReceiver, OTSenderShared,
+    CommittedOTReceiver, CommittedOTSenderShared, OTError, OTReceiver, OTSenderShared, OTSetup,
 };
 
 use super::SenderActorError;
@@ -66,7 +66,7 @@ pub struct SenderActor<BaseOT, Si, St> {
 
 impl<BaseOT, Si, St> SenderActor<BaseOT, Si, St>
 where
-    BaseOT: OTReceiver<bool, Block> + ProtocolMessage + Send,
+    BaseOT: OTSetup + OTReceiver<bool, Block> + ProtocolMessage + Send,
     Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
     St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
 {

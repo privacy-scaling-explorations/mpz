@@ -14,11 +14,22 @@ pub enum SenderActorError {
     SenderError(#[from] SenderError),
     #[error("actor channel error: {0}")]
     Channel(String),
+    #[error("{0}")]
+    Other(String),
 }
 
 impl From<mpz_ot_core::kos::SenderError> for SenderActorError {
     fn from(err: mpz_ot_core::kos::SenderError) -> Self {
         SenderActorError::SenderError(err.into())
+    }
+}
+
+impl From<crate::OTError> for SenderActorError {
+    fn from(err: crate::OTError) -> Self {
+        match err {
+            crate::OTError::IOError(err) => err.into(),
+            err => SenderActorError::Other(err.to_string()),
+        }
     }
 }
 
@@ -74,11 +85,22 @@ pub enum ReceiverActorError {
     UnexpectedTransferId(String),
     #[error("actor channel error: {0}")]
     Channel(String),
+    #[error("{0}")]
+    Other(String),
 }
 
 impl From<mpz_ot_core::kos::ReceiverError> for ReceiverActorError {
     fn from(err: mpz_ot_core::kos::ReceiverError) -> Self {
         ReceiverActorError::ReceiverError(err.into())
+    }
+}
+
+impl From<crate::OTError> for ReceiverActorError {
+    fn from(err: crate::OTError) -> Self {
+        match err {
+            crate::OTError::IOError(err) => err.into(),
+            err => ReceiverActorError::Other(err.to_string()),
+        }
     }
 }
 

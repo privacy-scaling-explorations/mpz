@@ -59,7 +59,7 @@ mod tests {
 
     use crate::{
         mock::{mock_ot_pair, MockOTReceiver, MockOTSender},
-        CommittedOTSender, OTReceiver, OTSender, OTSetup, VerifiableOTReceiver,
+        OTReceiver, OTSender, OTSetup, VerifiableOTReceiver,
     };
 
     #[fixture]
