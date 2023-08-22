@@ -52,7 +52,7 @@ mod tests {
     use rand::Rng;
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
-    use utils_aio::{duplex::MpscDuplex, sink::IoSink, stream::IoStream};
+    use utils_aio::{duplex::MemoryDuplex, sink::IoSink, stream::IoStream};
 
     use crate::{
         mock::{mock_ot_pair, MockOTReceiver, MockOTSender},
@@ -120,7 +120,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MpscDuplex::new();
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
         let (mut sender_sink, mut sender_stream) = sender_channel.split();
         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
@@ -152,7 +152,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos_committed_sender(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MpscDuplex::new();
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
         let (mut sender_sink, mut sender_stream) = sender_channel.split();
         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
