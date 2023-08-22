@@ -5,7 +5,7 @@ use crate::{OTReceiveElement, OTSendElement};
 use super::{ConverterReceiver, ConverterSender, ReceiverConfig, SenderConfig};
 use mpz_ot::mock::{mock_ot_shared_pair, MockSharedOTReceiver, MockSharedOTSender};
 use mpz_share_conversion_core::fields::Field;
-use utils_aio::duplex::MpscDuplex;
+use utils_aio::duplex::MemoryDuplex;
 
 /// A mock converter sender
 pub type MockConverterSender<F> = ConverterSender<F, MockSharedOTSender>;
@@ -25,7 +25,7 @@ where
     MockSharedOTSender: OTSendElement<F>,
     MockSharedOTReceiver: OTReceiveElement<F>,
 {
-    let (c1, c2) = MpscDuplex::new();
+    let (c1, c2) = MemoryDuplex::new();
 
     let (ot_sender, ot_receiver) = mock_ot_shared_pair();
 

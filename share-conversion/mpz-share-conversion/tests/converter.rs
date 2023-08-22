@@ -7,7 +7,7 @@ use mpz_share_conversion::{
     AdditiveToMultiplicative, ConverterReceiver, ConverterSender, Field, Gf2_128,
     MultiplicativeToAdditive, OTReceiveElement, OTSendElement, ReceiverConfig, SenderConfig, P256,
 };
-use utils_aio::duplex::MpscDuplex;
+use utils_aio::duplex::MemoryDuplex;
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
@@ -24,7 +24,7 @@ where
     let mut rng = ChaCha12Rng::seed_from_u64(0);
 
     let (ot_sender, ot_receiver) = mock_ot_shared_pair();
-    let (sender_channel, receiver_channel) = MpscDuplex::new();
+    let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
     let mut sender = ConverterSender::<T, _>::new(
         SenderConfig::builder().id("test").record().build().unwrap(),

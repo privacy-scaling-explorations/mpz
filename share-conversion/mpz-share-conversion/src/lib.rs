@@ -94,7 +94,7 @@ pub trait ShareConversionVerify {
 mod tests {
     use super::*;
     use rstest::*;
-    use utils_aio::duplex::MpscDuplex;
+    use utils_aio::duplex::MemoryDuplex;
 
     use std::marker::PhantomData;
 
@@ -136,7 +136,7 @@ mod tests {
         MockSharedOTReceiver: OTReceiveElement<T>,
     {
         let (ot_sender, ot_receiver) = mock_ot_shared_pair();
-        let (mut sender_channel, mut receiver_channel) = MpscDuplex::new();
+        let (mut sender_channel, mut receiver_channel) = MemoryDuplex::new();
         let (mut sender, mut receiver) = create_pair::<T>();
         let mut rng = ChaCha20Rng::from_seed([0; 32]);
 

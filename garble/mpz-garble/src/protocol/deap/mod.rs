@@ -913,7 +913,7 @@ impl State {
 mod tests {
     use mpz_circuits::{circuits::AES128, ops::WrappingAdd, CircuitBuilder};
     use mpz_ot::mock::mock_ot_shared_pair;
-    use utils_aio::duplex::MpscDuplex;
+    use utils_aio::duplex::MemoryDuplex;
 
     use crate::Memory;
 
@@ -934,7 +934,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_deap() {
-        let (leader_channel, follower_channel) = MpscDuplex::<GarbleMessage>::new();
+        let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
         let (leader_ot_send, follower_ot_recv) = mock_ot_shared_pair();
         let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
 
@@ -1023,7 +1023,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_deap_decode_private() {
-        let (leader_channel, follower_channel) = MpscDuplex::<GarbleMessage>::new();
+        let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
         let (leader_ot_send, follower_ot_recv) = mock_ot_shared_pair();
         let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
 
@@ -1127,7 +1127,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_deap_decode_shared() {
-        let (leader_channel, follower_channel) = MpscDuplex::<GarbleMessage>::new();
+        let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
         let (leader_ot_send, follower_ot_recv) = mock_ot_shared_pair();
         let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
 
@@ -1261,7 +1261,7 @@ mod tests {
     }
 
     async fn run_zk(key: [u8; 16], msg: [u8; 16], expected_ciphertext: [u8; 16]) {
-        let (leader_channel, follower_channel) = MpscDuplex::<GarbleMessage>::new();
+        let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
         let (_, follower_ot_recv) = mock_ot_shared_pair();
         let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
 
