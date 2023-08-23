@@ -278,13 +278,13 @@ mod tests {
     fn inn_prdt_test() {
         use rand::{Rng, SeedableRng};
         use rand_chacha::ChaCha12Rng;
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut rng = ChaCha12Rng::from_seed([0; 32]);
 
         const SIZE: usize = 1000;
         let mut a = Vec::new();
         let mut b = Vec::new();
-        let mut c = (Block::default(), Block::default());
-        let mut d = Block::default();
+        let mut c = (Block::ZERO, Block::ZERO);
+        let mut d = Block::ZERO;
         for i in 0..SIZE {
             let r: [u8; 16] = rng.gen();
             a.push(Block::from(r));
