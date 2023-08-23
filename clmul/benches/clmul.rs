@@ -22,7 +22,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     c.bench_function("reduce", move |bench| {
-        bench.iter(|| black_box(Clmul::reduce(a, b)));
+        bench.iter(|| black_box(Clmul::reduce_gcm(a, b)));
     });
 }
 
