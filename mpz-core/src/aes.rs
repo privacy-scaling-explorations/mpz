@@ -58,7 +58,8 @@ impl FixedKeyAes {
     /// (cf.<https://eprint.iacr.org/2019/074>, §7.3).
     ///
     /// The function computes `H(sigma(x))`, where `H` is a correlation-robust hash
-    /// function and `sigma( x0 || x1 ) = (x0 xor x1) || x1`.
+    /// function and `sigma( x = x0 || x1 ) = (x0 xor x1) || x1`.
+    /// `x0` and `x1` are the lower and higher halves of `x`, respectively.
     #[inline]
     pub fn ccr(&self, block: Block) -> Block {
         self.cr(Block::sigma(block))
@@ -100,8 +101,8 @@ impl AesEncryptor {
 
     /// Encrypt many blocks with many keys.
     /// Input: `NK` AES keys `keys`, and `NK * NM` blocks `blks`
-    /// Output: use each AES key encrypts each bunch of `NM` blocks.
-    /// If the length of `blks` is larger than `NK * NM`, do not handle the rest part.
+    /// Output: each batch of NM blocks encrypted by a corresponding AES key.
+    /// Only handle the first NK * NM blocks of blks, do not handle the rest.
     #[inline(always)]
     pub fn para_encrypt<const NK: usize, const NM: usize>(keys: &[Self; NK], blks: &mut [Block]) {
         assert!(blks.len() >= NM * NK);
@@ -125,10 +126,10 @@ fn aes_test() {
     assert_eq!(
         blks,
         [
-            Block::from((0x2E2B34CA59FA4C883B2C8AEFD44BE966 as u128).to_le_bytes()),
-            Block::from((0x4E668D3ED24773FA0A5A85EAC98C5B3F as u128).to_le_bytes()),
-            Block::from((0x2CC9BF3845486489CD5F7D878C25F6A1 as u128).to_le_bytes()),
-            Block::from((0x79B93A19527051B230CF80B27C21BFBC as u128).to_le_bytes())
+            Block::from((0x2E2B34CA59FA4C883B2C8AEFD44BE966_u128).to_le_bytes()),
+            Block::from((0x4E668D3ED24773FA0A5A85EAC98C5B3F_u128).to_le_bytes()),
+            Block::from((0x2CC9BF3845486489CD5F7D878C25F6A1_u128).to_le_bytes()),
+            Block::from((0x79B93A19527051B230CF80B27C21BFBC_u128).to_le_bytes())
         ]
     );
 }

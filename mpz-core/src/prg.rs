@@ -88,7 +88,7 @@ impl SeedableRng for Prg {
 impl CryptoRng for Prg {}
 
 impl Prg {
-    /// New a Prg with random seed.
+    /// New Prg with random seed.
     #[inline(always)]
     pub fn new() -> Self {
         let seed = rand::random::<Block>();

@@ -85,14 +85,14 @@ impl ClmulArm {
     }
 
     #[inline(always)]
-    pub fn reduce(x: Self, y: Self) -> ClmulArm {
-        unsafe { Self::reduce_unsafe(&x, &y) }
+    pub fn reduce_gcm(x: Self, y: Self) -> ClmulArm {
+        unsafe { Self::reduce_gcm_unsafe(&x, &y) }
     }
 
     // This implementation is adapted from EMP Toolkit.
     #[inline]
     #[target_feature(enable = "neon")]
-    unsafe fn reduce_unsafe(x: &Self, y: &Self) -> ClmulArm {
+    unsafe fn reduce_gcm_unsafe(x: &Self, y: &Self) -> ClmulArm {
         macro_rules! _mm_shuffle_epi32 {
             ($a:expr,$IMM8:expr) => {{
                 let ret = vmovq_n_u32(vgetq_lane_u32(vreinterpretq_u32_u8($a), $IMM8 & (0x3)));

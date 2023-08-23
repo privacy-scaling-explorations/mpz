@@ -62,17 +62,18 @@ impl Block {
     }
 
     #[inline]
-    /// Performs reduction
-    pub fn reduce(x: Self, y: Self) -> Self {
-        let r = Clmul::reduce(Clmul::new(&x.0), Clmul::new(&y.0));
+    /// Reduces the polynomial represented in bits modulo the GCM polynomial x^128 + x^7 + x^2 + x + 1.
+    /// `x` and `y` are resp. upper and lower bits of the polynomial.
+    pub fn reduce_gcm(x: Self, y: Self) -> Self {
+        let r = Clmul::reduce_gcm(Clmul::new(&x.0), Clmul::new(&y.0));
         Self::new(r.into())
     }
 
-    /// The multiplication of two field elements.
+    /// The multiplication of two Galois field elements.
     #[inline]
     pub fn gfmul(self, x: Self) -> Self {
         let (a, b) = self.clmul(x);
-        Block::reduce(a, b)
+        Block::reduce_gcm(a, b)
     }
 
     /// Compute the inner product of two block vectors, without reducing the polynomial.
@@ -81,7 +82,7 @@ impl Block {
         assert_eq!(a.len(), b.len());
         a.iter()
             .zip(b.iter())
-            .fold((Block::default(), Block::default()), |acc, (x, y)| {
+            .fold((Block::ZERO, Block::ZERO), |acc, (x, y)| {
                 let t = x.clmul(*y);
                 (t.0 ^ acc.0, t.1 ^ acc.1)
             })
@@ -91,7 +92,7 @@ impl Block {
     #[inline]
     pub fn inn_prdt_red(a: &[Block], b: &[Block]) -> Block {
         let (x, y) = Block::inn_prdt_no_red(a, b);
-        Block::reduce(x, y)
+        Block::reduce_gcm(x, y)
     }
 
     /// Sets the least significant bit of the block
@@ -106,7 +107,8 @@ impl Block {
         ((self.0[0] & 1) == 1) as usize
     }
 
-    /// Function ``sigma( x0 || x1 ) = (x0 xor x1) || x1``.
+    /// Let `x0` and `x1` be the lower and higher halves of `x`, respectively.
+    /// This function compute ``sigma( x = x0 || x1 ) = (x0 xor x1) || x1``.
     #[inline(always)]
     pub fn sigma(a: Self) -> Self {
         let mut x: [u64; 2] = bytemuck::cast(a);

@@ -86,14 +86,14 @@ impl ClmulX86 {
     }
 
     #[inline(always)]
-    pub fn reduce(x: Self, y: Self) -> ClmulX86 {
-        unsafe { Self::reduce_unsafe(&x, &y) }
+    pub fn reduce_gcm(x: Self, y: Self) -> ClmulX86 {
+        unsafe { Self::reduce_gcm_unsafe(&x, &y) }
     }
 
     // This implementation is adapted from EMP Toolkit.
     #[inline]
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    unsafe fn reduce_unsafe(x: &Self, y: &Self) -> ClmulX86 {
+    unsafe fn reduce_gcm_unsafe(x: &Self, y: &Self) -> ClmulX86 {
         let tmp3 = x.0;
         let tmp6 = y.0;
         let xmmmask = _mm_setr_epi32(-1, 0x0, 0x0, 0x0);

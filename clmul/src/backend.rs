@@ -10,10 +10,12 @@ use core::ops::{BitXor, BitXorAssign};
 mod soft;
 
 impl soft::Clmul {
-    pub fn reduce(x: Self, y: Self) -> Self {
-        // This software implementation is adopted from Swanky.
-        // Page 15 of https://is.gd/tOd246
-        // Reduce the polynomial represented in bits over x^128 + x^7 + x^2 + x + 1
+    /// Reduces the polynomial represented in bits modulo the GCM polynomial x^128 + x^7 + x^2 + x + 1.
+    /// x and y are resp. upper and lower bits of the polynomial.
+    ///
+    /// Page 16 of [Intel® Carry-Less Multiplication Instruction and its Usage for Computing the GCM Mode rev 2.02]
+    /// (https://www.intel.com/content/dam/develop/external/us/en/documents/clmul-wp-rev-2-02-2014-04-20.pdf)
+    pub fn reduce_gcm(x: Self, y: Self) -> Self {
         fn sep(x: u128) -> (u64, u64) {
             // (high, low)
             ((x >> 64) as u64, x as u64)
@@ -182,16 +184,17 @@ impl Clmul {
         }
     }
 
-    /// Performs reduction
-    pub fn reduce(x: Self, y: Self) -> Self {
+    /// Reduces the polynomial represented in bits modulo the GCM polynomial x^128 + x^7 + x^2 + x + 1.
+    /// x and y are resp. upper and lower bits of the polynomial.
+    pub fn reduce_gcm(x: Self, y: Self) -> Self {
         match x.intrinsics {
             Some(x_intr) => match y.intrinsics {
                 Some(y_intr) => {
                     cfg_if! {
                         if #[cfg(any(all(target_arch = "aarch64", feature = "armv8"), any(target_arch = "x86_64", target_arch = "x86")))]{
-                            let r = intrinsics::Clmul::reduce(x_intr, y_intr);
+                            let r = intrinsics::Clmul::reduce_gcm(x_intr, y_intr);
                         }else{
-                            let r = soft::Clmul::reduce(x_intr, y_intr);
+                            let r = soft::Clmul::reduce_gcm(x_intr, y_intr);
                         }
                     }
                     Self {
@@ -204,7 +207,7 @@ impl Clmul {
             None => match x.soft {
                 Some(x_soft) => match y.soft {
                     Some(y_soft) => {
-                        let r = soft::Clmul::reduce(x_soft, y_soft);
+                        let r = soft::Clmul::reduce_gcm(x_soft, y_soft);
                         Self {
                             intrinsics: None,
                             soft: Some(r),
@@ -304,20 +307,20 @@ fn reduce_test() {
     use rand::Rng;
     use rand_chacha::{rand_core::SeedableRng, ChaCha12Rng};
 
-    let mut rng = ChaCha12Rng::from_entropy();
+    let mut rng = ChaCha12Rng::from_seed([0; 32]);
     let x: [u8; 16] = rng.gen();
     let y: [u8; 16] = rng.gen();
 
     let xx = soft::Clmul::new(&x);
     let yy = soft::Clmul::new(&y);
 
-    let zz = soft::Clmul::reduce(xx, yy);
+    let zz = soft::Clmul::reduce_gcm(xx, yy);
     let zz: [u8; 16] = zz.into();
 
     let xxx = Clmul::new(&x);
     let yyy = Clmul::new(&y);
 
-    let zzz = Clmul::reduce(xxx, yyy);
+    let zzz = Clmul::reduce_gcm(xxx, yyy);
     let zzz: [u8; 16] = zzz.into();
 
     assert_eq!(zz, zzz);
