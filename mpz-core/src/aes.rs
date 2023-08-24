@@ -58,7 +58,7 @@ impl FixedKeyAes {
     /// (cf.<https://eprint.iacr.org/2019/074>, §7.3).
     ///
     /// The function computes `H(sigma(x))`, where `H` is a correlation-robust hash
-    /// function and `sigma( x = x0 || x1 ) = (x0 xor x1) || x1`.
+    /// function and `sigma( x = x0 || x1 ) = x1 || (x0 xor x1)`.
     /// `x0` and `x1` are the lower and higher halves of `x`, respectively.
     #[inline]
     pub fn ccr(&self, block: Block) -> Block {
@@ -71,8 +71,8 @@ impl FixedKeyAes {
 pub struct AesEncryptor(Aes128Enc);
 
 impl AesEncryptor {
-    /// AES_BLOCK_SIZE
-    pub const AES_BLOCK_SIZE: usize = 8;
+    /// Constant number of AES blocks, always set to 8.
+    pub const AES_BLOCK_COUNT: usize = 8;
 
     /// Initiate an AesEncryptor instance with key.
     #[inline(always)]

@@ -108,12 +108,12 @@ impl Block {
     }
 
     /// Let `x0` and `x1` be the lower and higher halves of `x`, respectively.
-    /// This function compute ``sigma( x = x0 || x1 ) = (x0 xor x1) || x1``.
+    /// This function compute ``sigma( x = x0 || x1 ) = x1 || (x0 xor x1)``.
     #[inline(always)]
     pub fn sigma(a: Self) -> Self {
         let mut x: [u64; 2] = bytemuck::cast(a);
         x[0] ^= x[1];
-        bytemuck::cast(x)
+        bytemuck::cast([x[1], x[0]])
     }
 }
 
@@ -301,5 +301,22 @@ mod tests {
 
         assert_eq!(c, Block::inn_prdt_no_red(&a, &b));
         assert_eq!(d, Block::inn_prdt_red(&a, &b));
+    }
+
+    #[test]
+    fn sigma_test() {
+        use rand::{Rng, SeedableRng};
+        use rand_chacha::ChaCha12Rng;
+        let mut rng = ChaCha12Rng::from_seed([0; 32]);
+        let mut x: [u8; 16] = rng.gen();
+        let bx = Block::sigma(Block::from(x));
+        let (xl, xr) = x.split_at_mut(8);
+
+        for (x, y) in xl.iter_mut().zip(xr.iter_mut()) {
+            *x ^= *y;
+            std::mem::swap(x, y);
+        }
+        let expected_sigma = Block::from(x);
+        assert_eq!(bx, expected_sigma);
     }
 }

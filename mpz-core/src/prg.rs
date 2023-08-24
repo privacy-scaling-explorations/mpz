@@ -16,12 +16,12 @@ struct PrgCore {
 // This implementation is somehow standard, and is adapted from Swanky.
 impl BlockRngCore for PrgCore {
     type Item = u32;
-    type Results = [u32; 4 * AesEncryptor::AES_BLOCK_SIZE];
+    type Results = [u32; 4 * AesEncryptor::AES_BLOCK_COUNT];
 
     // Compute [AES(state)..AES(state+8)]
     #[inline(always)]
     fn generate(&mut self, results: &mut Self::Results) {
-        let states = [0; AesEncryptor::AES_BLOCK_SIZE].map(
+        let states = [0; AesEncryptor::AES_BLOCK_COUNT].map(
             #[inline(always)]
             |_| {
                 let x = self.state;
