@@ -67,16 +67,14 @@ pub use encoding::{
 pub use evaluator::{Evaluator, EvaluatorError};
 pub use generator::{Generator, GeneratorError};
 
-/// Fixed key used for AES encryption
-///
-/// See [Efficient Garbling from a Fixed-Key Blockcipher \[BHKR13\]](https://eprint.iacr.org/2013/426.pdf)
-/// for more details.
-pub(crate) static CIPHER_FIXED_KEY: [u8; 16] = [69u8; 16];
-
 #[cfg(test)]
 mod tests {
-    use aes::{Aes128, BlockEncrypt, NewBlockCipher};
+    use aes::{
+        cipher::{BlockEncrypt, KeyInit},
+        Aes128,
+    };
     use mpz_circuits::{circuits::AES128, types::Value};
+    use mpz_core::aes::FIXED_KEY_AES;
     use rand::SeedableRng;
     use rand_chacha::ChaCha12Rng;
 
@@ -87,7 +85,7 @@ mod tests {
         use crate::{evaluator as ev, generator as gen};
 
         let mut rng = ChaCha12Rng::from_entropy();
-        let cipher = Aes128::new_from_slice(&CIPHER_FIXED_KEY).unwrap();
+        let cipher = &(*FIXED_KEY_AES);
 
         let delta = Delta::random(&mut rng);
         let x_0 = Label::random(&mut rng);
@@ -96,13 +94,13 @@ mod tests {
         let y_1 = y_0 ^ delta;
         let gid: usize = 1;
 
-        let (z_0, encrypted_gate) = gen::and_gate(&cipher, &x_0, &y_0, &delta, gid);
+        let (z_0, encrypted_gate) = gen::and_gate(cipher, &x_0, &y_0, &delta, gid);
         let z_1 = z_0 ^ delta;
 
-        assert_eq!(ev::and_gate(&cipher, &x_0, &y_1, &encrypted_gate, gid), z_0);
-        assert_eq!(ev::and_gate(&cipher, &x_0, &y_1, &encrypted_gate, gid), z_0);
-        assert_eq!(ev::and_gate(&cipher, &x_1, &y_0, &encrypted_gate, gid), z_0);
-        assert_eq!(ev::and_gate(&cipher, &x_1, &y_1, &encrypted_gate, gid), z_1);
+        assert_eq!(ev::and_gate(cipher, &x_0, &y_1, &encrypted_gate, gid), z_0);
+        assert_eq!(ev::and_gate(cipher, &x_0, &y_1, &encrypted_gate, gid), z_0);
+        assert_eq!(ev::and_gate(cipher, &x_1, &y_0, &encrypted_gate, gid), z_0);
+        assert_eq!(ev::and_gate(cipher, &x_1, &y_1, &encrypted_gate, gid), z_1);
     }
 
     #[test]

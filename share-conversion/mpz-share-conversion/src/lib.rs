@@ -37,10 +37,10 @@ pub use ot::{OTReceiveElement, OTSendElement};
 pub use receiver::GilboaReceiver;
 pub use sender::GilboaSender;
 
-use utils_aio::Channel;
+use utils_aio::duplex::Duplex;
 
 /// A channel used by conversion protocols for messaging
-pub type ShareConversionChannel<T> = Box<dyn Channel<ShareConversionMessage<T>>>;
+pub type ShareConversionChannel<T> = Box<dyn Duplex<ShareConversionMessage<T>>>;
 
 /// A trait for converting additive shares into multiplicative shares.
 #[async_trait]
@@ -94,13 +94,13 @@ pub trait ShareConversionVerify {
 mod tests {
     use super::*;
     use rstest::*;
-    use utils_aio::duplex::DuplexChannel;
+    use utils_aio::duplex::MemoryDuplex;
 
     use std::marker::PhantomData;
 
     use crate::config::{ReceiverConfig, SenderConfig};
 
-    use mpz_ot::mock::mock_ot_pair;
+    use mpz_ot::mock::{mock_ot_shared_pair, MockSharedOTReceiver, MockSharedOTSender};
     use mpz_share_conversion_core::{
         fields::{gf2_128::Gf2_128, p256::P256, Field},
         ShareType,
@@ -131,9 +131,12 @@ mod tests {
         #[case] ty: ShareType,
         #[case] _pd: PhantomData<T>,
         #[values(false, true)] malicious: bool,
-    ) {
-        let (ot_sender, ot_receiver) = mock_ot_pair();
-        let (mut sender_channel, mut receiver_channel) = DuplexChannel::new();
+    ) where
+        MockSharedOTSender: OTSendElement<T>,
+        MockSharedOTReceiver: OTReceiveElement<T>,
+    {
+        let (ot_sender, ot_receiver) = mock_ot_shared_pair();
+        let (mut sender_channel, mut receiver_channel) = MemoryDuplex::new();
         let (mut sender, mut receiver) = create_pair::<T>();
         let mut rng = ChaCha20Rng::from_seed([0; 32]);
 

@@ -1,16 +1,17 @@
 use std::sync::Arc;
 
-use aes::{Aes128, NewBlockCipher};
 use blake3::Hasher;
-use cipher::{consts::U16, BlockCipher, BlockEncrypt};
 
 use crate::{
     circuit::EncryptedGate,
     encoding::{state, Delta, EncodedValue, Label},
-    CIPHER_FIXED_KEY,
 };
 use mpz_circuits::{types::TypeError, Circuit, CircuitError, Gate};
-use mpz_core::{hash::Hash, Block};
+use mpz_core::{
+    aes::{FixedKeyAes, FIXED_KEY_AES},
+    hash::Hash,
+    Block,
+};
 
 /// Errors that can occur during garbled circuit generation.
 #[derive(Debug, thiserror::Error)]
@@ -26,8 +27,8 @@ pub enum GeneratorError {
 
 /// Computes half-gate garbled AND gate
 #[inline]
-pub(crate) fn and_gate<C: BlockCipher<BlockSize = U16> + BlockEncrypt>(
-    c: &C,
+pub(crate) fn and_gate(
+    cipher: &FixedKeyAes,
     x_0: &Label,
     y_0: &Label,
     delta: &Delta,
@@ -41,18 +42,18 @@ pub(crate) fn and_gate<C: BlockCipher<BlockSize = U16> + BlockEncrypt>(
 
     let p_a = x_0.lsb();
     let p_b = y_0.lsb();
-    let j = gid;
-    let k = gid + 1;
+    let j = Block::new((gid as u128).to_be_bytes());
+    let k = Block::new(((gid + 1) as u128).to_be_bytes());
 
-    let hx_0 = x_0.hash_tweak(c, j);
-    let hy_0 = y_0.hash_tweak(c, k);
+    let hx_0 = cipher.tccr(j, x_0);
+    let hy_0 = cipher.tccr(k, y_0);
 
     // Garbled row of generator half-gate
-    let t_g = hx_0 ^ x_1.hash_tweak(c, j) ^ (Block::SELECT_MASK[p_b] & delta);
+    let t_g = hx_0 ^ cipher.tccr(j, x_1) ^ (Block::SELECT_MASK[p_b] & delta);
     let w_g = hx_0 ^ (Block::SELECT_MASK[p_a] & t_g);
 
     // Garbled row of evaluator half-gate
-    let t_e = hy_0 ^ y_1.hash_tweak(c, k) ^ x_0;
+    let t_e = hy_0 ^ cipher.tccr(k, y_1) ^ x_0;
     let w_e = hy_0 ^ (Block::SELECT_MASK[p_b] & (t_e ^ x_0));
 
     let z_0 = Label::new(w_g ^ w_e);
@@ -67,7 +68,7 @@ pub(crate) fn and_gate<C: BlockCipher<BlockSize = U16> + BlockEncrypt>(
 /// entire garbled circuit has been yielded.
 pub struct Generator {
     /// Cipher to use to encrypt the gates
-    cipher: Aes128,
+    cipher: &'static FixedKeyAes,
     /// Circuit to generate a garbled circuit for
     circ: Arc<Circuit>,
     /// Delta value to use while generating the circuit
@@ -142,7 +143,7 @@ impl Generator {
         }
 
         Ok(Self {
-            cipher: Aes128::new_from_slice(&CIPHER_FIXED_KEY).expect("cipher should initialize"),
+            cipher: &(*FIXED_KEY_AES),
             circ,
             delta,
             low_labels,
@@ -221,12 +222,12 @@ impl Iterator for Generator {
                     let x_0 = low_labels[node_x.id()].expect("feed should be initialized");
                     let y_0 = low_labels[node_y.id()].expect("feed should be initialized");
                     let (z_0, encrypted_gate) =
-                        and_gate(&self.cipher, &x_0, &y_0, &self.delta, self.gid);
+                        and_gate(self.cipher, &x_0, &y_0, &self.delta, self.gid);
                     low_labels[node_z.id()] = Some(z_0);
                     self.gid += 2;
 
                     if let Some(hasher) = &mut self.hasher {
-                        hasher.update(&encrypted_gate.to_be_bytes());
+                        hasher.update(&encrypted_gate.to_bytes());
                     }
 
                     return Some(encrypted_gate);
