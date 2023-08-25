@@ -221,9 +221,56 @@ where
             .into_sender_payload()
             .map_err(ReceiverError::from)?;
 
-        let received =
-            Backend::spawn(move || receiver_keys.decrypt(payload).map_err(ReceiverError::from))
-                .await?;
+        let received = Backend::spawn(move || {
+            receiver_keys
+                .decrypt_blocks(payload)
+                .map_err(ReceiverError::from)
+        })
+        .await?;
+
+        Ok(received)
+    }
+}
+
+#[async_trait]
+impl<const N: usize, BaseOT> OTReceiver<bool, [u8; N]> for Receiver<BaseOT>
+where
+    BaseOT: ProtocolMessage + Send,
+{
+    async fn receive<
+        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
+        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        choices: &[bool],
+    ) -> Result<Vec<[u8; N]>, OTError> {
+        let receiver = self.state.as_extension_mut().map_err(ReceiverError::from)?;
+
+        let mut receiver_keys = receiver.keys(choices.len()).map_err(ReceiverError::from)?;
+
+        let choices = choices.into_lsb0_vec();
+        let derandomize = receiver_keys
+            .derandomize(&choices)
+            .map_err(ReceiverError::from)?;
+
+        // Send derandomize message
+        sink.send(Message::Derandomize(derandomize)).await?;
+
+        // Receive payload
+        let payload = stream
+            .expect_next()
+            .await?
+            .into_sender_payload()
+            .map_err(ReceiverError::from)?;
+
+        let received = Backend::spawn(move || {
+            receiver_keys
+                .decrypt_bytes(payload)
+                .map_err(ReceiverError::from)
+        })
+        .await?;
 
         Ok(received)
     }

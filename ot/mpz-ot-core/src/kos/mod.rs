@@ -25,6 +25,9 @@ pub(crate) type Rng = ChaCha20Rng;
 /// Rng seed type
 pub(crate) type RngSeed = <Rng as SeedableRng>::Seed;
 
+/// AES-128 CTR used for encryption.
+pub(crate) type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,9 +118,50 @@ mod tests {
 
         let mut sender_keys = sender.keys(data.len()).unwrap();
         sender_keys.derandomize(derandomize).unwrap();
-        let payload = sender_keys.encrypt(&data).unwrap();
+        let payload = sender_keys.encrypt_blocks(&data).unwrap();
 
-        let received = receiver_keys.decrypt(payload).unwrap();
+        let received = receiver_keys.decrypt_blocks(payload).unwrap();
+
+        assert_eq!(received, expected);
+    }
+
+    #[rstest]
+    fn test_kos_extension_bytes(
+        delta: Block,
+        sender_seeds: [Block; CSP],
+        receiver_seeds: [[Block; 2]; CSP],
+        chi_seed: Block,
+        choices: Vec<bool>,
+        data: Vec<[Block; 2]>,
+        expected: Vec<Block>,
+    ) {
+        let sender = Sender::new(SenderConfig::default());
+        let receiver = Receiver::new(ReceiverConfig::default());
+
+        let mut sender = sender.setup(delta, sender_seeds);
+        let mut receiver = receiver.setup(receiver_seeds);
+
+        let receiver_setup = receiver.extend(choices.len() + 256).unwrap();
+        sender.extend(data.len() + 256, receiver_setup).unwrap();
+
+        let receiver_check = receiver.check(chi_seed).unwrap();
+        sender.check(chi_seed, receiver_check).unwrap();
+
+        let mut receiver_keys = receiver.keys(choices.len()).unwrap();
+        let derandomize = receiver_keys.derandomize(&choices).unwrap();
+
+        let data: Vec<_> = data
+            .iter()
+            .map(|[a, b]| [a.to_bytes(), b.to_bytes()])
+            .collect();
+
+        let mut sender_keys = sender.keys(data.len()).unwrap();
+        sender_keys.derandomize(derandomize).unwrap();
+        let payload = sender_keys.encrypt_bytes(&data).unwrap();
+
+        let received = receiver_keys.decrypt_bytes::<16>(payload).unwrap();
+
+        let expected = expected.iter().map(|b| b.to_bytes()).collect::<Vec<_>>();
 
         assert_eq!(received, expected);
     }
@@ -153,9 +197,9 @@ mod tests {
 
         let mut sender_keys = sender.keys(data.len()).unwrap();
         sender_keys.derandomize(derandomize).unwrap();
-        let payload = sender_keys.encrypt(&data).unwrap();
+        let payload = sender_keys.encrypt_blocks(&data).unwrap();
 
-        let received = receiver_keys.decrypt(payload).unwrap();
+        let received = receiver_keys.decrypt_blocks(payload).unwrap();
 
         assert_eq!(received, expected);
     }
@@ -261,9 +305,9 @@ mod tests {
 
         let mut sender_keys = sender.keys(data.len()).unwrap();
         sender_keys.derandomize(derandomize).unwrap();
-        let payload = sender_keys.encrypt(&data).unwrap();
+        let payload = sender_keys.encrypt_blocks(&data).unwrap();
 
-        let received = receiver_keys.decrypt(payload).unwrap();
+        let received = receiver_keys.decrypt_blocks(payload).unwrap();
 
         assert_eq!(received, expected);
 
@@ -301,9 +345,9 @@ mod tests {
 
         let mut sender_keys = sender.keys(data.len()).unwrap();
         sender_keys.derandomize(derandomize).unwrap();
-        let payload = sender_keys.encrypt(&data).unwrap();
+        let payload = sender_keys.encrypt_blocks(&data).unwrap();
 
-        let received = receiver_keys.decrypt(payload).unwrap();
+        let received = receiver_keys.decrypt_blocks(payload).unwrap();
 
         assert_eq!(received, expected);
 

@@ -259,7 +259,45 @@ where
         sender_keys
             .derandomize(derandomize)
             .map_err(SenderError::from)?;
-        let payload = sender_keys.encrypt(msgs).map_err(SenderError::from)?;
+        let payload = sender_keys
+            .encrypt_blocks(msgs)
+            .map_err(SenderError::from)?;
+
+        sink.send(Message::SenderPayload(payload))
+            .await
+            .map_err(SenderError::from)?;
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<const N: usize, BaseOT> OTSender<[[u8; N]; 2]> for Sender<BaseOT>
+where
+    BaseOT: ProtocolMessage + Send,
+{
+    async fn send<
+        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
+        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        msgs: &[[[u8; N]; 2]],
+    ) -> Result<(), OTError> {
+        let sender = self.state.as_extension_mut().map_err(SenderError::from)?;
+
+        let derandomize = stream
+            .expect_next()
+            .await?
+            .into_derandomize()
+            .map_err(SenderError::from)?;
+
+        let mut sender_keys = sender.keys(msgs.len()).map_err(SenderError::from)?;
+        sender_keys
+            .derandomize(derandomize)
+            .map_err(SenderError::from)?;
+        let payload = sender_keys.encrypt_bytes(msgs).map_err(SenderError::from)?;
 
         sink.send(Message::SenderPayload(payload))
             .await

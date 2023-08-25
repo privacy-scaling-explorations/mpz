@@ -1,11 +1,12 @@
 use crate::{
     kos::{
-        msgs::{Check, Extend, SenderPayload},
-        Rng, RngSeed, SenderConfig, SenderError, CSP, SSP,
+        msgs::{Check, Ciphertexts, Extend, SenderPayload},
+        Aes128Ctr, Rng, RngSeed, SenderConfig, SenderError, CSP, SSP,
     },
     msgs::Derandomize,
 };
 
+use cipher::{KeyIvInit, StreamCipher};
 use itybity::ToBits;
 use mpz_core::{aes::FIXED_KEY_AES, Block};
 
@@ -350,38 +351,101 @@ impl SenderKeys {
     /// # Arguments
     ///
     /// * `msgs` - The messages to encrypt
-    pub fn encrypt(self, msgs: &[[Block; 2]]) -> Result<SenderPayload, SenderError> {
+    pub fn encrypt_blocks(self, msgs: &[[Block; 2]]) -> Result<SenderPayload, SenderError> {
         if msgs.len() != self.keys.len() {
             return Err(SenderError::InsufficientSetup(msgs.len(), self.keys.len()));
         }
 
+        // If we have derandomization, use it to correct the receiver's choices, else we use
+        // default
+        let flip = self
+            .derandomize
+            .map(|x| x.flip)
+            .unwrap_or_else(|| vec![0; self.keys.len() / 8 + 1]);
+
         // Encrypt the chosen messages using the generated keys from ROT.
-        let ciphertexts = if let Some(Derandomize { flip, .. }) = self.derandomize {
-            self.keys
-                .into_iter()
-                .zip(msgs)
-                .zip(flip.iter_lsb0())
-                .flat_map(|(([k0, k1], [m0, m1]), flip)| {
-                    // Use Beaver derandomization to correct the receiver's choices
-                    // from the extension phase.
-                    if flip {
-                        [k1 ^ *m0, k0 ^ *m1]
-                    } else {
-                        [k0 ^ *m0, k1 ^ *m1]
-                    }
-                })
-                .collect()
-        } else {
-            self.keys
-                .into_iter()
-                .zip(msgs)
-                .flat_map(|([k0, k1], [m0, m1])| [k0 ^ *m0, k1 ^ *m1])
-                .collect()
-        };
+        let ciphertexts = self
+            .keys
+            .into_iter()
+            .zip(msgs)
+            .zip(flip.iter_lsb0())
+            .flat_map(|(([k0, k1], [m0, m1]), flip)| {
+                // Use Beaver derandomization to correct the receiver's choices
+                // from the extension phase.
+                if flip {
+                    [k1 ^ *m0, k0 ^ *m1]
+                } else {
+                    [k0 ^ *m0, k1 ^ *m1]
+                }
+            })
+            .collect();
 
         Ok(SenderPayload {
             id: self.id,
-            ciphertexts,
+            ciphertexts: Ciphertexts::Blocks { ciphertexts },
+        })
+    }
+
+    /// Encrypts the provided messages using the keys.
+    ///
+    /// # Arguments
+    ///
+    /// * `msgs` - The messages to encrypt
+    pub fn encrypt_bytes<const N: usize>(
+        self,
+        msgs: &[[[u8; N]; 2]],
+    ) -> Result<SenderPayload, SenderError> {
+        if msgs.len() != self.keys.len() {
+            return Err(SenderError::InsufficientSetup(msgs.len(), self.keys.len()));
+        }
+
+        // Generate a random IV which is used for all messages.
+        // This is safe because every message is encrypted with a different key.
+        let iv: [u8; 16] = rand::thread_rng().gen();
+
+        // If we have derandomization, use it to correct the receiver's choices, else we use
+        // default
+        let flip = self
+            .derandomize
+            .map(|x| x.flip)
+            .unwrap_or_else(|| vec![0; self.keys.len() / 8 + 1]);
+
+        // Encrypt the chosen messages using the generated keys from ROT.
+        let ciphertexts = self
+            .keys
+            .into_iter()
+            .zip(msgs)
+            .zip(flip.iter_lsb0())
+            .flat_map(|(([k0, k1], [m0, m1]), flip)| {
+                // Initialize AES-CTR with the keys from ROT.
+                let mut e0 = Aes128Ctr::new(&k0.into(), &iv.into());
+                let mut e1 = Aes128Ctr::new(&k1.into(), &iv.into());
+
+                let mut m0 = *m0;
+                let mut m1 = *m1;
+
+                // Use Beaver derandomization to correct the receiver's choices
+                // from the extension phase.
+                if flip {
+                    e1.apply_keystream(&mut m0);
+                    e0.apply_keystream(&mut m1);
+                } else {
+                    e0.apply_keystream(&mut m0);
+                    e1.apply_keystream(&mut m1);
+                }
+
+                [m0, m1]
+            })
+            .flatten()
+            .collect();
+
+        Ok(SenderPayload {
+            id: self.id,
+            ciphertexts: Ciphertexts::Bytes {
+                ciphertexts,
+                iv: iv.to_vec(),
+                length: N as u32,
+            },
         })
     }
 }
