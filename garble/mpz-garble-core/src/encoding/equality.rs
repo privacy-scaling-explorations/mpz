@@ -48,15 +48,13 @@ impl EqualityCheck {
                     .select(purported_value.clone())
                     .expect("value type should match encoding type")
                     .iter()
-                    .flat_map(|label| label.to_inner().to_be_bytes())
+                    .flat_map(|label| label.to_inner().to_bytes())
                     .collect::<Vec<_>>()
             },
         );
-        let peer_active_iter = peer_encodings.iter().flat_map(|encoded| {
-            encoded
-                .iter()
-                .flat_map(|label| label.to_inner().to_be_bytes())
-        });
+        let peer_active_iter = peer_encodings
+            .iter()
+            .flat_map(|encoded| encoded.iter().flat_map(|label| label.to_inner().to_bytes()));
 
         let bytes: Vec<u8> = if order {
             our_active_iter.chain(peer_active_iter).collect()

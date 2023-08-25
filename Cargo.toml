@@ -54,6 +54,7 @@ tokio = "1.23"
 tokio-util = "0.7"
 
 # serialization
+ark-serialize = "0.4"
 serde = "1.0"
 serde_yaml = "0.9"
 serde_arrays = "0.1"

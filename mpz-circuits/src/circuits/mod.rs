@@ -252,8 +252,10 @@ mod tests {
     #[test]
     #[cfg(feature = "aes")]
     fn test_aes128() {
+        use aes::cipher::{BlockEncrypt, KeyInit};
+
         fn aes_128(key: [u8; 16], msg: [u8; 16]) -> [u8; 16] {
-            use aes::{Aes128, BlockEncrypt, NewBlockCipher};
+            use aes::Aes128;
 
             let aes = Aes128::new_from_slice(&key).unwrap();
             let mut ciphertext = msg.into();

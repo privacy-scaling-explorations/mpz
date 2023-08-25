@@ -176,7 +176,10 @@ mod tests {
     #[cfg(feature = "aes")]
     #[ignore = "expensive"]
     fn test_parse_aes() {
-        use aes::{Aes128, BlockEncrypt, NewBlockCipher};
+        use aes::{
+            cipher::{BlockEncrypt, KeyInit},
+            Aes128,
+        };
 
         let circ = Circuit::parse(
             "circuits/bristol/aes_128_reverse.txt",

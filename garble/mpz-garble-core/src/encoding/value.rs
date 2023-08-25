@@ -1,4 +1,4 @@
-use itybity::{FromBits, ToBits};
+use itybity::{FromBitIterator, ToBits};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::ops::BitXor;
@@ -550,7 +550,7 @@ macro_rules! define_decoding_info_variant {
 
         impl $value<state::Full> {
             pub(crate) fn decoding(&self) -> $name {
-                $name(<$ty>::from_lsb0(
+                $name(<$ty>::from_lsb0_iter(
                     self.0.iter().map(|label| label.pointer_bit()),
                 ))
             }
@@ -593,7 +593,7 @@ macro_rules! define_decoding_info_variant {
 
             /// Decodes this value using the decoding information.
             pub(crate) fn decode(&self, decoding: &$name) -> $ty {
-                <$ty>::from_lsb0(
+                <$ty>::from_lsb0_iter(
                     self.0
                         .iter()
                         .zip(decoding.0.iter_lsb0())

@@ -20,18 +20,18 @@ pub trait OTSendEncoding {
 #[async_trait]
 impl<T> OTSendEncoding for T
 where
-    T: mpz_ot::ObliviousSend<[Block; 2]> + Send + Sync,
+    T: mpz_ot::OTSenderShared<[Block; 2]> + Send + Sync,
 {
     async fn send(
         &self,
         id: &str,
         input: Vec<EncodedValue<encoding_state::Full>>,
     ) -> Result<(), mpz_ot::OTError> {
-        let blocks = input
+        let blocks: Vec<[Block; 2]> = input
             .into_iter()
             .flat_map(|v| v.iter_blocks().collect::<Vec<_>>())
             .collect();
-        self.send(id, blocks).await
+        self.send(id, &blocks).await
     }
 }
 
@@ -49,7 +49,7 @@ pub trait OTReceiveEncoding {
 #[async_trait]
 impl<T> OTReceiveEncoding for T
 where
-    T: mpz_ot::ObliviousReceive<bool, Block> + Send + Sync,
+    T: mpz_ot::OTReceiverShared<bool, Block> + Send + Sync,
 {
     async fn receive(
         &self,
@@ -59,10 +59,10 @@ where
         let mut blocks = self
             .receive(
                 id,
-                choice
+                &choice
                     .iter()
                     .flat_map(|value| value.clone().into_iter_lsb0())
-                    .collect(),
+                    .collect::<Vec<bool>>(),
             )
             .await?;
         let encodings = choice
@@ -95,25 +95,25 @@ pub trait OTVerifyEncoding {
 #[async_trait]
 impl<T> OTVerifyEncoding for T
 where
-    T: mpz_ot::ObliviousVerify<[Block; 2]> + Send + Sync,
+    T: mpz_ot::VerifiableOTReceiverShared<bool, Block, [Block; 2]> + Send + Sync,
 {
     async fn verify(
         &self,
         id: &str,
         input: Vec<EncodedValue<encoding_state::Full>>,
     ) -> Result<(), mpz_ot::OTError> {
-        let blocks = input
+        let blocks: Vec<[Block; 2]> = input
             .into_iter()
             .flat_map(|v| v.iter_blocks().collect::<Vec<_>>())
             .collect();
-        self.verify(id, blocks).await
+        self.verify(id, &blocks).await
     }
 }
 
 /// A trait for verifiable oblivious transfer of encodings.
-pub trait VerifiableOTSendEncoding: OTSendEncoding + mpz_ot::ObliviousReveal {}
+pub trait VerifiableOTSendEncoding: mpz_ot::CommittedOTSenderShared<[Block; 2]> {}
 
-impl<T> VerifiableOTSendEncoding for T where T: OTSendEncoding + mpz_ot::ObliviousReveal {}
+impl<T> VerifiableOTSendEncoding for T where T: mpz_ot::CommittedOTSenderShared<[Block; 2]> {}
 
 /// A trait for verifiable oblivious transfer of encodings.
 pub trait VerifiableOTReceiveEncoding: OTReceiveEncoding + OTVerifyEncoding {}
@@ -126,12 +126,12 @@ mod tests {
 
     use mpz_circuits::circuits::AES128;
     use mpz_garble_core::{ChaChaEncoder, Encoder};
-    use mpz_ot::mock::mock_ot_pair;
+    use mpz_ot::mock::mock_ot_shared_pair;
 
     #[tokio::test]
     async fn test_encoding_transfer() {
         let encoder = ChaChaEncoder::new([0u8; 32]);
-        let (sender, receiver) = mock_ot_pair();
+        let (sender, receiver) = mock_ot_shared_pair();
 
         let inputs = AES128
             .inputs()
