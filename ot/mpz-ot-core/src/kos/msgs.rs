@@ -50,5 +50,24 @@ pub struct SenderPayload {
     /// Transfer ID
     pub id: u32,
     /// Sender's ciphertexts
-    pub ciphertexts: Vec<Block>,
+    pub ciphertexts: Ciphertexts,
+}
+
+/// OT ciphertexts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Ciphertexts {
+    /// Messages encrypted with XOR
+    Blocks {
+        /// Sender's ciphertexts
+        ciphertexts: Vec<Block>,
+    },
+    /// Messages encrypted with stream cipher
+    Bytes {
+        /// Sender's ciphertexts
+        ciphertexts: Vec<u8>,
+        /// The IV used for encryption.
+        iv: Vec<u8>,
+        /// The length of each message in bytes.
+        length: u32,
+    },
 }
