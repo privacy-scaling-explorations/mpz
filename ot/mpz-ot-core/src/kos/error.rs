@@ -29,7 +29,7 @@ pub enum ReceiverError {
     #[error("not enough OTs are setup: expected {0}, actual {1}")]
     InsufficientSetup(usize, usize),
     #[error("invalid payload")]
-    InvalidPayload,
+    InvalidPayload(String),
     #[error(transparent)]
     ReceiverVerifyError(#[from] ReceiverVerifyError),
 }

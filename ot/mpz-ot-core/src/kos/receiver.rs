@@ -6,8 +6,8 @@ use std::{
 use crate::{
     kos::{
         error::ReceiverVerifyError,
-        msgs::{Check, Extend, SenderPayload},
-        ReceiverConfig, ReceiverError, Rng, RngSeed, CSP, SSP,
+        msgs::{Check, Ciphertexts, Extend, SenderPayload},
+        Aes128Ctr, ReceiverConfig, ReceiverError, Rng, RngSeed, CSP, SSP,
     },
     msgs::Derandomize,
 };
@@ -16,6 +16,7 @@ use itybity::{FromBitIterator, IntoBits, ToBits};
 use mpz_core::{aes::FIXED_KEY_AES, Block};
 
 use blake3::Hasher;
+use cipher::{KeyIvInit, StreamCipher};
 use rand::{thread_rng, Rng as _, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use rand_core::RngCore;
@@ -427,8 +428,14 @@ impl ReceiverKeys {
     }
 
     /// Decrypts the sender's payload.
-    pub fn decrypt(mut self, payload: SenderPayload) -> Result<Vec<Block>, ReceiverError> {
+    pub fn decrypt_blocks(mut self, payload: SenderPayload) -> Result<Vec<Block>, ReceiverError> {
         let SenderPayload { id, ciphertexts } = payload;
+
+        let Ciphertexts::Blocks { ciphertexts } = ciphertexts else {
+            return Err(ReceiverError::InvalidPayload(
+                "expected block ciphertexts".to_string(),
+            ));
+        };
 
         if id != self.id {
             return Err(ReceiverError::IdMismatch(self.id, id));
@@ -437,7 +444,7 @@ impl ReceiverKeys {
         if ciphertexts.len() / 2 != self.keys.len() {
             return Err(ReceiverError::CountMismatch(
                 self.keys.len(),
-                ciphertexts.len(),
+                ciphertexts.len() / 2,
             ));
         }
 
@@ -467,6 +474,70 @@ impl ReceiverKeys {
             .zip(self.choices)
             .zip(ciphertexts.chunks(2))
             .map(|((key, c), ct)| if c { key ^ ct[1] } else { key ^ ct[0] })
+            .collect())
+    }
+
+    /// Decrypts the sender's payload.
+    ///
+    /// # Verifiable OT
+    ///
+    /// Verifiable OT with KOS does not currently support byte payloads, so no record of this payload
+    /// will be recorded.
+    pub fn decrypt_bytes<const N: usize>(
+        self,
+        payload: SenderPayload,
+    ) -> Result<Vec<[u8; N]>, ReceiverError> {
+        let SenderPayload { id, ciphertexts } = payload;
+
+        let Ciphertexts::Bytes { ciphertexts, iv, length  } = ciphertexts else {
+            return Err(ReceiverError::InvalidPayload(
+                "expected byte ciphertexts".to_string(),
+            ));
+        };
+
+        if id != self.id {
+            return Err(ReceiverError::IdMismatch(self.id, id));
+        }
+
+        let length = length as usize;
+        if length != N {
+            return Err(ReceiverError::InvalidPayload(format!(
+                "invalid message length: expected {}, got {}",
+                N, length
+            )));
+        }
+
+        if ciphertexts.len() / (2 * length) != self.keys.len() {
+            return Err(ReceiverError::CountMismatch(
+                self.keys.len(),
+                ciphertexts.len() / (2 * length),
+            ));
+        }
+
+        let iv: [u8; 16] = iv
+            .try_into()
+            .map_err(|_| ReceiverError::InvalidPayload("invalid iv length".to_string()))?;
+
+        Ok(self
+            .keys
+            .into_iter()
+            .zip(self.choices)
+            .zip(ciphertexts.chunks(2 * N))
+            .map(|((key, c), ct)| {
+                // Initialize AES-CTR with the key from ROT.
+                let mut e = Aes128Ctr::new(&key.into(), &iv.into());
+
+                let mut msg = [0u8; N];
+                if c {
+                    msg.copy_from_slice(&ct[N..])
+                } else {
+                    msg.copy_from_slice(&ct[..N])
+                };
+
+                e.apply_keystream(&mut msg);
+
+                msg
+            })
             .collect())
     }
 }
