@@ -432,7 +432,9 @@ impl ReceiverKeys {
         let SenderPayload { id, ciphertexts } = payload;
 
         let Ciphertexts::Blocks { ciphertexts } = ciphertexts else {
-            return Err(ReceiverError::InvalidPayload);
+            return Err(ReceiverError::InvalidPayload(
+                "expected block ciphertexts".to_string(),
+            ));
         };
 
         if id != self.id {
@@ -488,7 +490,9 @@ impl ReceiverKeys {
         let SenderPayload { id, ciphertexts } = payload;
 
         let Ciphertexts::Bytes { ciphertexts, iv, length  } = ciphertexts else {
-            return Err(ReceiverError::InvalidPayload);
+            return Err(ReceiverError::InvalidPayload(
+                "expected byte ciphertexts".to_string(),
+            ));
         };
 
         if id != self.id {
@@ -496,6 +500,13 @@ impl ReceiverKeys {
         }
 
         let length = length as usize;
+        if length != N {
+            return Err(ReceiverError::InvalidPayload(format!(
+                "invalid message length: expected {}, got {}",
+                N, length
+            )));
+        }
+
         if ciphertexts.len() / (2 * length) != self.keys.len() {
             return Err(ReceiverError::CountMismatch(
                 self.keys.len(),
@@ -503,22 +514,24 @@ impl ReceiverKeys {
             ));
         }
 
-        let iv: [u8; 16] = iv.try_into().map_err(|_| ReceiverError::InvalidPayload)?;
+        let iv: [u8; 16] = iv
+            .try_into()
+            .map_err(|_| ReceiverError::InvalidPayload("invalid iv length".to_string()))?;
 
         Ok(self
             .keys
             .into_iter()
             .zip(self.choices)
-            .zip(ciphertexts.chunks(2 * length))
+            .zip(ciphertexts.chunks(2 * N))
             .map(|((key, c), ct)| {
                 // Initialize AES-CTR with the key from ROT.
                 let mut e = Aes128Ctr::new(&key.into(), &iv.into());
 
                 let mut msg = [0u8; N];
                 if c {
-                    msg.copy_from_slice(&ct[length..])
+                    msg.copy_from_slice(&ct[N..])
                 } else {
-                    msg.copy_from_slice(&ct[..length])
+                    msg.copy_from_slice(&ct[..N])
                 };
 
                 e.apply_keystream(&mut msg);
