@@ -8,7 +8,6 @@ name = "mpz_share_conversion"
 
 [features]
 default = ["mock"]
-serde = ["dep:serde"]
 mock = []
 
 [dependencies]
@@ -22,7 +21,7 @@ async-trait.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 futures.workspace = true
-serde = { workspace = true, features = ["derive"], optional = true }
+serde.workspace = true
 derive_builder.workspace = true
 
 [dev-dependencies]
