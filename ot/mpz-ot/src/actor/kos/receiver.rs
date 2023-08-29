@@ -216,6 +216,13 @@ where
                     }
                 };
 
+                if self.state.ids.contains_key(&id) {
+                    _ = caller_response.send(Err(ReceiverError::Other(format!(
+                        "duplicate transfer id: {id}"
+                    ))));
+                    return Ok(());
+                }
+
                 self.state.ids.insert(id.clone(), keys.id());
                 self.state.pending_transfers.insert(
                     id,
