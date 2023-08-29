@@ -66,7 +66,7 @@ where
         Ok(self.state.as_extension()?.remaining())
     }
 
-    /// Returns a mutable refernce to the inner sender state.
+    /// Returns a mutable reference to the inner sender state.
     pub(crate) fn state_mut(&mut self) -> &mut State {
         &mut self.state
     }
@@ -150,7 +150,7 @@ where
             .into_extend()
             .map_err(SenderError::from)?;
 
-        // Receive cointoss commitments from the receiver.
+        // Receive coin toss commitments from the receiver.
         let commitment = stream.expect_next().await?.into_cointoss_commit()?;
 
         // Extend the OTs, adding padding for the consistency check.
@@ -161,17 +161,17 @@ where
         })
         .await?;
 
-        // Execute cointoss protocol for consistency check.
+        // Execute coin toss protocol for consistency check.
         let seed: Block = thread_rng().gen();
         let cointoss_receiver = cointoss::Receiver::new(vec![seed]);
 
         let (cointoss_receiver, cointoss_payload) = cointoss_receiver.reveal(commitment)?;
 
-        // Send cointoss payload to the receiver.
+        // Send coin toss payload to the receiver.
         sink.send(Message::CointossReceiverPayload(cointoss_payload))
             .await?;
 
-        // Receive cointoss sender payload from the receiver.
+        // Receive coin toss sender payload from the receiver.
         let cointoss_sender_payload = stream.expect_next().await?.into_cointoss_sender_payload()?;
 
         // Receive consistency check from the receiver.
@@ -212,7 +212,7 @@ where
             .into_extension()
             .map_err(SenderError::from)?;
 
-        // Reveal cointoss payload
+        // Reveal coin toss payload
         let Some(payload) = self.cointoss_payload.take() else {
             return Err(SenderError::ConfigError(
                 "committed sender not configured".to_string(),
@@ -259,7 +259,7 @@ where
             return Ok(());
         }
 
-        // If the sender is committed, we sample delta using a cointoss.
+        // If the sender is committed, we sample delta using a coin toss.
         let delta = if self
             .state
             .as_initialized()

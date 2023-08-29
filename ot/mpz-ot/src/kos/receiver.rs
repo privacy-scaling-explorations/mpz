@@ -68,7 +68,7 @@ where
         &self.state
     }
 
-    /// Returns a mutable refernce to the inner receiver state.
+    /// Returns a mutable reference to the inner receiver state.
     pub(crate) fn state_mut(&mut self) -> &mut State {
         &mut self.state
     }
@@ -101,7 +101,7 @@ where
 
         let extend = extend?;
 
-        // Commit to cointoss seed
+        // Commit to coin toss seed
         let seed: Block = thread_rng().gen();
         let (cointoss_sender, cointoss_commitment) = cointoss::Sender::new(vec![seed]).send();
 
@@ -111,7 +111,7 @@ where
             .await?;
         sink.flush().await?;
 
-        // Receive cointoss
+        // Receive coin toss
         let cointoss_payload = stream
             .expect_next()
             .await?
@@ -131,7 +131,7 @@ where
 
         let check = check?;
 
-        // Send cointoss decommitment and correlation check value.
+        // Send coin toss decommitment and correlation check value.
         sink.feed(Message::CointossSenderPayload(payload)).await?;
         sink.feed(Message::Check(check)).await?;
         sink.flush().await?;
@@ -156,7 +156,7 @@ where
     ) -> Result<(), ReceiverError> {
         let receiver = self.state.replace(State::Error).into_extension()?;
 
-        // Finalize cointoss to determine expected delta
+        // Finalize coin toss to determine expected delta
         let cointoss_payload = stream
             .expect_next()
             .await?
@@ -221,7 +221,7 @@ where
             .into_initialized()
             .map_err(ReceiverError::from)?;
 
-        // If the sender is committed, we run a cointoss
+        // If the sender is committed, we run a coin toss
         if ext_receiver.config().sender_commit() {
             let commitment = stream
                 .expect_next()
