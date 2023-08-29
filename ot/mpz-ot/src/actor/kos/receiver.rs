@@ -25,34 +25,44 @@ use crate::actor::kos::{
     ReceiverActorError,
 };
 
+/// Commands that can be sent to a [`ReceiverActor`].
 enum Command {
-    Receive {
-        id: String,
-        choices: Vec<bool>,
-        caller_response: oneshot::Sender<Result<(ReceiverKeys, SenderPayload), ReceiverError>>,
-    },
+    Receive(Receive),
     Verify(Verify),
     Shutdown(Shutdown),
 }
 
+struct Receive {
+    id: String,
+    choices: Vec<bool>,
+    /// Used to send back the Result to the caller of the Receive command.
+    caller_response: oneshot::Sender<Result<(ReceiverKeys, SenderPayload), ReceiverError>>,
+}
+
 struct Verify {
     id: String,
+    /// Used to send back the Result to the caller of the Verify command.
     caller_response: oneshot::Sender<Result<PayloadRecord, ReceiverError>>,
 }
 
+struct Shutdown {
+    /// Used to send back the Result to the caller of the Shutdown command.
+    caller_response: oneshot::Sender<Result<(), ReceiverActorError>>,
+}
+
+/// A pending oblivious transfer which was requested by this KOS receiver but has not yet been
+/// responded to by the KOS sender.
 struct PendingTransfer {
     keys: ReceiverKeys,
+    /// Used to send back the Result to the caller of the Receive command.
     caller_response: oneshot::Sender<Result<(ReceiverKeys, SenderPayload), ReceiverError>>,
 }
 
 opaque_debug::implement!(PendingTransfer);
 
-struct Shutdown {
-    caller_response: oneshot::Sender<Result<(), ReceiverActorError>>,
-}
-
 #[derive(Default)]
 struct State {
+    /// All oblivious transfer ids seen so far.
     ids: HashMap<String, u32>,
 
     pending_transfers: HashMap<String, PendingTransfer>,
@@ -61,14 +71,18 @@ struct State {
 
 /// KOS receiver actor.
 pub struct ReceiverActor<BaseOT, Si, St> {
+    /// A sink to send messages to the KOS sender actor.
     sink: Si,
+    /// A stream to receive messages from the KOS sender actor.
     stream: Fuse<St>,
 
     receiver: Receiver<BaseOT>,
 
     state: State,
 
+    /// Used to send commands to this actor.
     command_sender: mpsc::UnboundedSender<Command>,
+    /// Used to receive commands to this actor.
     commands: mpsc::UnboundedReceiver<Command>,
 }
 
@@ -115,7 +129,9 @@ where
     pub async fn run(&mut self) -> Result<(), ReceiverActorError> {
         loop {
             futures::select! {
+                // Handle messages from the KOS sender actor.
                 msg = self.stream.select_next_some() => self.handle_msg(msg?).await?,
+                // Handle commands from controllers.
                 cmd = self.commands.select_next_some() => {
                     if let Command::Shutdown(Shutdown { caller_response }) = cmd {
                         _ = caller_response.send(Ok(()));
@@ -128,6 +144,7 @@ where
         }
     }
 
+    /// Starts an oblivious transfer by sending a request to the peer.
     async fn start_transfer(
         &mut self,
         id: &str,
@@ -171,8 +188,11 @@ where
         Ok(())
     }
 
+    /// Handles the Verify command from a controller.
+    ///
+    /// Sends back the [`PayloadRecord`] which the controller must verify itself.
     fn handle_verify(&mut self, verify: Verify) {
-        // If we're ready to start verifying we do so, otherwise, we buffer
+        // If we're ready to start verifying, we do so, otherwise, we buffer
         // the verification for later.
         if self.receiver.state().is_verify() {
             let Verify {
@@ -201,13 +221,14 @@ where
         }
     }
 
+    /// Handles commands received from a controller.
     async fn handle_cmd(&mut self, cmd: Command) -> Result<(), ReceiverError> {
         match cmd {
-            Command::Receive {
+            Command::Receive(Receive {
                 id,
                 choices,
                 caller_response,
-            } => {
+            }) => {
                 let keys = match self.start_transfer(&id, &choices).await {
                     Ok(keys) => keys,
                     Err(e) => {
@@ -239,6 +260,7 @@ where
         Ok(())
     }
 
+    /// Handles a message from the KOS sender actor.
     async fn handle_msg(&mut self, msg: Message<BaseOT::Msg>) -> Result<(), ReceiverActorError> {
         let msg = msg.into_actor_message()?;
 
@@ -270,9 +292,10 @@ where
     }
 }
 
-/// KOS receiver actor control.
+/// KOS Shared Receiver controller.
 #[derive(Debug, Clone)]
 pub struct SharedReceiver {
+    /// Channel for sending commands to the receiver actor.
     sender: mpsc::UnboundedSender<Command>,
 }
 
@@ -295,11 +318,11 @@ impl OTReceiverShared<bool, Block> for SharedReceiver {
         let (sender, receiver) = oneshot::channel();
 
         self.sender
-            .unbounded_send(Command::Receive {
+            .unbounded_send(Command::Receive(Receive {
                 id: id.to_string(),
                 choices: choices.to_vec(),
                 caller_response: sender,
-            })
+            }))
             .map_err(ReceiverError::from)?;
 
         let (keys, payload) = receiver.await.map_err(ReceiverError::from)??;
@@ -316,11 +339,11 @@ impl<const N: usize> OTReceiverShared<bool, [u8; N]> for SharedReceiver {
         let (sender, receiver) = oneshot::channel();
 
         self.sender
-            .unbounded_send(Command::Receive {
+            .unbounded_send(Command::Receive(Receive {
                 id: id.to_string(),
                 choices: choices.to_vec(),
                 caller_response: sender,
-            })
+            }))
             .map_err(ReceiverError::from)?;
 
         let (keys, payload) = receiver.await.map_err(ReceiverError::from)??;

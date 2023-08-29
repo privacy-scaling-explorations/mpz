@@ -22,24 +22,28 @@ use crate::{
 
 use super::SenderActorError;
 
+/// Commands that can be sent to a [`SenderActor`].
 enum Command {
     GetKeys(GetKeys),
-    SendPayload(PendingPayload),
+    SendPayload(SendPayload),
     Shutdown(Shutdown),
 }
 
 struct GetKeys {
     id: String,
+    /// Used to send back the Result to the caller of the GetKeys command.
     caller_response: oneshot::Sender<Result<SenderKeys, SenderError>>,
 }
 
-struct PendingPayload {
+struct SendPayload {
     id: String,
     payload: SenderPayload,
+    /// Used to send back the Result to the caller of the SendPayload command.
     caller_response: oneshot::Sender<Result<(), SenderError>>,
 }
 
 struct Shutdown {
+    /// Used to send back the Result to the caller of the Shutdown command.
     caller_response: oneshot::Sender<Result<(), SenderActorError>>,
 }
 
@@ -53,14 +57,18 @@ opaque_debug::implement!(State);
 
 /// KOS sender actor.
 pub struct SenderActor<BaseOT, Si, St> {
+    /// A sink to send messages to the KOS receiver actor.
     sink: Si,
+    /// A stream to receive messages from the KOS receiver actor.
     stream: Fuse<St>,
 
     sender: Sender<BaseOT>,
 
     state: State,
 
+    /// Used to send commands to this actor.
     command_sender: mpsc::UnboundedSender<Command>,
+    /// Used to receive commands to this actor.
     commands: mpsc::UnboundedReceiver<Command>,
 }
 
@@ -126,7 +134,7 @@ where
                 msg = self.stream.select_next_some() => {
                     self.handle_msg(msg?.into_actor_message()?)?;
                 }
-                // Processes a command
+                // Processes a command from a controller.
                 cmd = self.commands.select_next_some() => {
                     if let Command::Shutdown(Shutdown { caller_response }) = cmd {
                         _ = caller_response.send(Ok(()));
@@ -139,6 +147,7 @@ where
         }
     }
 
+    /// Handles commands received from a controller.
     async fn handle_cmd(&mut self, cmd: Command) {
         match cmd {
             Command::GetKeys(GetKeys {
@@ -148,10 +157,11 @@ where
                 if let Some(keys) = self.state.pending_keys.remove(&id) {
                     _ = caller_response.send(keys);
                 } else {
+                    // The peer has not requested an OT with this id yet.
                     self.state.pending_callers.insert(id, caller_response);
                 }
             }
-            Command::SendPayload(PendingPayload {
+            Command::SendPayload(SendPayload {
                 id,
                 payload,
                 caller_response,
@@ -167,6 +177,7 @@ where
         }
     }
 
+    /// Handles a message from the KOS receiver actor.
     fn handle_msg(&mut self, msg: ActorMessage) -> Result<(), SenderActorError> {
         match msg {
             ActorMessage::TransferRequest(TransferRequest { id, derandomize }) => {
@@ -236,9 +247,10 @@ where
     }
 }
 
-/// KOS Shared Sender
+/// KOS Shared Sender controller
 #[derive(Clone)]
 pub struct SharedSender {
+    /// Channel for sending commands to the sender actor.
     command_sender: mpsc::UnboundedSender<Command>,
 }
 
@@ -272,7 +284,7 @@ impl OTSenderShared<[Block; 2]> for SharedSender {
 
         let (caller_response, receiver) = oneshot::channel();
         self.command_sender
-            .unbounded_send(Command::SendPayload(PendingPayload {
+            .unbounded_send(Command::SendPayload(SendPayload {
                 id: id.to_string(),
                 payload,
                 caller_response,
@@ -303,7 +315,7 @@ impl<const N: usize> OTSenderShared<[[u8; N]; 2]> for SharedSender {
 
         let (caller_response, receiver) = oneshot::channel();
         self.command_sender
-            .unbounded_send(Command::SendPayload(PendingPayload {
+            .unbounded_send(Command::SendPayload(SendPayload {
                 id: id.to_string(),
                 payload,
                 caller_response,
