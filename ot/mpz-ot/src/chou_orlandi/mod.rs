@@ -3,7 +3,7 @@
 //! # Examples
 //!
 //! ```
-//! use utils_aio::duplex::MpscDuplex;
+//! use utils_aio::duplex::MemoryDuplex;
 //! use mpz_ot::chou_orlandi::{Receiver, Sender, SenderConfig, ReceiverConfig};
 //! use mpz_ot::{OTReceiver, OTSender};
 //! use mpz_core::Block;
@@ -11,7 +11,7 @@
 //!
 //! # futures::executor::block_on(async {
 //! // An in-memory duplex channel.
-//! let (sender_channel, receiver_channel) = MpscDuplex::new();
+//! let (sender_channel, receiver_channel) = MemoryDuplex::new();
 //!
 //! let (mut sender_sink, mut sender_stream) = sender_channel.split();
 //! let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
@@ -52,7 +52,7 @@
 //! ## Example
 //!
 //! ```
-//! use utils_aio::duplex::MpscDuplex;
+//! use utils_aio::duplex::MemoryDuplex;
 //! use mpz_ot::chou_orlandi::{Receiver, Sender, SenderConfig, ReceiverConfig};
 //! use mpz_ot::{OTReceiver, OTSender, CommittedOTReceiver, VerifiableOTSender};
 //! use mpz_core::Block;
@@ -60,7 +60,7 @@
 //!
 //! # futures::executor::block_on(async {
 //! // An in-memory duplex channel.
-//! let (sender_channel, receiver_channel) = MpscDuplex::new();
+//! let (sender_channel, receiver_channel) = MemoryDuplex::new();
 //!
 //! let (mut sender_sink, mut sender_stream) = sender_channel.split();
 //! let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
@@ -126,7 +126,7 @@ mod tests {
     use rand::Rng;
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
-    use utils_aio::{duplex::MpscDuplex, sink::IoSink, stream::IoStream};
+    use utils_aio::{duplex::MemoryDuplex, sink::IoSink, stream::IoStream};
 
     use crate::{CommittedOTReceiver, OTReceiver, OTSender, VerifiableOTSender};
 
@@ -180,7 +180,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_chou_orlandi(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MpscDuplex::new();
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
         let (mut sender_sink, mut sender_stream) = sender_channel.split();
         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
@@ -211,7 +211,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_chou_orlandi_committed_receiver(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MpscDuplex::new();
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
         let (mut sender_sink, mut sender_stream) = sender_channel.split();
         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();

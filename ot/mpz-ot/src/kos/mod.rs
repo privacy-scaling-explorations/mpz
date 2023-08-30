@@ -52,7 +52,7 @@ mod tests {
     use rand::Rng;
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
-    use utils_aio::{duplex::MpscDuplex, sink::IoSink, stream::IoStream};
+    use utils_aio::{duplex::MemoryDuplex, sink::IoSink, stream::IoStream};
 
     use crate::{
         mock::{mock_ot_pair, MockOTReceiver, MockOTSender},
@@ -120,7 +120,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MpscDuplex::new();
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
         let (mut sender_sink, mut sender_stream) = sender_channel.split();
         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
@@ -142,7 +142,44 @@ mod tests {
         );
 
         sender_res.unwrap();
-        let received = receiver_res.unwrap();
+        let received: Vec<Block> = receiver_res.unwrap();
+
+        let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
+
+        assert_eq!(received, expected);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_kos_bytes(data: Vec<[Block; 2]>, choices: Vec<bool>) {
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
+
+        let (mut sender_sink, mut sender_stream) = sender_channel.split();
+        let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
+
+        let (mut sender, mut receiver) = setup(
+            SenderConfig::default(),
+            ReceiverConfig::default(),
+            &mut sender_sink,
+            &mut sender_stream,
+            &mut receiver_sink,
+            &mut receiver_stream,
+            data.len(),
+        )
+        .await;
+
+        let data: Vec<_> = data
+            .into_iter()
+            .map(|[a, b]| [a.to_bytes(), b.to_bytes()])
+            .collect();
+
+        let (sender_res, receiver_res) = tokio::join!(
+            sender.send(&mut sender_sink, &mut sender_stream, &data),
+            receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
+        );
+
+        sender_res.unwrap();
+        let received: Vec<[u8; 16]> = receiver_res.unwrap();
 
         let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
 
@@ -152,7 +189,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos_committed_sender(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MpscDuplex::new();
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
         let (mut sender_sink, mut sender_stream) = sender_channel.split();
         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
@@ -174,7 +211,7 @@ mod tests {
         );
 
         sender_res.unwrap();
-        let received = receiver_res.unwrap();
+        let received: Vec<Block> = receiver_res.unwrap();
 
         let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
 

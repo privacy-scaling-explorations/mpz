@@ -67,9 +67,9 @@ fn kos(c: &mut Criterion) {
 
                 let mut sender_keys = sender.keys(msgs.len()).unwrap();
                 sender_keys.derandomize(derandomize).unwrap();
-                let payload = sender_keys.encrypt(&msgs).unwrap();
+                let payload = sender_keys.encrypt_blocks(&msgs).unwrap();
 
-                let received = receiver_keys.decrypt(payload).unwrap();
+                let received = receiver_keys.decrypt_blocks(payload).unwrap();
 
                 black_box(received)
             })

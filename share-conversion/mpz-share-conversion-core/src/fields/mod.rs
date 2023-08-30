@@ -8,8 +8,7 @@ use std::{
     ops::{Add, Mul, Neg},
 };
 
-use itybity::{BitLength, FromBits, GetBit, Lsb0, Msb0};
-use mpz_core::BlockSerialize;
+use itybity::{BitLength, FromBitIterator, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution, Rng};
 
 /// A trait for finite fields
@@ -28,8 +27,7 @@ pub trait Field:
     + Ord
     + PartialEq
     + Eq
-    + BlockSerialize
-    + FromBits
+    + FromBitIterator
     + GetBit<Lsb0>
     + GetBit<Msb0>
     + BitLength
@@ -135,8 +133,8 @@ mod tests {
         a[0] = true;
         b[T::BIT_SIZE as usize - 1] = true;
 
-        let a = T::from_lsb0(a);
-        let b = T::from_lsb0(b);
+        let a = T::from_lsb0_iter(a);
+        let b = T::from_lsb0_iter(b);
 
         assert_eq!(a, T::one());
         assert!(GetBit::<Lsb0>::get_bit(&a, 0));

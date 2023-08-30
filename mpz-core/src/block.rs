@@ -95,6 +95,12 @@ impl Block {
         Block::reduce_gcm(x, y)
     }
 
+    /// Reverses the bits of the block
+    #[inline]
+    pub fn reverse_bits(self) -> Self {
+        Self(u128::from_le_bytes(self.0).reverse_bits().to_le_bytes())
+    }
+
     /// Sets the least significant bit of the block
     #[inline]
     pub fn set_lsb(&mut self) {
@@ -230,6 +236,8 @@ impl AsMut<[u8]> for Block {
 
 #[cfg(test)]
 mod tests {
+    use itybity::ToBits;
+
     use super::*;
 
     #[test]
@@ -272,6 +280,16 @@ mod tests {
 
         let a = Block::new(three);
         assert_eq!(a.lsb(), 1);
+    }
+
+    #[test]
+    fn test_reverse_bits() {
+        let a = Block::new([42; 16]);
+
+        let mut expected_bits = a.to_lsb0_vec();
+        expected_bits.reverse();
+
+        assert_eq!(a.reverse_bits().to_lsb0_vec(), expected_bits);
     }
 
     #[test]

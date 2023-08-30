@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::components::{Feed, Node};
-use itybity::{FromBits, IntoBits};
+use itybity::{FromBitIterator, IntoBits};
 use rand::Rng;
 
 /// An error related to binary type conversions.
@@ -24,7 +24,7 @@ pub enum TypeError {
 
 /// A type that can be represented in binary form.
 #[allow(clippy::len_without_is_empty)]
-pub trait ToBinaryRepr: IntoBits + Into<Value> {
+pub trait ToBinaryRepr: Into<Value> {
     /// The binary representation of the type.
     type Repr: Clone + Into<BinaryRepr>;
 
@@ -147,11 +147,11 @@ impl BinaryRepr {
         }
         match self {
             BinaryRepr::Bit(_) => Ok(Value::Bit(bits[0])),
-            BinaryRepr::U8(_) => Ok(Value::U8(u8::from_lsb0(bits.iter().copied()))),
-            BinaryRepr::U16(_) => Ok(Value::U16(u16::from_lsb0(bits.iter().copied()))),
-            BinaryRepr::U32(_) => Ok(Value::U32(u32::from_lsb0(bits.iter().copied()))),
-            BinaryRepr::U64(_) => Ok(Value::U64(u64::from_lsb0(bits.iter().copied()))),
-            BinaryRepr::U128(_) => Ok(Value::U128(u128::from_lsb0(bits.iter().copied()))),
+            BinaryRepr::U8(_) => Ok(Value::U8(u8::from_lsb0_iter(bits.iter().copied()))),
+            BinaryRepr::U16(_) => Ok(Value::U16(u16::from_lsb0_iter(bits.iter().copied()))),
+            BinaryRepr::U32(_) => Ok(Value::U32(u32::from_lsb0_iter(bits.iter().copied()))),
+            BinaryRepr::U64(_) => Ok(Value::U64(u64::from_lsb0_iter(bits.iter().copied()))),
+            BinaryRepr::U128(_) => Ok(Value::U128(u128::from_lsb0_iter(bits.iter().copied()))),
             BinaryRepr::Array(v) => Ok(Value::Array(
                 v.iter()
                     .zip(bits.chunks(v[0].len()))

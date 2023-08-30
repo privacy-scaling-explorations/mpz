@@ -22,8 +22,8 @@ mpz-share-conversion = { path = "share-conversion/mpz-share-conversion" }
 clmul = { path = "clmul" }
 matrix-transpose = { path = "matrix-transpose" }
 
-tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils" }
-tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils", branch = "feature/duplex" }
+tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "b182066" }
+tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "b182066" }
 
 # rand
 rand_chacha = "0.3"
@@ -35,6 +35,7 @@ cipher = "0.4"
 sha2 = "0.10"
 blake3 = "1.3.3"
 aes = "0.8"
+ctr = "0.9"
 digest = "0.10"
 curve25519-dalek = "4.0.0-rc.0"
 elliptic-curve = "0.11"
@@ -53,6 +54,7 @@ tokio = "1.23"
 tokio-util = "0.7"
 
 # serialization
+ark-serialize = "0.4"
 serde = "1.0"
 serde_yaml = "0.9"
 serde_arrays = "0.1"

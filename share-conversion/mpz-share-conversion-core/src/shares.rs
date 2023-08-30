@@ -202,7 +202,7 @@ where
                 // otherwise we send `(x_summand + y_summand) * random + mask`
                 let mut bits = vec![false; T::BIT_SIZE as usize];
                 bits[k] = true;
-                let y_summand = T::from_lsb0(bits);
+                let y_summand = T::from_lsb0_iter(bits);
                 let v1 = (x_summands[k] + y_summand) * random + masks[k];
 
                 [v0, v1]
