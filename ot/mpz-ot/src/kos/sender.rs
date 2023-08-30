@@ -22,7 +22,7 @@ use enum_try_as_inner::EnumTryAsInner;
 use super::{into_base_sink, into_base_stream};
 
 #[derive(Debug, EnumTryAsInner)]
-enum State {
+pub(crate) enum State {
     Initialized(SenderCore<state::Initialized>),
     Extension(SenderCore<state::Extension>),
     Complete,
@@ -64,6 +64,11 @@ where
     /// The number of remaining OTs which can be consumed.
     pub fn remaining(&self) -> Result<usize, SenderError> {
         Ok(self.state.as_extension()?.remaining())
+    }
+
+    /// Returns a mutable reference to the inner sender state.
+    pub(crate) fn state_mut(&mut self) -> &mut State {
+        &mut self.state
     }
 
     /// Performs the base OT setup with the provided delta.
@@ -145,7 +150,7 @@ where
             .into_extend()
             .map_err(SenderError::from)?;
 
-        // Receive cointoss commitments from the receiver.
+        // Receive coin toss commitments from the receiver.
         let commitment = stream.expect_next().await?.into_cointoss_commit()?;
 
         // Extend the OTs, adding padding for the consistency check.
@@ -156,17 +161,17 @@ where
         })
         .await?;
 
-        // Execute cointoss protocol for consistency check.
+        // Execute coin toss protocol for consistency check.
         let seed: Block = thread_rng().gen();
         let cointoss_receiver = cointoss::Receiver::new(vec![seed]);
 
         let (cointoss_receiver, cointoss_payload) = cointoss_receiver.reveal(commitment)?;
 
-        // Send cointoss payload to the receiver.
+        // Send coin toss payload to the receiver.
         sink.send(Message::CointossReceiverPayload(cointoss_payload))
             .await?;
 
-        // Receive cointoss sender payload from the receiver.
+        // Receive coin toss sender payload from the receiver.
         let cointoss_sender_payload = stream.expect_next().await?.into_cointoss_sender_payload()?;
 
         // Receive consistency check from the receiver.
@@ -184,6 +189,47 @@ where
         .await?;
 
         self.state = State::Extension(ext_sender);
+
+        Ok(())
+    }
+}
+
+impl<BaseOT> Sender<BaseOT>
+where
+    BaseOT: CommittedOTReceiver<bool, Block> + ProtocolMessage + Send,
+{
+    pub(crate) async fn reveal<
+        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
+        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+    ) -> Result<(), SenderError> {
+        let _ = self
+            .state
+            .replace(State::Error)
+            .into_extension()
+            .map_err(SenderError::from)?;
+
+        // Reveal coin toss payload
+        let Some(payload) = self.cointoss_payload.take() else {
+            return Err(SenderError::ConfigError(
+                "committed sender not configured".to_string(),
+            ))?;
+        };
+
+        sink.send(Message::CointossSenderPayload(payload))
+            .await
+            .map_err(SenderError::from)?;
+
+        // Reveal base OT choices
+        self.base
+            .reveal_choices(&mut into_base_sink(sink), &mut into_base_stream(stream))
+            .await?;
+
+        // This sender is no longer usable, so mark it as complete.
+        self.state = State::Complete;
 
         Ok(())
     }
@@ -213,7 +259,7 @@ where
             return Ok(());
         }
 
-        // If the sender is committed, we sample delta using a cointoss.
+        // If the sender is committed, we sample delta using a coin toss.
         let delta = if self
             .state
             .as_initialized()
@@ -341,31 +387,6 @@ where
         sink: &mut Si,
         stream: &mut St,
     ) -> Result<(), OTError> {
-        let _ = self
-            .state
-            .replace(State::Error)
-            .into_extension()
-            .map_err(SenderError::from)?;
-
-        // Reveal cointoss payload
-        let Some(payload) = self.cointoss_payload.take() else {
-            return Err(SenderError::ConfigError(
-                "committed sender not configured".to_string(),
-            ))?;
-        };
-
-        sink.send(Message::CointossSenderPayload(payload))
-            .await
-            .map_err(SenderError::from)?;
-
-        // Reveal base OT choices
-        self.base
-            .reveal_choices(&mut into_base_sink(sink), &mut into_base_stream(stream))
-            .await?;
-
-        // This sender is no longer usable, so mark it as complete.
-        self.state = State::Complete;
-
-        Ok(())
+        self.reveal(sink, stream).await.map_err(OTError::from)
     }
 }

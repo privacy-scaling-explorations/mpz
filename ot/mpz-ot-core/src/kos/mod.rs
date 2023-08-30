@@ -311,11 +311,9 @@ mod tests {
 
         assert_eq!(received, expected);
 
-        receiver
-            .remove_record(0)
-            .unwrap()
-            .verify(delta, &data)
-            .unwrap();
+        let receiver = receiver.start_verification(delta).unwrap();
+
+        receiver.remove_record(0).unwrap().verify(&data).unwrap();
     }
 
     #[rstest]
@@ -353,10 +351,12 @@ mod tests {
 
         data[0][0] = Block::default();
 
+        let receiver = receiver.start_verification(delta).unwrap();
+
         let err = receiver
             .remove_record(0)
             .unwrap()
-            .verify(delta, &data)
+            .verify(&data)
             .unwrap_err();
 
         assert!(matches!(
