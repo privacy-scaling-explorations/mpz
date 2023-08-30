@@ -213,11 +213,6 @@ where
             return Ok(());
         }
 
-        // Set up base OT if not already done
-        self.base
-            .setup(&mut into_base_sink(sink), &mut into_base_stream(stream))
-            .await?;
-
         // If the sender is committed, we sample delta using a cointoss.
         let delta = if self
             .state
@@ -247,6 +242,11 @@ where
         } else {
             Block::random(&mut thread_rng())
         };
+
+        // Set up base OT if not already done
+        self.base
+            .setup(&mut into_base_sink(sink), &mut into_base_stream(stream))
+            .await?;
 
         self._setup_with_delta(sink, stream, delta)
             .await

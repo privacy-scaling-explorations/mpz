@@ -164,11 +164,6 @@ where
             .into_initialized()
             .map_err(ReceiverError::from)?;
 
-        // Set up base OT if not already done
-        self.base
-            .setup(&mut into_base_sink(sink), &mut into_base_stream(stream))
-            .await?;
-
         // If the sender is committed, we run a cointoss
         if ext_receiver.config().sender_commit() {
             let commitment = stream
@@ -185,6 +180,11 @@ where
 
             self.cointoss_receiver = Some(cointoss_receiver);
         }
+
+        // Set up base OT if not already done
+        self.base
+            .setup(&mut into_base_sink(sink), &mut into_base_stream(stream))
+            .await?;
 
         let seeds: [[Block; 2]; CSP] = std::array::from_fn(|_| thread_rng().gen());
 
