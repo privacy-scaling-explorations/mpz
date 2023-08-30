@@ -29,6 +29,22 @@ pub enum OTError {
 // ######################## Exclusive Reference ###########################
 // ########################################################################
 
+/// An oblivious transfer protocol that needs to perform a one-time setup.
+#[async_trait]
+pub trait OTSetup: ProtocolMessage {
+    /// Runs any one-time setup for the protocol.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the peer.
+    /// * `stream` - The IO stream from the peer.
+    async fn setup<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+    ) -> Result<(), OTError>;
+}
+
 /// An oblivious transfer sender.
 #[async_trait]
 pub trait OTSender<T>: ProtocolMessage

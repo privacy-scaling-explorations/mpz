@@ -3,7 +3,7 @@ use futures_util::StreamExt;
 use mpz_core::Block;
 use mpz_ot::{
     chou_orlandi::{Receiver, ReceiverConfig, Sender, SenderConfig},
-    OTReceiver, OTSender,
+    OTReceiver, OTSender, OTSetup,
 };
 use utils_aio::duplex::MemoryDuplex;
 

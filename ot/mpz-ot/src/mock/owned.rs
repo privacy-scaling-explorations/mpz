@@ -1,7 +1,7 @@
 use crate::{
     CommittedOTReceiver, CommittedOTSender, CommittedOTSenderWithIo, OTError, OTReceiver,
-    OTReceiverWithIo, OTSender, OTSenderWithIo, VerifiableOTReceiver, VerifiableOTReceiverWithIo,
-    VerifiableOTSender,
+    OTReceiverWithIo, OTSender, OTSenderWithIo, OTSetup, VerifiableOTReceiver,
+    VerifiableOTReceiverWithIo, VerifiableOTSender,
 };
 use async_trait::async_trait;
 use futures::{
@@ -55,6 +55,20 @@ pub fn mock_ot_pair<T: Send + Sync + 'static>() -> (MockOTSender<T>, MockOTRecei
 }
 
 #[async_trait]
+impl<T> OTSetup for MockOTSender<T>
+where
+    T: Send + Sync,
+{
+    async fn setup<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
+        &mut self,
+        _sink: &mut Si,
+        _stream: &mut St,
+    ) -> Result<(), OTError> {
+        Ok(())
+    }
+}
+
+#[async_trait]
 impl<T> OTSender<[T; 2]> for MockOTSender<T>
 where
     T: Send + Sync + Clone + 'static,
@@ -81,6 +95,20 @@ where
             .try_send(msgs.to_vec())
             .expect("DummySender should be able to send");
 
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl<T> OTSetup for MockOTReceiver<T>
+where
+    T: Send + Sync,
+{
+    async fn setup<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
+        &mut self,
+        _sink: &mut Si,
+        _stream: &mut St,
+    ) -> Result<(), OTError> {
         Ok(())
     }
 }

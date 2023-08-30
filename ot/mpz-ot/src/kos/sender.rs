@@ -1,5 +1,6 @@
 use crate::{
     kos::SenderError, CommittedOTReceiver, CommittedOTSender, OTError, OTReceiver, OTSender,
+    OTSetup,
 };
 
 use async_trait::async_trait;
@@ -63,44 +64,6 @@ where
     /// The number of remaining OTs which can be consumed.
     pub fn remaining(&self) -> Result<usize, SenderError> {
         Ok(self.state.as_extension()?.remaining())
-    }
-
-    /// Performs the base OT setup using a random delta.
-    ///
-    /// # Arguments
-    ///
-    /// * `sink` - The sink to send messages to the base OT sender
-    /// * `stream` - The stream to receive messages from the base OT sender
-    pub async fn setup<
-        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
-        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<(), SenderError> {
-        // If the sender is committed, we sample delta using a cointoss.
-        let delta = if self.state.as_initialized()?.config().sender_commit() {
-            let (cointoss_sender, commitment) =
-                cointoss::Sender::new(vec![thread_rng().gen()]).send();
-
-            sink.send(Message::CointossCommit(commitment)).await?;
-            let payload = stream
-                .expect_next()
-                .await?
-                .into_cointoss_receiver_payload()?;
-
-            let (seeds, payload) = cointoss_sender.finalize(payload)?;
-
-            // Store the payload to reveal to the receiver later.
-            self.cointoss_payload = Some(payload);
-
-            seeds[0]
-        } else {
-            Block::random(&mut thread_rng())
-        };
-
-        self._setup_with_delta(sink, stream, delta).await
     }
 
     /// Performs the base OT setup with the provided delta.
@@ -231,6 +194,64 @@ where
     BaseOT: ProtocolMessage,
 {
     type Msg = Message<BaseOT::Msg>;
+}
+
+#[async_trait]
+impl<BaseOT> OTSetup for Sender<BaseOT>
+where
+    BaseOT: OTSetup + OTReceiver<bool, Block> + Send,
+{
+    async fn setup<
+        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
+        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+    ) -> Result<(), OTError> {
+        if self.state.is_extension() {
+            return Ok(());
+        }
+
+        // If the sender is committed, we sample delta using a cointoss.
+        let delta = if self
+            .state
+            .as_initialized()
+            .map_err(SenderError::from)?
+            .config()
+            .sender_commit()
+        {
+            let (cointoss_sender, commitment) =
+                cointoss::Sender::new(vec![thread_rng().gen()]).send();
+
+            sink.send(Message::CointossCommit(commitment)).await?;
+            let payload = stream
+                .expect_next()
+                .await?
+                .into_cointoss_receiver_payload()
+                .map_err(SenderError::from)?;
+
+            let (seeds, payload) = cointoss_sender
+                .finalize(payload)
+                .map_err(SenderError::from)?;
+
+            // Store the payload to reveal to the receiver later.
+            self.cointoss_payload = Some(payload);
+
+            seeds[0]
+        } else {
+            Block::random(&mut thread_rng())
+        };
+
+        // Set up base OT if not already done
+        self.base
+            .setup(&mut into_base_sink(sink), &mut into_base_stream(stream))
+            .await?;
+
+        self._setup_with_delta(sink, stream, delta)
+            .await
+            .map_err(OTError::from)
+    }
 }
 
 #[async_trait]

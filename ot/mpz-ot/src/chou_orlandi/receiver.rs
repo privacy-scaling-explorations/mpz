@@ -15,7 +15,7 @@ use utils_aio::{
     stream::{ExpectStreamExt, IoStream},
 };
 
-use crate::{CommittedOTReceiver, OTError, OTReceiver};
+use crate::{CommittedOTReceiver, OTError, OTReceiver, OTSetup};
 
 use super::ReceiverError;
 
@@ -71,26 +71,31 @@ impl Receiver {
             cointoss_payload: None,
         }
     }
+}
 
-    /// Sets up the receiver.
-    ///
-    /// # Arguments
-    ///
-    /// * `sink` - The sink to send messages to the sender
-    /// * `stream` - The stream to receive messages from the sender
-    pub async fn setup<Si: IoSink<Message> + Send + Unpin, St: IoStream<Message> + Send + Unpin>(
+#[async_trait]
+impl OTSetup for Receiver {
+    async fn setup<Si: IoSink<Message> + Send + Unpin, St: IoStream<Message> + Send + Unpin>(
         &mut self,
         sink: &mut Si,
         stream: &mut St,
-    ) -> Result<(), ReceiverError> {
-        let (config, seed) = self.state.replace(State::Error).into_initialized()?;
+    ) -> Result<(), OTError> {
+        if self.state.is_setup() {
+            return Ok(());
+        }
+
+        let (config, seed) = self
+            .state
+            .replace(State::Error)
+            .into_initialized()
+            .map_err(ReceiverError::from)?;
 
         // If the receiver is committed, we generate the seed using a cointoss.
         let receiver = if config.receiver_commit() {
             if seed.is_some() {
                 return Err(ReceiverError::InvalidConfig(
                     "committed receiver seed must be generated using coin toss".to_string(),
-                ));
+                ))?;
             }
 
             let (seed, cointoss_payload) = execute_cointoss(sink, stream).await?;
@@ -102,7 +107,11 @@ impl Receiver {
             ReceiverCore::new_with_seed(config, seed.unwrap_or_else(|| thread_rng().gen()))
         };
 
-        let sender_setup = stream.expect_next().await?.into_sender_setup()?;
+        let sender_setup = stream
+            .expect_next()
+            .await?
+            .into_sender_setup()
+            .map_err(ReceiverError::from)?;
 
         let receiver = Backend::spawn(move || receiver.setup(sender_setup)).await;
 

@@ -1,4 +1,4 @@
-use crate::{chou_orlandi::SenderError, OTError, OTSender, VerifiableOTSender};
+use crate::{chou_orlandi::SenderError, OTError, OTSender, OTSetup, VerifiableOTSender};
 
 use async_trait::async_trait;
 use futures_util::SinkExt;
@@ -63,19 +63,24 @@ impl Sender {
             cointoss_receiver: None,
         }
     }
+}
 
-    /// Sets up the Sender.
-    ///
-    /// # Arguments
-    ///
-    /// * `sink` - The sink to send messages to the receiver
-    /// * `stream` - The stream to receive messages from the receiver
-    pub async fn setup<Si: IoSink<Message> + Send + Unpin, St: IoStream<Message> + Send + Unpin>(
+#[async_trait]
+impl OTSetup for Sender {
+    async fn setup<Si: IoSink<Message> + Send + Unpin, St: IoStream<Message> + Send + Unpin>(
         &mut self,
         sink: &mut Si,
         stream: &mut St,
-    ) -> Result<(), SenderError> {
-        let sender = self.state.replace(State::Error).into_initialized()?;
+    ) -> Result<(), OTError> {
+        if self.state.is_setup() {
+            return Ok(());
+        }
+
+        let sender = self
+            .state
+            .replace(State::Error)
+            .into_initialized()
+            .map_err(SenderError::from)?;
 
         // If the receiver is committed, we run the cointoss protocol
         if sender.config().receiver_commit() {
