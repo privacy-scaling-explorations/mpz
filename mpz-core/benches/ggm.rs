@@ -1,6 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mpz_core::{block::Block, ggm_tree::GgmTree};
 
+#[allow(clippy::all)]
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("ggm::gen::1K", move |bench| {
         let depth = 11;

@@ -73,26 +73,26 @@ fn ggm_test() {
     assert_eq!(
         tree,
         [
-            Block::from((0x92A6DDEAA3E99F9BECB268BD9EF67C91 as u128).to_le_bytes()),
-            Block::from((0x9E7E9C02ED1E62385EE8A9EDDC63A2B5 as u128).to_le_bytes()),
-            Block::from((0xBD4B85E90AACBD106694537DB6251264 as u128).to_le_bytes()),
-            Block::from((0x230485DC4360014833E07D8D914411A2 as u128).to_le_bytes()),
+            Block::from(0x92A6DDEAA3E99F9BECB268BD9EF67C91_u128.to_le_bytes()),
+            Block::from(0x9E7E9C02ED1E62385EE8A9EDDC63A2B5_u128.to_le_bytes()),
+            Block::from(0xBD4B85E90AACBD106694537DB6251264_u128.to_le_bytes()),
+            Block::from(0x230485DC4360014833E07D8D914411A2_u128.to_le_bytes()),
         ]
     );
 
     assert_eq!(
         k0,
         [
-            Block::from((0x2E2B34CA59FA4C883B2C8AEFD44BE966 as u128).to_le_bytes()),
-            Block::from((0x2FED5803A945228B8A263BC028D36EF5 as u128).to_le_bytes()),
+            Block::from(0x2E2B34CA59FA4C883B2C8AEFD44BE966_u128.to_le_bytes()),
+            Block::from(0x2FED5803A945228B8A263BC028D36EF5_u128.to_le_bytes()),
         ]
     );
 
     assert_eq!(
         k1,
         [
-            Block::from((0x7E46C568D1CD4972BB1A61F95DD80EDC as u128).to_le_bytes()),
-            Block::from((0xBD7A19DEAE7E63706D08D4604D27B317 as u128).to_le_bytes()),
+            Block::from(0x7E46C568D1CD4972BB1A61F95DD80EDC_u128.to_le_bytes()),
+            Block::from(0xBD7A19DEAE7E63706D08D4604D27B317_u128.to_le_bytes()),
         ]
     );
 }
