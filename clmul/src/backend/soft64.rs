@@ -5,12 +5,13 @@
 //!
 //! Copyright (c) 2016 Thomas Pornin <pornin@bolet.org>
 //!
+use bytemuck::{Pod, Zeroable};
 use core::{num::Wrapping, ops::BitXor};
-
 pub type Clmul = U64x2;
 
 /// 2 x `u64` values
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Pod, Zeroable)]
 pub struct U64x2(u64, u64);
 
 impl From<U64x2> for [u8; 16] {

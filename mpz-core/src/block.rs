@@ -1,6 +1,9 @@
+//! A block of 128 bits and its operations.
+
+use bytemuck::{Pod, Zeroable};
 use cipher::{consts::U16, generic_array::GenericArray};
 use clmul::Clmul;
-use core::ops::{BitAnd, BitXor};
+use core::ops::{BitAnd, BitAndAssign, BitXor, BitXorAssign};
 use itybity::{BitIterable, BitLength, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -8,7 +11,7 @@ use std::convert::From;
 
 /// A block of 128 bits
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize, Deserialize, Pod, Zeroable)]
 pub struct Block([u8; 16]);
 
 impl Block {
@@ -58,6 +61,40 @@ impl Block {
         (Self::new(a.into()), Self::new(b.into()))
     }
 
+    #[inline]
+    /// Reduces the polynomial represented in bits modulo the GCM polynomial x^128 + x^7 + x^2 + x + 1.
+    /// `x` and `y` are resp. upper and lower bits of the polynomial.
+    pub fn reduce_gcm(x: Self, y: Self) -> Self {
+        let r = Clmul::reduce_gcm(Clmul::new(&x.0), Clmul::new(&y.0));
+        Self::new(r.into())
+    }
+
+    /// The multiplication of two Galois field elements.
+    #[inline]
+    pub fn gfmul(self, x: Self) -> Self {
+        let (a, b) = self.clmul(x);
+        Block::reduce_gcm(a, b)
+    }
+
+    /// Compute the inner product of two block vectors, without reducing the polynomial.
+    #[inline]
+    pub fn inn_prdt_no_red(a: &[Block], b: &[Block]) -> (Block, Block) {
+        assert_eq!(a.len(), b.len());
+        a.iter()
+            .zip(b.iter())
+            .fold((Block::ZERO, Block::ZERO), |acc, (x, y)| {
+                let t = x.clmul(*y);
+                (t.0 ^ acc.0, t.1 ^ acc.1)
+            })
+    }
+
+    /// Compute the inner product of two block vectors.
+    #[inline]
+    pub fn inn_prdt_red(a: &[Block], b: &[Block]) -> Block {
+        let (x, y) = Block::inn_prdt_no_red(a, b);
+        Block::reduce_gcm(x, y)
+    }
+
     /// Reverses the bits of the block
     #[inline]
     pub fn reverse_bits(self) -> Self {
@@ -74,6 +111,15 @@ impl Block {
     #[inline]
     pub fn lsb(&self) -> usize {
         ((self.0[0] & 1) == 1) as usize
+    }
+
+    /// Let `x0` and `x1` be the lower and higher halves of `x`, respectively.
+    /// This function compute ``sigma( x = x0 || x1 ) = x1 || (x0 xor x1)``.
+    #[inline(always)]
+    pub fn sigma(a: Self) -> Self {
+        let mut x: [u64; 2] = bytemuck::cast(a);
+        x[0] ^= x[1];
+        bytemuck::cast([x[1], x[0]])
     }
 }
 
@@ -152,6 +198,13 @@ impl BitXor for Block {
     }
 }
 
+impl BitXorAssign for Block {
+    #[inline(always)]
+    fn bitxor_assign(&mut self, rhs: Self) {
+        *self = *self ^ rhs;
+    }
+}
+
 impl BitAnd for Block {
     type Output = Self;
 
@@ -161,9 +214,23 @@ impl BitAnd for Block {
     }
 }
 
+impl BitAndAssign for Block {
+    #[inline(always)]
+    fn bitand_assign(&mut self, rhs: Self) {
+        *self = *self & rhs
+    }
+}
+
 impl Distribution<Block> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Block {
         Block::new(rng.gen())
+    }
+}
+
+impl AsMut<[u8]> for Block {
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.0.as_mut()
     }
 }
 
@@ -223,5 +290,51 @@ mod tests {
         expected_bits.reverse();
 
         assert_eq!(a.reverse_bits().to_lsb0_vec(), expected_bits);
+    }
+
+    #[test]
+    fn inn_prdt_test() {
+        use rand::{Rng, SeedableRng};
+        use rand_chacha::ChaCha12Rng;
+        let mut rng = ChaCha12Rng::from_seed([0; 32]);
+
+        const SIZE: usize = 1000;
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+        let mut c = (Block::ZERO, Block::ZERO);
+        let mut d = Block::ZERO;
+        for i in 0..SIZE {
+            let r: [u8; 16] = rng.gen();
+            a.push(Block::from(r));
+            let r: [u8; 16] = rng.gen();
+            b.push(Block::from(r));
+
+            let z = a[i].clmul(b[i]);
+            c.0 = c.0 ^ z.0;
+            c.1 = c.1 ^ z.1;
+
+            let x = a[i].gfmul(b[i]);
+            d ^= x;
+        }
+
+        assert_eq!(c, Block::inn_prdt_no_red(&a, &b));
+        assert_eq!(d, Block::inn_prdt_red(&a, &b));
+    }
+
+    #[test]
+    fn sigma_test() {
+        use rand::{Rng, SeedableRng};
+        use rand_chacha::ChaCha12Rng;
+        let mut rng = ChaCha12Rng::from_seed([0; 32]);
+        let mut x: [u8; 16] = rng.gen();
+        let bx = Block::sigma(Block::from(x));
+        let (xl, xr) = x.split_at_mut(8);
+
+        for (x, y) in xl.iter_mut().zip(xr.iter_mut()) {
+            *x ^= *y;
+            std::mem::swap(x, y);
+        }
+        let expected_sigma = Block::from(x);
+        assert_eq!(bx, expected_sigma);
     }
 }

@@ -20,6 +20,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("clmul_reuse", move |bench| {
         bench.iter(|| a.clmul_reuse(&mut b));
     });
+
+    c.bench_function("reduce", move |bench| {
+        bench.iter(|| black_box(Clmul::reduce_gcm(a, b)));
+    });
 }
 
 criterion_group!(benches, criterion_benchmark);
