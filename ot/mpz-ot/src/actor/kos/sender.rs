@@ -181,8 +181,6 @@ where
     fn handle_msg(&mut self, msg: ActorMessage) -> Result<(), SenderActorError> {
         match msg {
             ActorMessage::TransferRequest(TransferRequest { id, derandomize }) => {
-                println!("receiver req: {:?}", id);
-
                 // Reserve the keys for the transfer.
                 let keys = self
                     .sender
