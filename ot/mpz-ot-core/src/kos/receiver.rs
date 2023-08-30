@@ -489,7 +489,12 @@ impl ReceiverKeys {
     ) -> Result<Vec<[u8; N]>, ReceiverError> {
         let SenderPayload { id, ciphertexts } = payload;
 
-        let Ciphertexts::Bytes { ciphertexts, iv, length  } = ciphertexts else {
+        let Ciphertexts::Bytes {
+            ciphertexts,
+            iv,
+            length,
+        } = ciphertexts
+        else {
             return Err(ReceiverError::InvalidPayload(
                 "expected byte ciphertexts".to_string(),
             ));

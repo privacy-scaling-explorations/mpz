@@ -310,8 +310,8 @@ mod tests {
             b.push(Block::from(r));
 
             let z = a[i].clmul(b[i]);
-            c.0 = c.0 ^ z.0;
-            c.1 = c.1 ^ z.1;
+            c.0 ^= z.0;
+            c.1 ^= z.1;
 
             let x = a[i].gfmul(b[i]);
             d ^= x;
