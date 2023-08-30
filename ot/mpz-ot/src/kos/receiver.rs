@@ -238,7 +238,7 @@ where
             self.cointoss_receiver = Some(cointoss_receiver);
         }
 
-        // Set up base OT if not already done
+        // Set up base OT
         self.base
             .setup(&mut into_base_sink(sink), &mut into_base_stream(stream))
             .await?;
