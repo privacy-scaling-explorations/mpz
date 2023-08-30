@@ -139,8 +139,8 @@ impl Evaluator {
             // Filter out any values that are already active.
             let mut input_configs: Vec<ValueIdConfig> = input_configs
                 .iter()
-                .cloned()
                 .filter(|config| !state.encoding_registry.contains(config.id()))
+                .cloned()
                 .collect();
 
             input_configs.sort_by_key(|config| config.id().clone());
