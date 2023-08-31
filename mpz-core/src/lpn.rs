@@ -4,11 +4,11 @@
 use crate::{prp::Prp, Block};
 use rayon::prelude::*;
 /// A struct related to LPN.
-/// The `seed` defines a sparse binary matrix `A` with at most `D` non-zero values in each row.\
-/// `A` - is a binary matrix with `k` columns and `n` rows. The concrete number of `n` is determined by the input length. `A` will be generated on-the-fly.\
-/// `x` - is a `F_{2^128}` vector with length `k`.\
-/// `e` - is a `F_{2^128}` vector with length `n`.\
-/// Given a vector `x` and `e`, compute `y = Ax + e`.\
+/// The `seed` defines a sparse binary matrix `A` with at most `D` non-zero values in each row.
+/// `A` - is a binary matrix with `k` columns and `n` rows. The concrete number of `n` is determined by the input length. `A` will be generated on-the-fly.
+/// `x` - is a `F_{2^128}` vector with length `k`.
+/// `e` - is a `F_{2^128}` vector with length `n`.
+/// Given a vector `x` and `e`, compute `y = Ax + e`.
 /// Note that in the standard LPN problem, `x` is a binary vector, `e` is a sparse binary vector. The way we difined here is a more generic way in term of computing `y`.
 pub struct Lpn<const D: usize> {
     // The seed to generate the random sparse matrix A.
@@ -95,10 +95,10 @@ impl<const D: usize> Lpn<D> {
         }
     }
 
-    /// Compute `Ax + e` in a naive way.\
-    /// Input: `x` with length `k`.\
-    /// Input: `y` with length `n`, this is actually `e` in LPN.\
-    /// Output: `y = Ax + y`.\
+    /// Compute `Ax + e` in a naive way.
+    /// Input: `x` with length `k`.
+    /// Input: `y` with length `n`, this is actually `e` in LPN.
+    /// Output: `y = Ax + y`.
     /// Use `compute` function for optimized performance, but will keep it probably for test.
     pub fn compute_naive(&self, y: &mut [Block], x: &[Block]) {
         assert_eq!(x.len() as u32, self.k);
@@ -115,10 +115,10 @@ impl<const D: usize> Lpn<D> {
         }
     }
 
-    /// Compute `Ax + e` with multiple threads.\
-    /// Input: `x` with length `k`.\
-    /// Input: `y` with length `n`, this is actually `e` in LPN.\
-    /// Output: `y = Ax + y`.\
+    /// Compute `Ax + e` with multiple threads.
+    /// Input: `x` with length `k`.
+    /// Input: `y` with length `n`, this is actually `e` in LPN.
+    /// Output: `y = Ax + y`.
     pub fn compute(&self, y: &mut [Block], x: &[Block]) {
         assert_eq!(x.len() as u32, self.k);
         assert!(x.len() >= D);
