@@ -121,8 +121,8 @@ fn ggm_test() {
     let alpha = [false, true, false];
     let mut pos = 0;
 
-    for i in 0..alpha.len() {
-        pos = pos << 1;
+    for i in 0..depth {
+        pos <<= 1;
         if !alpha[i] {
             pos += 1;
         }
