@@ -19,14 +19,14 @@ impl GgmTree {
     }
 
     /// Input: `seed`: a seed.
-    /// Output: `tree`: a GGM (binary tree) `tree`, with size `2^{depth-1}`
-    /// Output: `k0`: XORs of all the left-node values in each level, with size `depth-1`.
-    /// Output: `k1`: XORs of all the right-node values in each level, with size `depth-1`.
+    /// Output: `tree`: a GGM (binary tree) `tree`, with size `2^{depth}`
+    /// Output: `k0`: XORs of all the left-node values in each level, with size `depth`.
+    /// Output: `k1`: XORs of all the right-node values in each level, with size `depth`.
     /// This implementation is adapted from EMP Toolkit.
     pub fn gen(&self, seed: Block, tree: &mut [Block], k0: &mut [Block], k1: &mut [Block]) {
-        assert!(tree.len() == 1 << (self.depth - 1));
-        assert!(k0.len() == self.depth - 1);
-        assert!(k1.len() == self.depth - 1);
+        assert!(tree.len() == 1 << (self.depth));
+        assert!(k0.len() == self.depth);
+        assert!(k1.len() == self.depth);
         let mut buf = vec![Block::ZERO; 8];
         self.tkprp.expand_1to2(tree, seed);
         k0[0] = tree[0];
@@ -37,7 +37,7 @@ impl GgmTree {
         k1[1] = buf[1] ^ buf[3];
         tree[0..4].copy_from_slice(&buf[0..4]);
 
-        for h in 2..self.depth - 1 {
+        for h in 2..self.depth {
             k0[h] = Block::ZERO;
             k1[h] = Block::ZERO;
             let sz = 1 << h;
@@ -56,43 +56,94 @@ impl GgmTree {
             }
         }
     }
+
+    /// reconstruct
+    pub fn reconstruct(&self, alpha: &[bool], k: &[Block], tree: &mut [Block]) {
+        let mut pos = 0;
+        for i in 1..=self.depth {
+            pos *= 2;
+            tree[pos] = Block::ZERO;
+            tree[pos + 1] = Block::ZERO;
+            if !alpha[i - 1] {
+                self.reconstruct_layer(i, false, pos, k[i - 1], tree);
+                pos += 1;
+            } else {
+                self.reconstruct_layer(i, true, pos + 1, k[i - 1], tree);
+            }
+        }
+    }
+
+    // Handle each layer.
+    fn reconstruct_layer(
+        &self,
+        depth: usize,
+        left_or_right: bool,
+        pos: usize,
+        k: Block,
+        tree: &mut [Block],
+    ) {
+        let sz = 1 << depth;
+        let mut sum = Block::ZERO;
+        let start = if left_or_right { 1 } else { 0 };
+
+        for i in (start..sz).step_by(2) {
+            sum ^= tree[i];
+        }
+        tree[pos] = sum ^ k;
+
+        if depth == (self.depth) {
+            return;
+        }
+
+        let mut buf = vec![Block::ZERO; 8];
+        if sz == 2 {
+            self.tkprp.expand_2to4(&mut buf, tree);
+            tree[0..4].copy_from_slice(&buf[0..4]);
+        } else {
+            for i in (0..=sz - 4).rev().step_by(4) {
+                self.tkprp.expand_4to8(&mut buf, &tree[i..]);
+                tree[2 * i..2 * i + 8].copy_from_slice(&buf);
+            }
+        }
+    }
 }
 
 #[test]
 fn ggm_test() {
+    use crate::ggm_tree::GgmTree;
+    use crate::Block;
+
     let depth = 3;
-    let mut tree = vec![Block::ZERO; 1 << (depth - 1)];
-    let mut k0 = vec![Block::ZERO; depth - 1];
-    let mut k1 = vec![Block::ZERO; depth - 1];
+    let mut tree = vec![Block::ZERO; 1 << depth];
+    let mut k0 = vec![Block::ZERO; depth];
+    let mut k1 = vec![Block::ZERO; depth];
+    let mut k = vec![Block::ZERO; depth];
+    let alpha = [false, true, false];
+    let mut pos = 0;
+
+    for i in 0..alpha.len() {
+        pos = pos << 1;
+        if !alpha[i] {
+            pos += 1;
+        }
+    }
 
     let ggm = GgmTree::new(depth);
 
     ggm.gen(Block::ZERO, &mut tree, &mut k0, &mut k1);
 
-    // Test vectors are from EMP Toolkit.
-    assert_eq!(
-        tree,
-        [
-            Block::from(0x92A6DDEAA3E99F9BECB268BD9EF67C91_u128.to_le_bytes()),
-            Block::from(0x9E7E9C02ED1E62385EE8A9EDDC63A2B5_u128.to_le_bytes()),
-            Block::from(0xBD4B85E90AACBD106694537DB6251264_u128.to_le_bytes()),
-            Block::from(0x230485DC4360014833E07D8D914411A2_u128.to_le_bytes()),
-        ]
-    );
+    for i in 0..depth {
+        if alpha[i] {
+            k[i] = k1[i];
+        } else {
+            k[i] = k0[i];
+        }
+    }
 
-    assert_eq!(
-        k0,
-        [
-            Block::from(0x2E2B34CA59FA4C883B2C8AEFD44BE966_u128.to_le_bytes()),
-            Block::from(0x2FED5803A945228B8A263BC028D36EF5_u128.to_le_bytes()),
-        ]
-    );
+    let mut tree_reconstruct = vec![Block::ZERO; 1 << depth];
+    ggm.reconstruct(&alpha, &k, &mut tree_reconstruct);
 
-    assert_eq!(
-        k1,
-        [
-            Block::from(0x7E46C568D1CD4972BB1A61F95DD80EDC_u128.to_le_bytes()),
-            Block::from(0xBD7A19DEAE7E63706D08D4604D27B317_u128.to_le_bytes()),
-        ]
-    );
+    assert_eq!(tree_reconstruct[pos], Block::ZERO);
+    tree_reconstruct[pos] = tree[pos];
+    assert_eq!(tree, tree_reconstruct);
 }
