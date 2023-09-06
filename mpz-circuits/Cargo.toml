@@ -16,6 +16,24 @@ sha2 = ["dep:sha2"]
 [dependencies]
 mpz-circuits-macros = { path = "../mpz-circuits-macros" }
 
+# dsl
+circom-circom =  { git = "https://github.com/iden3/circom", package = "circom"}
+circom-compiler =  { git = "https://github.com/iden3/circom", package = "compiler"}
+circom-type_analysis =  { git = "https://github.com/iden3/circom", package = "type_analysis"}
+circom-circom_algebra =  { git = "https://github.com/iden3/circom", package = "circom_algebra"}
+circom-constraint_list =  { git = "https://github.com/iden3/circom", package = "constraint_list"}
+circom-program_structure =  { git = "https://github.com/iden3/circom", package = "program_structure"}
+circom-constraint_generation =  { git = "https://github.com/iden3/circom", package = "constraint_generation"}
+circom-constraint_writers =  { git = "https://github.com/iden3/circom", package = "constraint_writers"}
+circom-constant_tracking =  { git = "https://github.com/iden3/circom", package = "constant_tracking"}
+circom-code_producers =  { git = "https://github.com/iden3/circom", package = "code_producers"}
+circom-dag =  { git = "https://github.com/iden3/circom", package = "dag"}
+circom-parser =  { git = "https://github.com/iden3/circom", package = "parser"}
+
+clap = "2.33.0"
+ansi_term = "0.12.1"
+wast = "39.0.0"
+
 sha2 = { workspace = true, features = ["compress"], optional = true }
 
 serde = { workspace = true, optional = true, features = ["derive"] }
