@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_against_emptool_impl() {
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut rng = ChaCha12Rng::from_seed([0; 32]);
         let a: [u8; 16] = rng.gen();
         let b: [u8; 16] = rng.gen();
 
