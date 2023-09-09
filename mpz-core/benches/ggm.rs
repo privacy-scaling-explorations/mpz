@@ -27,7 +27,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let k = vec![Block::ZERO; depth];
         let alpha = vec![false; depth];
         bench.iter(|| {
-            black_box(ggm.reconstruct(black_box(&alpha), black_box(&k), black_box(&mut tree)))
+            black_box(ggm.reconstruct(black_box(&mut tree), black_box(&k), black_box(&alpha)))
         });
     });
 }

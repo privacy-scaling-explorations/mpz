@@ -18,10 +18,10 @@ impl GgmTree {
         Self { tkprp, depth }
     }
 
-    /// Input: `seed`: a seed.
-    /// Output: `tree`: a GGM (binary tree) `tree`, with size `2^{depth}`
-    /// Output: `k0`: XORs of all the left-node values in each level, with size `depth`.
-    /// Output: `k1`: XORs of all the right-node values in each level, with size `depth`.
+    /// Input : `seed` - a seed.
+    /// Output: `tree` - a GGM (binary tree) `tree`, with size `2^{depth}`.
+    /// Output: `k0` - XORs of all the left-node values in each level, with size `depth`.
+    /// Output: `k1`- XORs of all the right-node values in each level, with size `depth`.
     /// This implementation is adapted from EMP Toolkit.
     pub fn gen(&self, seed: Block, tree: &mut [Block], k0: &mut [Block], k1: &mut [Block]) {
         assert!(tree.len() == 1 << (self.depth));
@@ -57,8 +57,11 @@ impl GgmTree {
         }
     }
 
-    /// reconstruct
-    pub fn reconstruct(&self, alpha: &[bool], k: &[Block], tree: &mut [Block]) {
+    /// Reconstruct the GGM tree except the value in a given position.
+    /// Input : `k` - a slice of blocks with length `depth`, the values of k are chosen via OT from k0 and k1. For the i-th value, if alpha[i] == 1, k[i] = k1[i]; else k[i] = k0[i].
+    /// Input : `alpha` - a slice of bits with length `depth`.
+    /// Output : `tree` - the ggm tree, except `tree[pos] == Block::ZERO`. The bit decomposition of `pos` is the complement of `alpha`. I.e., `pos[i] = 1 xor alpha[i]`.
+    pub fn reconstruct(&self, tree: &mut [Block], k: &[Block], alpha: &[bool]) {
         let mut pos = 0;
         for i in 1..=self.depth {
             pos *= 2;
@@ -141,7 +144,7 @@ fn ggm_test() {
     }
 
     let mut tree_reconstruct = vec![Block::ZERO; 1 << depth];
-    ggm.reconstruct(&alpha, &k, &mut tree_reconstruct);
+    ggm.reconstruct(&mut tree_reconstruct, &k, &alpha);
 
     assert_eq!(tree_reconstruct[pos], Block::ZERO);
     tree_reconstruct[pos] = tree[pos];

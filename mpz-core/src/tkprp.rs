@@ -16,7 +16,7 @@ impl TwoKeyPrp {
 
     /// expand 1 to 2
     #[inline(always)]
-    pub fn expand_1to2(&self, children: &mut [Block], parent: Block) {
+    pub(crate) fn expand_1to2(&self, children: &mut [Block], parent: Block) {
         children[0] = parent;
         children[1] = parent;
         AesEncryptor::para_encrypt::<2, 1>(&self.0, children);
@@ -29,7 +29,7 @@ impl TwoKeyPrp {
     // c[0]    c[1]    c[2]    c[3]
     // t[0]    t[2]    t[1]    t[3]
     #[inline(always)]
-    pub fn expand_2to4(&self, children: &mut [Block], parent: &[Block]) {
+    pub(crate) fn expand_2to4(&self, children: &mut [Block], parent: &[Block]) {
         let mut tmp = [Block::ZERO; 4];
         children[3] = parent[1];
         children[2] = parent[1];
@@ -54,7 +54,7 @@ impl TwoKeyPrp {
     // c[0]    c[1]    c[2]    c[3]    c[4]    c[5]    c[6]    c[7]
     // t[0]    t[4]    t[1]    t[5]    t[2]    t[6]    t[3]    t[7]
     #[inline(always)]
-    pub fn expand_4to8(&self, children: &mut [Block], parent: &[Block]) {
+    pub(crate) fn expand_4to8(&self, children: &mut [Block], parent: &[Block]) {
         let mut tmp = [Block::ZERO; 8];
         children[7] = parent[3];
         children[6] = parent[3];
