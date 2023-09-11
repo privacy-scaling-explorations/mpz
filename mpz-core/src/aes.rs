@@ -92,17 +92,32 @@ impl AesEncryptor {
     /// Encrypt many blocks.
     #[inline(always)]
     pub fn encrypt_many_blocks<const N: usize>(&self, blks: [Block; N]) -> [Block; N] {
-        let mut ctxt = [Block::default(); N];
-        for i in 0..N {
-            ctxt[i] = self.encrypt_block(blks[i]);
-        }
-        ctxt
+        let mut out = [Block::default(); N];
+        let out_mut = Block::as_generic_array_slice_mut(out.as_mut_slice());
+
+        let blks = Block::as_generic_array_slice(blks.as_slice());
+
+        self.0
+            .encrypt_blocks_b2b(blks, out_mut)
+            .expect("block slices are equal length");
+
+        out
     }
 
     /// Encrypt many blocks with many keys.
-    /// Input: `NK` AES keys `keys`, and `NK * NM` blocks `blks`
-    /// Output: each batch of NM blocks encrypted by a corresponding AES key.
-    /// Only handle the first NK * NM blocks of blks, do not handle the rest.
+    ///
+    /// Each batch of NM blocks are encrypted by a corresponding AES key.
+    ///
+    /// **Only the first NK * NM blocks of blks are handled, the rest are ignored.**
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - A slice of keys used to encrypt the blocks.
+    /// * `blks` - A slice of blocks to be encrypted.
+    ///
+    /// # Panics
+    ///
+    /// * If the length of `blks` is less than `NM * NK`.
     #[inline(always)]
     pub fn para_encrypt<const NK: usize, const NM: usize>(keys: &[Self; NK], blks: &mut [Block]) {
         assert!(blks.len() >= NM * NK);
