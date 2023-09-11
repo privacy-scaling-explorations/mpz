@@ -45,15 +45,17 @@ pub(crate) fn and_gate(
     let j = Block::new((gid as u128).to_be_bytes());
     let k = Block::new(((gid + 1) as u128).to_be_bytes());
 
-    let hx_0 = cipher.tccr(j, x_0);
-    let hy_0 = cipher.tccr(k, y_0);
+    let mut h = [x_0, y_0, x_1, y_1];
+    cipher.tccr_many_inplace(&[j, k, j, k], &mut h);
+
+    let [hx_0, hy_0, hx_1, hy_1] = h;
 
     // Garbled row of generator half-gate
-    let t_g = hx_0 ^ cipher.tccr(j, x_1) ^ (Block::SELECT_MASK[p_b] & delta);
+    let t_g = hx_0 ^ hx_1 ^ (Block::SELECT_MASK[p_b] & delta);
     let w_g = hx_0 ^ (Block::SELECT_MASK[p_a] & t_g);
 
     // Garbled row of evaluator half-gate
-    let t_e = hy_0 ^ cipher.tccr(k, y_1) ^ x_0;
+    let t_e = hy_0 ^ hy_1 ^ x_0;
     let w_e = hy_0 ^ (Block::SELECT_MASK[p_b] & (t_e ^ x_0));
 
     let z_0 = Label::new(w_g ^ w_e);
