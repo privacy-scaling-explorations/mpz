@@ -689,7 +689,10 @@ pub mod state {
 
     opaque_debug::implement!(Initialized);
 
-    /// The receiver's state after base setup
+    /// The receiver's state after the setup phase.
+    ///
+    /// In this state the receiver performs OT extension (potentially multiple times). Also in this
+    /// state the receiver sends OT requests.
     pub struct Extension {
         /// Receiver's rngs
         pub(super) rngs: Vec<[ChaCha20Rng; 2]>,
