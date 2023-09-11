@@ -10,7 +10,7 @@ use core::arch::x86_64::*;
 
 pub type Clmul = ClmulX86;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct ClmulX86(pub __m128i);
 
 impl From<ClmulX86> for [u8; 16] {
