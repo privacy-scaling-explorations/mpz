@@ -124,6 +124,7 @@ impl Block {
 
     /// Converts a block to a [`GenericArray<u8, U16>`](cipher::generic_array::GenericArray)
     /// from the [`generic-array`](https://docs.rs/generic-array/latest/generic_array/) crate.
+    #[allow(dead_code)]
     pub(crate) fn as_generic_array(&self) -> &GenericArray<u8, U16> {
         (&self.0).into()
     }
@@ -136,6 +137,7 @@ impl Block {
 
     /// Converts a slice of blocks to a slice of [`GenericArray<u8, U16>`](cipher::generic_array::GenericArray)
     /// from the [`generic-array`](https://docs.rs/generic-array/latest/generic_array/) crate.
+    #[allow(dead_code)]
     pub(crate) fn as_generic_array_slice(slice: &[Self]) -> &[GenericArray<u8, U16>] {
         // # Safety
         // This is always safe because `Block` and `GenericArray<u8, U16>` have the same memory layout.
@@ -146,7 +148,7 @@ impl Block {
 
     /// Converts a mutable slice of blocks to a mutable slice of [`GenericArray<u8, U16>`](cipher::generic_array::GenericArray)
     /// from the [`generic-array`](https://docs.rs/generic-array/latest/generic_array/) crate.
-    pub(crate) fn as_generic_array_slice_mut(slice: &mut [Self]) -> &mut [GenericArray<u8, U16>] {
+    pub(crate) fn as_generic_array_mut_slice(slice: &mut [Self]) -> &mut [GenericArray<u8, U16>] {
         // # Safety
         // This is always safe because `Block` and `GenericArray<u8, U16>` have the same memory layout.
         // See https://github.com/fizyk20/generic-array/blob/37dc6aefc3ed5c423ad7402d4febf06a3e78a223/src/lib.rs#L847-L854
