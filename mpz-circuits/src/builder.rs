@@ -5,7 +5,7 @@ use crate::{
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
     Circuit, Tracer,
 };
-use std::{cell::RefCell, collections::HashMap, mem::discriminant};
+use std::{cell::RefCell, collections::HashMap, mem::discriminant, sync::Arc};
 
 /// An error that can occur when building a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -46,7 +46,10 @@ pub enum BuilderError {
 /// ```
 #[derive(Default)]
 pub struct CircuitBuilder {
+    inputs: Vec<BinaryRepr>,
+    outputs: Vec<BinaryRepr>,
     state: RefCell<BuilderState>,
+    sub_circuits: Vec<Arc<Circuit>>,
 }
 
 impl CircuitBuilder {
@@ -183,10 +186,7 @@ impl CircuitBuilder {
 #[derive(Debug)]
 pub struct BuilderState {
     feed_id: usize,
-    inputs: Vec<BinaryRepr>,
-    outputs: Vec<BinaryRepr>,
     gates: Vec<Gate>,
-
     and_count: usize,
     xor_count: usize,
 }
@@ -199,6 +199,7 @@ impl Default for BuilderState {
             inputs: vec![],
             outputs: vec![],
             gates: vec![],
+            sub_circuits: vec![],
             and_count: 0,
             xor_count: 0,
         }
