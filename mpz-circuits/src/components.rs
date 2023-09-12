@@ -59,23 +59,44 @@ impl Gate {
         }
     }
 
-    /// Shifts all the node IDs of the gate by the given offset.
+    /// Shifts all the node IDs of the gate to the left by the given offset.
     #[inline]
     pub(crate) fn shift_left(&mut self, offset: usize) {
         match self {
             Gate::Xor { x, y, z } => {
-                x.id -= offset;
-                y.id -= offset;
-                z.id -= offset;
+                x.shift_left(offset);
+                y.shift_left(offset);
+                z.shift_left(offset);
             }
             Gate::And { x, y, z } => {
-                x.id -= offset;
-                y.id -= offset;
-                z.id -= offset;
+                x.shift_left(offset);
+                y.shift_left(offset);
+                z.shift_left(offset);
             }
             Gate::Inv { x, z } => {
-                x.id -= offset;
-                z.id -= offset;
+                x.shift_left(offset);
+                z.shift_left(offset);
+            }
+        }
+    }
+
+    /// Shifts all the node IDs of the gate to the left by the given offset.
+    #[inline]
+    pub(crate) fn shift_right(&mut self, offset: usize) {
+        match self {
+            Gate::Xor { x, y, z } => {
+                x.shift_right(offset);
+                y.shift_right(offset);
+                z.shift_right(offset);
+            }
+            Gate::And { x, y, z } => {
+                x.shift_right(offset);
+                y.shift_right(offset);
+                z.shift_right(offset);
+            }
+            Gate::Inv { x, z } => {
+                x.shift_right(offset);
+                z.shift_right(offset);
             }
         }
     }
@@ -136,9 +157,14 @@ impl<T> Node<T> {
         self.id
     }
 
-    /// Shifts the node ID by the given offset.
+    /// Shifts the node ID to the left by the given offset.
     pub(crate) fn shift_left(&mut self, offset: usize) {
         self.id -= offset;
+    }
+
+    /// Shifts the node ID to the right by the given offset.
+    pub(crate) fn shift_right(&mut self, offset: usize) {
+        self.id += offset;
     }
 }
 

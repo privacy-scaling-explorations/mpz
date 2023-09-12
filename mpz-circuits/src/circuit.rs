@@ -4,6 +4,7 @@ use crate::{
     components::Gate,
     types::{BinaryRepr, TypeError, Value},
 };
+use std::sync::Arc;
 
 /// An error that can occur when performing operations with a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -25,6 +26,7 @@ pub struct Circuit {
     pub(crate) outputs: Vec<BinaryRepr>,
     pub(crate) gates: Vec<Gate>,
     pub(crate) feed_count: usize,
+    pub(crate) sub_circuits: Vec<Arc<Circuit>>,
 
     pub(crate) and_count: usize,
     pub(crate) xor_count: usize,
@@ -41,24 +43,35 @@ impl Circuit {
         &self.outputs
     }
 
-    /// Returns a reference to the gates of the circuit.
-    pub fn gates(&self) -> &[Gate] {
-        &self.gates
+    pub fn gates(&self) -> GateIterator<'_> {
+        self.into_iter()
     }
 
     /// Returns the number of feeds in the circuit.
     pub fn feed_count(&self) -> usize {
-        self.feed_count
+        self.sub_circuits
+            .iter()
+            .map(|c| c.feed_count())
+            .sum::<usize>()
+            + self.feed_count
     }
 
     /// Returns the number of AND gates in the circuit.
     pub fn and_count(&self) -> usize {
-        self.and_count
+        self.sub_circuits
+            .iter()
+            .map(|c| c.and_count())
+            .sum::<usize>()
+            + self.and_count
     }
 
     /// Returns the number of XOR gates in the circuit.
     pub fn xor_count(&self) -> usize {
-        self.xor_count
+        self.sub_circuits
+            .iter()
+            .map(|c| c.xor_count())
+            .sum::<usize>()
+            + self.xor_count
     }
 
     /// Reverses the order of the inputs.
@@ -183,12 +196,69 @@ impl Circuit {
     }
 }
 
-impl IntoIterator for Circuit {
+pub struct GateIterator<'c> {
+    gates: &'c [Gate],
+    feed_count: usize,
+    sub_circuits: &'c [Arc<Circuit>],
+    circuit_idx: usize,
+    offset: usize,
+}
+
+impl<'c> Iterator for GateIterator<'c> {
     type Item = Gate;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let shift_gate = |mut gate: Gate| {
+            if self.circuit_idx == 0 {
+                return gate;
+            }
+            let shift = self
+                .sub_circuits
+                .iter()
+                .take(self.circuit_idx - 1)
+                .map(|c| c.feed_count())
+                .sum::<usize>()
+                + self.feed_count;
+            gate.shift_right(shift);
+            gate
+        };
+
+        if self.circuit_idx == 0 {
+            if let Some(gate) = self.gates.get(self.offset) {
+                self.offset += 1;
+                return Some(shift_gate(*gate));
+            } else {
+                self.circuit_idx += 1;
+                self.offset = 0;
+                return self.next();
+            }
+        } else {
+            let circuit = self.sub_circuits.get(self.circuit_idx - 1)?;
+            if let Some(gate) = circuit.gates.get(self.offset) {
+                self.offset += 1;
+                return Some(shift_gate(*gate));
+            } else {
+                self.circuit_idx += 1;
+                self.offset = 0;
+                return self.next();
+            }
+        }
+    }
+}
+
+impl<'c> IntoIterator for &'c Circuit {
+    type Item = Gate;
+
+    type IntoIter = GateIterator<'c>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.gates.into_iter()
+        GateIterator {
+            gates: &self.gates,
+            feed_count: self.feed_count(),
+            sub_circuits: &self.sub_circuits,
+            circuit_idx: 0,
+            offset: 0,
+        }
     }
 }
 

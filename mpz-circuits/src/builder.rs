@@ -46,10 +46,7 @@ pub enum BuilderError {
 /// ```
 #[derive(Default)]
 pub struct CircuitBuilder {
-    inputs: Vec<BinaryRepr>,
-    outputs: Vec<BinaryRepr>,
     state: RefCell<BuilderState>,
-    sub_circuits: Vec<Arc<Circuit>>,
 }
 
 impl CircuitBuilder {
@@ -186,7 +183,10 @@ impl CircuitBuilder {
 #[derive(Debug)]
 pub struct BuilderState {
     feed_id: usize,
+    inputs: Vec<BinaryRepr>,
+    outputs: Vec<BinaryRepr>,
     gates: Vec<Gate>,
+    sub_circuits: Vec<Arc<Circuit>>,
     and_count: usize,
     xor_count: usize,
 }
@@ -371,7 +371,7 @@ impl BuilderState {
     /// The outputs of the appended circuit
     pub fn append(
         &mut self,
-        circ: &Circuit,
+        circ: Arc<Circuit>,
         builder_inputs: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
         if builder_inputs.len() != circ.inputs().len() {
@@ -443,6 +443,7 @@ impl BuilderState {
         Ok(Circuit {
             inputs: self.inputs,
             outputs: self.outputs,
+            sub_circuits: self.sub_circuits,
             gates: self.gates,
             feed_count: self.feed_id,
             and_count: self.and_count,
