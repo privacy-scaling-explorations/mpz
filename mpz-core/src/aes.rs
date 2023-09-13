@@ -85,7 +85,7 @@ impl FixedKeyAes {
     /// (cf. <https://eprint.iacr.org/2019/074>, §7.2).
     ///
     /// `π(x) ⊕ x`, where `π` is instantiated using fixed-key AES.
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `blocks` - The blocks to hash in-place.
