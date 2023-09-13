@@ -62,7 +62,7 @@ bincode = "1.3.3"
 prost-build = "0.9"
 bytes = "1"
 yamux = "0.10"
-bytemuck = {version = "1.13", features = ["derive"]}
+bytemuck = { version = "1.13", features = ["derive"] }
 
 # testing
 prost = "0.9"
@@ -89,5 +89,6 @@ hex = "0.4"
 lazy_static = "1"
 derive_builder = "0.11"
 once_cell = "1"
+# DO NOT BUMP, SEE https://github.com/privacy-scaling-explorations/mpz/issues/61
 generic-array = "0.14"
 itybity = "0.2"
