@@ -43,8 +43,10 @@ pub(crate) fn and_gate(
     let j = Block::new((gid as u128).to_be_bytes());
     let k = Block::new(((gid + 1) as u128).to_be_bytes());
 
-    let hx = cipher.tccr(j, x);
-    let hy = cipher.tccr(k, y);
+    let mut h = [x, y];
+    cipher.tccr_many_inplace(&[j, k], &mut h);
+
+    let [hx, hy] = h;
 
     let w_g = hx ^ (encrypted_gate[0] & Block::SELECT_MASK[s_a]);
     let w_e = hy ^ (Block::SELECT_MASK[s_b] & (encrypted_gate[1] ^ x));
