@@ -1,9 +1,9 @@
 //! A block of 128 bits and its operations.
 
 use bytemuck::{Pod, Zeroable};
-use cipher::{consts::U16, generic_array::GenericArray};
 use clmul::Clmul;
 use core::ops::{BitAnd, BitAndAssign, BitXor, BitXorAssign};
+use generic_array::{typenum::consts::U16, GenericArray};
 use itybity::{BitIterable, BitLength, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
