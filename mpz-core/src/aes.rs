@@ -85,6 +85,10 @@ impl FixedKeyAes {
     /// (cf. <https://eprint.iacr.org/2019/074>, §7.2).
     ///
     /// `π(x) ⊕ x`, where `π` is instantiated using fixed-key AES.
+    /// 
+    /// # Arguments
+    ///
+    /// * `blocks` - The blocks to hash in-place.
     #[inline]
     pub fn cr_many_inplace<const N: usize>(&self, blocks: &mut [Block; N]) {
         let mut buf = *blocks;
@@ -115,6 +119,10 @@ impl FixedKeyAes {
     /// `π(σ(x)) ⊕ σ(x)`, where `π` is instantiated using fixed-key AES
     ///
     /// See [`Block::sigma`](Block::sigma) for more details on `σ`.
+    ///
+    /// # Arguments
+    ///
+    /// * `blocks` - The blocks to hash in-place.
     #[inline]
     pub fn ccr_many_inplace<const N: usize>(&self, blocks: &mut [Block; N]) {
         blocks.iter_mut().for_each(|b| *b = Block::sigma(*b));
@@ -161,7 +169,7 @@ impl AesEncryptor {
 
     /// Encrypt many blocks with many keys.
     ///
-    /// Each batch of NM blocks are encrypted by a corresponding AES key.
+    /// Each batch of NM blocks is encrypted by a corresponding AES key.
     ///
     /// **Only the first NK * NM blocks of blks are handled, the rest are ignored.**
     ///
