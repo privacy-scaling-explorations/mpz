@@ -4,7 +4,7 @@ use crate::{
     components::Gate,
     types::{BinaryRepr, TypeError, Value},
 };
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 /// An error that can occur when performing operations with a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -24,6 +24,7 @@ pub enum CircuitError {
 pub struct Circuit {
     pub(crate) inputs: Vec<BinaryRepr>,
     pub(crate) outputs: Vec<BinaryRepr>,
+    pub(crate) sub_circuit_wiring: HashMap<usize, usize>,
     pub(crate) sub_circuits: Vec<Arc<SubCircuit>>,
 }
 
@@ -202,7 +203,7 @@ impl Circuit {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-struct SubCircuit {
+pub(crate) struct SubCircuit {
     pub(crate) gates: Vec<Gate>,
     pub(crate) feed_count: usize,
     pub(crate) and_count: usize,

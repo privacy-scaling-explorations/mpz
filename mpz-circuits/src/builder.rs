@@ -1,6 +1,7 @@
 use itybity::{BitIterable, IntoBits};
 
 use crate::{
+    circuit::SubCircuit,
     components::{Feed, Gate, Node},
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
     Circuit, Tracer,
@@ -186,7 +187,7 @@ pub struct BuilderState {
     inputs: Vec<BinaryRepr>,
     outputs: Vec<BinaryRepr>,
     gates: Vec<Gate>,
-    sub_circuits: Vec<Arc<Circuit>>,
+    sub_circuits: Vec<Arc<SubCircuit>>,
     and_count: usize,
     xor_count: usize,
 }
@@ -374,72 +375,60 @@ impl BuilderState {
         circ: Arc<Circuit>,
         builder_inputs: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
-        // Store reference to circuit
-        self.sub_circuits.push(Arc::clone(&circ));
+        if builder_inputs.len() != circ.inputs().len() {
+            return Err(BuilderError::AppendError(
+                "Number of inputs does not match number of inputs in circuit".to_string(),
+            ));
+        }
 
-        // Adapt outputs
-        let old_outputs = self.outputs.clone();
-        let mut outputs = circ.outputs.clone();
-        outputs
-            .iter_mut()
-            .for_each(|binary_repr| binary_repr.shift_right(self.feed_id));
-        self.outputs = outputs;
+        // Maps old feed id -> new feed id
+        let mut feed_map: HashMap<Node<Feed>, Node<Feed>> = HashMap::default();
+        for (i, (builder_input, append_input)) in
+            builder_inputs.iter().zip(circ.inputs()).enumerate()
+        {
+            if discriminant(builder_input) != discriminant(append_input) {
+                return Err(BuilderError::AppendError(format!(
+                    "Input {i} type does not match input type in circuit, expected {}, got {}",
+                    append_input, builder_input,
+                )));
+            }
+            for (builder_node, append_node) in builder_input.iter().zip(append_input.iter()) {
+                feed_map.insert(*append_node, *builder_node);
+            }
+        }
 
-        Ok(vec![])
-        //        if builder_inputs.len() != circ.inputs().len() {
-        //            return Err(BuilderError::AppendError(
-        //                "Number of inputs does not match number of inputs in circuit".to_string(),
-        //            ));
-        //        }
-        //
-        //        // Maps old feed id -> new feed id
-        //        let mut feed_map: HashMap<Node<Feed>, Node<Feed>> = HashMap::default();
-        //        for (i, (builder_input, append_input)) in
-        //            builder_inputs.iter().zip(circ.inputs()).enumerate()
-        //        {
-        //            if discriminant(builder_input) != discriminant(append_input) {
-        //                return Err(BuilderError::AppendError(format!(
-        //                    "Input {i} type does not match input type in circuit, expected {}, got {}",
-        //                    append_input, builder_input,
-        //                )));
-        //            }
-        //            for (builder_node, append_node) in builder_input.iter().zip(append_input.iter()) {
-        //                feed_map.insert(*append_node, *builder_node);
-        //            }
-        //        }
-        //
-        //        // Add new gates, mapping the node ids from the old circuit to the new circuit
-        //        for gate in circ.gates() {
-        //            match gate {
-        //                Gate::Xor { x, y, z } => {
-        //                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
-        //                    let new_y = feed_map.get(&(*y).into()).expect("feed should exist");
-        //                    let new_z = self.add_xor_gate(*new_x, *new_y);
-        //                    feed_map.insert(*z, new_z);
-        //                }
-        //                Gate::And { x, y, z } => {
-        //                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
-        //                    let new_y = feed_map.get(&(*y).into()).expect("feed should exist");
-        //                    let new_z = self.add_and_gate(*new_x, *new_y);
-        //                    feed_map.insert(*z, new_z);
-        //                }
-        //                Gate::Inv { x, z } => {
-        //                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
-        //                    let new_z = self.add_inv_gate(*new_x);
-        //                    feed_map.insert(*z, new_z);
-        //                }
-        //            }
-        //        }
-        //
-        //        // Update the outputs
-        //        let mut outputs = circ.outputs().to_vec();
-        //        outputs.iter_mut().for_each(|output| {
-        //            for node in output.iter_mut() {
-        //                *node = *feed_map.get(node).expect("feed should exist");
-        //            }
-        //        });
-        //
-        //        Ok(outputs)
+        // Add new gates, mapping the node ids from the old circuit to the new circuit
+        for gate in circ.gates() {
+            match gate {
+                Gate::Xor { x, y, z } => {
+                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
+                    let new_y = feed_map.get(&(*y).into()).expect("feed should exist");
+                    let new_z = self.add_xor_gate(*new_x, *new_y);
+                    feed_map.insert(*z, new_z);
+                }
+                Gate::And { x, y, z } => {
+                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
+                    let new_y = feed_map.get(&(*y).into()).expect("feed should exist");
+                    let new_z = self.add_and_gate(*new_x, *new_y);
+                    feed_map.insert(*z, new_z);
+                }
+                Gate::Inv { x, z } => {
+                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
+                    let new_z = self.add_inv_gate(*new_x);
+                    feed_map.insert(*z, new_z);
+                }
+            }
+        }
+
+        // Update the outputs
+        let mut outputs = circ.outputs().to_vec();
+        outputs.iter_mut().for_each(|output| {
+            for node in output.iter_mut() {
+                *node = *feed_map.get(node).expect("feed should exist");
+            }
+        });
+
+        Ok(outputs)
     }
 
     /// Builds the circuit.
