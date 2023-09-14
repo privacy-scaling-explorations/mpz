@@ -375,31 +375,12 @@ impl BuilderState {
     pub(crate) fn append(
         &mut self,
         circ: Arc<Circuit>,
+        // This indicates the wires which should be connected to the inputs of the new circuit
         circ_new_input_wiring: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
-        if circ_new_input_wiring.len() != circ.inputs().len() {
-            return Err(BuilderError::AppendError(
-                "Number of inputs does not match number of inputs in circuit".to_string(),
-            ));
-        }
+        // Check if `circ_new_input_wiring` is consistent with `circ.inputs()`
+        let input_feed_map = check_and_create_feed_map(circ.inputs(), circ_new_input_wiring)?;
 
-        // Maps old feed id -> new feed id
-        let mut feed_map: HashMap<Node<Feed>, Node<Feed>> = HashMap::default();
-        for (i, (new_input_wires, input_wires)) in
-            circ_new_input_wiring.iter().zip(circ.inputs()).enumerate()
-        {
-            if discriminant(new_input_wires) != discriminant(input_wires) {
-                return Err(BuilderError::AppendError(format!(
-                    "Input {i} type does not match input type in circuit, expected {}, got {}",
-                    input_wires, new_input_wires,
-                )));
-            }
-            for (builder_node, append_node) in new_input_wires.iter().zip(input_wires.iter()) {
-                feed_map.insert(*append_node, *builder_node);
-            }
-        }
-
-        // * Check if `circ_new_input_wiring` is consistent with `circ.inputs()`
         // * Create a subcircuit of the current non-finished circuit and append it to
         //   `self.subcircuits`
         // * Create a map which maps the feed ids of the input of the new circuit to what they
@@ -413,7 +394,7 @@ impl BuilderState {
         let mut outputs = circ.outputs().to_vec();
         outputs.iter_mut().for_each(|output| {
             for node in output.iter_mut() {
-                *node = *feed_map.get(node).expect("feed should exist");
+                *node = *input_feed_map.get(node).expect("feed should exist");
             }
         });
 
@@ -430,16 +411,35 @@ impl BuilderState {
             .iter_mut()
             .for_each(|output| output.shift_left(2));
 
-        Ok(Circuit {
-            inputs: self.inputs,
-            outputs: self.outputs,
-            sub_circuits: self.sub_circuits,
-            gates: self.gates,
-            feed_count: self.feed_id,
-            and_count: self.and_count,
-            xor_count: self.xor_count,
-        })
+        todo!()
     }
+}
+
+/// Checks if `feed_keys` and `feed_values` are consistent and builds a hashmap
+fn check_and_create_feed_map(
+    feed_keys: &[BinaryRepr],
+    feed_values: &[BinaryRepr],
+) -> Result<HashMap<Node<Feed>, Node<Feed>>, BuilderError> {
+    if feed_keys.len() != feed_values.len() {
+        return Err(BuilderError::AppendError(
+            "Number of inputs does not match number of inputs in circuit".to_string(),
+        ));
+    }
+
+    let mut feed_map: HashMap<Node<Feed>, Node<Feed>> = HashMap::default();
+    for (i, (key_wires, value_wires)) in feed_keys.iter().zip(feed_values).enumerate() {
+        if discriminant(key_wires) != discriminant(value_wires) {
+            return Err(BuilderError::AppendError(format!(
+                "Input {i} type does not match input type in circuit, expected {}, got {}",
+                value_wires, key_wires,
+            )));
+        }
+        for (key_node, value_node) in key_wires.iter().zip(value_wires.iter()) {
+            feed_map.insert(*value_node, *key_node);
+        }
+    }
+
+    Ok(feed_map)
 }
 
 #[cfg(test)]
