@@ -161,7 +161,7 @@ impl CircuitBuilder {
     /// # Arguments
     ///
     /// * `circ` - The circuit to append
-    /// * `builder_inputs` - The inputs to the appended circuit
+    /// * `circ_new_input_wiring` - The inputs to the appended circuit
     ///
     /// # Returns
     ///
@@ -169,9 +169,9 @@ impl CircuitBuilder {
     pub fn append(
         &self,
         circ: Arc<Circuit>,
-        builder_inputs: &[BinaryRepr],
+        circ_new_input_wiring: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
-        self.state.borrow_mut().append(circ, builder_inputs)
+        self.state.borrow_mut().append(circ, circ_new_input_wiring)
     }
 
     /// Builds the circuit
@@ -187,6 +187,7 @@ pub struct BuilderState {
     inputs: Vec<BinaryRepr>,
     outputs: Vec<BinaryRepr>,
     gates: Vec<Gate>,
+    sub_circuit_wiring: HashMap<usize, usize>,
     sub_circuits: Vec<Arc<SubCircuit>>,
     and_count: usize,
     xor_count: usize,
@@ -200,6 +201,7 @@ impl Default for BuilderState {
             inputs: vec![],
             outputs: vec![],
             gates: vec![],
+            sub_circuit_wiring: HashMap::default(),
             sub_circuits: vec![],
             and_count: 0,
             xor_count: 0,
@@ -365,7 +367,7 @@ impl BuilderState {
     /// # Arguments
     ///
     /// * `circ` - The circuit to append
-    /// * `builder_inputs` - The inputs to the appended circuit
+    /// * `circ_new_input_wiring` - The inputs to the appended circuit
     ///
     /// # Returns
     ///
@@ -373,9 +375,9 @@ impl BuilderState {
     pub(crate) fn append(
         &mut self,
         circ: Arc<Circuit>,
-        builder_inputs: &[BinaryRepr],
+        circ_new_input_wiring: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
-        if builder_inputs.len() != circ.inputs().len() {
+        if circ_new_input_wiring.len() != circ.inputs().len() {
             return Err(BuilderError::AppendError(
                 "Number of inputs does not match number of inputs in circuit".to_string(),
             ));
@@ -383,43 +385,30 @@ impl BuilderState {
 
         // Maps old feed id -> new feed id
         let mut feed_map: HashMap<Node<Feed>, Node<Feed>> = HashMap::default();
-        for (i, (builder_input, append_input)) in
-            builder_inputs.iter().zip(circ.inputs()).enumerate()
+        for (i, (new_input_wires, input_wires)) in
+            circ_new_input_wiring.iter().zip(circ.inputs()).enumerate()
         {
-            if discriminant(builder_input) != discriminant(append_input) {
+            if discriminant(new_input_wires) != discriminant(input_wires) {
                 return Err(BuilderError::AppendError(format!(
                     "Input {i} type does not match input type in circuit, expected {}, got {}",
-                    append_input, builder_input,
+                    input_wires, new_input_wires,
                 )));
             }
-            for (builder_node, append_node) in builder_input.iter().zip(append_input.iter()) {
+            for (builder_node, append_node) in new_input_wires.iter().zip(input_wires.iter()) {
                 feed_map.insert(*append_node, *builder_node);
             }
         }
 
-        // Add new gates, mapping the node ids from the old circuit to the new circuit
-        for gate in circ.gates() {
-            match gate {
-                Gate::Xor { x, y, z } => {
-                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
-                    let new_y = feed_map.get(&(*y).into()).expect("feed should exist");
-                    let new_z = self.add_xor_gate(*new_x, *new_y);
-                    feed_map.insert(*z, new_z);
-                }
-                Gate::And { x, y, z } => {
-                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
-                    let new_y = feed_map.get(&(*y).into()).expect("feed should exist");
-                    let new_z = self.add_and_gate(*new_x, *new_y);
-                    feed_map.insert(*z, new_z);
-                }
-                Gate::Inv { x, z } => {
-                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
-                    let new_z = self.add_inv_gate(*new_x);
-                    feed_map.insert(*z, new_z);
-                }
-            }
-        }
-
+        // * Check if `circ_new_input_wiring` is consistent with `circ.inputs()`
+        // * Create a subcircuit of the current non-finished circuit and append it to
+        //   `self.subcircuits`
+        // * Create a map which maps the feed ids of the input of the new circuit to what they
+        //    should be connected with from the old circuit
+        // * Append the subcircuits from the new circuit to the current builder state
+        // * Add the `sub_circuit_wiring` from the new circuit to the current builder state
+        //   ATTENTION: This needs to be adapted
+        // * Adapt the outputs of the current builder state
+        //
         // Update the outputs
         let mut outputs = circ.outputs().to_vec();
         outputs.iter_mut().for_each(|output| {
