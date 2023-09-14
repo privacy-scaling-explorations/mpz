@@ -254,7 +254,7 @@ impl<'c> IntoIterator for &'c Circuit {
     fn into_iter(self) -> Self::IntoIter {
         GateIterator {
             gates: &self.gates,
-            feed_count: self.feed_count(),
+            feed_count: self.feed_count,
             sub_circuits: &self.sub_circuits,
             circuit_idx: 0,
             offset: 0,
