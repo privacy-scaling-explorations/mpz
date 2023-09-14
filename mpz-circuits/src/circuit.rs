@@ -3,6 +3,7 @@ use itybity::IntoBits;
 use crate::{
     components::Gate,
     types::{BinaryRepr, TypeError, Value},
+    Feed, Node,
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -24,7 +25,7 @@ pub enum CircuitError {
 pub struct Circuit {
     pub(crate) inputs: Vec<BinaryRepr>,
     pub(crate) outputs: Vec<BinaryRepr>,
-    pub(crate) sub_circuit_wiring: HashMap<usize, usize>,
+    pub(crate) sub_circuit_wiring: Vec<(Vec<Node<Feed>>, Vec<Node<Feed>>)>,
     pub(crate) sub_circuits: Vec<Arc<SubCircuit>>,
 }
 

@@ -6,7 +6,12 @@ use crate::{
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
     Circuit, Tracer,
 };
-use std::{cell::RefCell, collections::HashMap, mem::discriminant, sync::Arc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    mem::{discriminant, take},
+    sync::Arc,
+};
 
 /// An error that can occur when building a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -187,7 +192,7 @@ pub struct BuilderState {
     inputs: Vec<BinaryRepr>,
     outputs: Vec<BinaryRepr>,
     gates: Vec<Gate>,
-    sub_circuit_wiring: HashMap<usize, usize>,
+    sub_circuit_wiring: Vec<(Vec<Node<Feed>>, Vec<Node<Feed>>)>,
     sub_circuits: Vec<Arc<SubCircuit>>,
     and_count: usize,
     xor_count: usize,
@@ -201,7 +206,7 @@ impl Default for BuilderState {
             inputs: vec![],
             outputs: vec![],
             gates: vec![],
-            sub_circuit_wiring: HashMap::default(),
+            sub_circuit_wiring: vec![],
             sub_circuits: vec![],
             and_count: 0,
             xor_count: 0,
@@ -376,13 +381,65 @@ impl BuilderState {
         &mut self,
         circ: Arc<Circuit>,
         // This indicates the wires which should be connected to the inputs of the new circuit
-        circ_new_input_wiring: &[BinaryRepr],
+        new_circuit_input_wiring: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
-        // Check if `circ_new_input_wiring` is consistent with `circ.inputs()`
-        let input_feed_map = check_and_create_feed_map(circ.inputs(), circ_new_input_wiring)?;
+        // Create a subcircuit of the current non-finished circuit and append it
+        // Also update the `sub_circuit_wiring` of the current builder state
+        let sub_circuit = SubCircuit {
+            gates: take(&mut self.gates),
+            feed_count: take(&mut self.feed_id),
+            and_count: take(&mut self.and_count),
+            xor_count: take(&mut self.xor_count),
+        };
+        self.sub_circuits.push(sub_circuit.into());
+        self.sub_circuit_wiring.push((
+            self.inputs
+                .iter()
+                .flat_map(|binary| binary.iter().copied())
+                .collect(),
+            self.outputs
+                .iter()
+                .flat_map(|binary| binary.iter().copied())
+                .collect(),
+        ));
 
-        // * Create a subcircuit of the current non-finished circuit and append it to
-        //   `self.subcircuits`
+        // Now update the current builder state with the subcircuits of the new circuit
+        let offset = self
+            .sub_circuits
+            .iter()
+            .map(|c| c.feed_count())
+            .sum::<usize>();
+        self.sub_circuits.extend_from_slice(&circ.sub_circuits);
+        self.sub_circuit_wiring.extend_from_slice(
+            &(circ
+                .sub_circuit_wiring
+                .into_iter()
+                .map(|(inputs, outputs)| {
+                    (
+                        inputs
+                            .iter()
+                            .copied()
+                            .map(|mut node| {
+                                node.shift_right(offset);
+                                node
+                            })
+                            .collect(),
+                        outputs
+                            .iter()
+                            .copied()
+                            .map(|mut node| {
+                                node.shift_right(offset);
+                                node
+                            })
+                            .collect(),
+                    )
+                })
+                .collect::<Vec<(Vec<Node<Feed>>, Vec<Node<Feed>>)>>()),
+        );
+
+        // Check if `new_circuit_input_wiring` is consistent with `circ.inputs()`
+        let input_feed_map = check_and_create_feed_map(circ.inputs(), new_circuit_input_wiring)?;
+
         // * Create a map which maps the feed ids of the input of the new circuit to what they
         //    should be connected with from the old circuit
         // * Append the subcircuits from the new circuit to the current builder state
@@ -415,7 +472,7 @@ impl BuilderState {
     }
 }
 
-/// Checks if `feed_keys` and `feed_values` are consistent and builds a hashmap
+/// Checks if `feed_keys` and `feed_values` are consistent and returns a hashmap
 fn check_and_create_feed_map(
     feed_keys: &[BinaryRepr],
     feed_values: &[BinaryRepr],
