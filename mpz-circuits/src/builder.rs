@@ -444,6 +444,7 @@ impl BuilderState {
 
     /// Builds the circuit.
     pub(crate) fn build(mut self) -> Result<Circuit, BuilderError> {
+        self.build_sub_circuit();
         // Shift all the node ids to the left by 2 to eliminate
         // the reserved constant nodes (which should be factored out during building)
         self.inputs.iter_mut().for_each(|input| input.shift_left(2));
@@ -556,28 +557,24 @@ mod test {
 
     #[test]
     fn test_builder() {
-        // Build first circuit
-        let builder = CircuitBuilder::new();
+        let adder = build_adder();
+        dbg!(adder);
 
-        let a = builder.add_input::<u8>();
-        let b = builder.add_input::<u8>();
-
-        let c = builder.state().add_xor_gate(a.into(), b.into());
-        let d = builder.state().add_and_gate(a.into(), c.into());
-
-        let c1 = builder.build().unwrap();
-        
-        // Build second circuit
-        let builder = CircuitBuilder::new();
-
-        let e = builder.add_input::<u8>();
-        let f = builder.add_input::<u8>();
-
-        let g = builder.state().add_xor_gate(e.into(), f.into());
-
-        let h = builder.append(circuit.into(), &[f.into(), g.into()]).unwrap();
-
-        let output = builder.add_output(h[0]);
+        //        // Build second circuit
+        //        let builder = CircuitBuilder::new();
+        //
+        //        let e = builder.add_input::<u8>();
+        //        let f = builder.add_input::<u8>();
+        //
+        //        let g = e.wrapping_add(f);
+        //
+        //        let mut h = builder.append(adder.into(), &[f.into(), g.into()]).unwrap();
+        //
+        //        let h = h.pop().unwrap();
+        //        builder.add_output(h);
+        //
+        //        let circuit = builder.build().unwrap();
+        //        dbg!(&circuit.sub_circuits);
     }
 
     #[test]

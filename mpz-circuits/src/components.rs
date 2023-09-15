@@ -1,4 +1,7 @@
-use std::{fmt::Display, marker::PhantomData};
+use std::{
+    fmt::{Debug, Display},
+    marker::PhantomData,
+};
 
 /// A binary logic gate.
 #[derive(Debug, Clone, Copy)]
@@ -124,11 +127,17 @@ pub struct Feed;
 pub struct Sink;
 
 /// A node in a circuit.
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Hash, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Node<T> {
     pub(crate) id: usize,
     _pd: std::marker::PhantomData<T>,
+}
+
+impl<T> Debug for Node<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Node({})", self.id)
+    }
 }
 
 impl Display for Node<Feed> {
