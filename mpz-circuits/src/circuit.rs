@@ -139,6 +139,7 @@ impl Circuit {
         }
 
         let mut feeds: Vec<Option<bool>> = vec![None; self.feed_count()];
+        dbg!(&feeds);
 
         for (input, value) in self.inputs.iter().zip(values) {
             if input.value_type() != value.value_type() {

@@ -555,6 +555,32 @@ mod test {
     }
 
     #[test]
+    fn test_builder() {
+        // Build first circuit
+        let builder = CircuitBuilder::new();
+
+        let a = builder.add_input::<u8>();
+        let b = builder.add_input::<u8>();
+
+        let c = builder.state().add_xor_gate(a.into(), b.into());
+        let d = builder.state().add_and_gate(a.into(), c.into());
+
+        let c1 = builder.build().unwrap();
+        
+        // Build second circuit
+        let builder = CircuitBuilder::new();
+
+        let e = builder.add_input::<u8>();
+        let f = builder.add_input::<u8>();
+
+        let g = builder.state().add_xor_gate(e.into(), f.into());
+
+        let h = builder.append(circuit.into(), &[f.into(), g.into()]).unwrap();
+
+        let output = builder.add_output(h[0]);
+    }
+
+    #[test]
     fn test_build_adder() {
         let circ = build_adder();
 
