@@ -49,13 +49,12 @@ impl Circuit {
     pub fn gates(&self) -> impl Iterator<Item = Gate> + '_ {
         let mut shift = 0;
         self.sub_circuits.iter().flat_map(move |c| {
-            c.gates.iter().copied().map(move |mut g| {
-                g.shift_right({
-                    shift += c.feed_count;
-                    shift
-                });
+            let iter = c.gates.iter().copied().map(move |mut g| {
+                g.shift_right(shift);
                 g
-            })
+            });
+            shift += c.feed_count;
+            iter
         })
     }
 

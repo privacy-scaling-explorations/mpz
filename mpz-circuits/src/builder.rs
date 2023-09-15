@@ -9,7 +9,7 @@ use crate::{
 use std::{
     cell::RefCell,
     collections::HashMap,
-    mem::{discriminant, take},
+    mem::{discriminant, replace, take},
     sync::Arc,
 };
 
@@ -383,28 +383,9 @@ impl BuilderState {
         // This indicates the wires which should be connected to the inputs of the new circuit
         new_circuit_input_wiring: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
-        // Create a subcircuit of the current non-finished circuit and append it
-        // Also update the `sub_circuit_wiring` of the current builder state
-        let sub_circuit = SubCircuit {
-            gates: take(&mut self.gates),
-            feed_count: take(&mut self.feed_id),
-            and_count: take(&mut self.and_count),
-            xor_count: take(&mut self.xor_count),
-        };
-        self.sub_circuits.push(sub_circuit.into());
-        self.sub_circuit_wiring.push((
-            self.inputs
-                .iter()
-                .flat_map(|binary| binary.iter().copied())
-                .collect(),
-            self.outputs
-                .iter()
-                .flat_map(|binary| binary.iter().copied())
-                .collect(),
-        ));
-
         // Now update the current builder state with the subcircuits of the new circuit
         // We need to shift the node ids of these subcircuits by the number of feeds we have so far
+        self.build_sub_circuit();
 
         // Check if `new_circuit_input_wiring` is consistent with `circ.inputs()` and create
         // feedmap
@@ -466,7 +447,6 @@ impl BuilderState {
         // Shift all the node ids to the left by 2 to eliminate
         // the reserved constant nodes (which should be factored out during building)
         self.inputs.iter_mut().for_each(|input| input.shift_left(2));
-        self.gates.iter_mut().for_each(|gate| gate.shift_left(2));
         self.outputs
             .iter_mut()
             .for_each(|output| output.shift_left(2));
@@ -486,6 +466,43 @@ impl BuilderState {
         };
 
         Ok(circuit)
+    }
+
+    fn build_sub_circuit(&mut self) {
+        // Create a subcircuit of the current non-finished circuit and append it
+        // Also update the `sub_circuit_wiring` of the current builder state
+        let mut sub_circuit = SubCircuit {
+            gates: take(&mut self.gates),
+            feed_count: replace(&mut self.feed_id, 2) - 2,
+            and_count: take(&mut self.and_count),
+            xor_count: take(&mut self.xor_count),
+        };
+        sub_circuit
+            .gates
+            .iter_mut()
+            .for_each(|gate| gate.shift_left(2));
+
+        self.sub_circuits.push(sub_circuit.into());
+        self.sub_circuit_wiring.push((
+            self.inputs
+                .iter()
+                .flat_map(|binary| {
+                    binary.iter().copied().map(|mut node| {
+                        node.shift_left(2);
+                        node
+                    })
+                })
+                .collect(),
+            self.outputs
+                .iter()
+                .flat_map(|binary| {
+                    binary.iter().copied().map(|mut node| {
+                        node.shift_left(2);
+                        node
+                    })
+                })
+                .collect(),
+        ));
     }
 }
 
@@ -561,7 +578,7 @@ mod test {
 
         let c = a.wrapping_add(b);
 
-        let mut appended_outputs = builder.append(&circ, &[a.into(), c.into()]).unwrap();
+        let mut appended_outputs = builder.append(circ.into(), &[a.into(), c.into()]).unwrap();
 
         let d = appended_outputs.pop().unwrap();
 
