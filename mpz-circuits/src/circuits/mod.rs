@@ -54,7 +54,7 @@ pub fn aes128_trace<'a>(
 ) -> [Tracer<'a, U8>; 16] {
     let mut outputs = state
         .borrow_mut()
-        .append(&AES128, &[key.into(), msg.into()])
+        .append(Arc::clone(&*AES128), &[key.into(), msg.into()])
         .expect("aes 128 should append successfully");
 
     let BinaryRepr::Array(ciphertext) = outputs.pop().unwrap() else {
@@ -88,7 +88,7 @@ pub fn sha256_compress_trace<'a>(
 ) -> [Tracer<'a, U32>; 8] {
     let mut outputs = builder_state
         .borrow_mut()
-        .append(&SHA256_COMPRESS, &[state.into(), msg.into()])
+        .append(Arc::clone(&*SHA256_COMPRESS), &[state.into(), msg.into()])
         .expect("sha 256 should append successfully");
 
     let BinaryRepr::Array(output) = outputs.pop().unwrap() else {
@@ -183,7 +183,7 @@ pub fn sha256_trace<'a>(
     let circ = build_sha256(pos, msg.len());
     let mut outputs = builder_state
         .borrow_mut()
-        .append(&circ, &[state.into(), msg.to_vec().into()])
+        .append(circ.into(), &[state.into(), msg.to_vec().into()])
         .expect("circuit should append successfully");
 
     let BinaryRepr::Array(hash) = outputs.pop().unwrap() else {

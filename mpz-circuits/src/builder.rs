@@ -404,58 +404,61 @@ impl BuilderState {
         ));
 
         // Now update the current builder state with the subcircuits of the new circuit
+        // We need to shift the node ids of these subcircuits by the number of feeds we have so far
+
+        // Check if `new_circuit_input_wiring` is consistent with `circ.inputs()` and create
+        // feedmap
+        let input_feed_map = check_and_create_feed_map(circ.inputs(), new_circuit_input_wiring)?;
+
         let offset = self
             .sub_circuits
             .iter()
-            .map(|c| c.feed_count())
+            .map(|c| c.feed_count)
             .sum::<usize>();
         self.sub_circuits.extend_from_slice(&circ.sub_circuits);
-        self.sub_circuit_wiring.extend_from_slice(
-            &(circ
-                .sub_circuit_wiring
-                .into_iter()
-                .map(|(inputs, outputs)| {
-                    (
-                        inputs
-                            .iter()
-                            .copied()
-                            .map(|mut node| {
+        let circuit_wiring_adapted = circ
+            .sub_circuit_wiring
+            .iter()
+            .map(|(inputs, outputs)| {
+                (
+                    inputs
+                        .iter()
+                        .copied()
+                        .map(|mut node| {
+                            if let Some(n) = input_feed_map.get(&node) {
+                                node = *n;
+                            } else {
                                 node.shift_right(offset);
-                                node
-                            })
-                            .collect(),
-                        outputs
-                            .iter()
-                            .copied()
-                            .map(|mut node| {
-                                node.shift_right(offset);
-                                node
-                            })
-                            .collect(),
-                    )
-                })
-                .collect::<Vec<(Vec<Node<Feed>>, Vec<Node<Feed>>)>>()),
-        );
+                            }
+                            node
+                        })
+                        .collect(),
+                    outputs
+                        .iter()
+                        .copied()
+                        .map(|mut node| {
+                            node.shift_right(offset);
+                            node
+                        })
+                        .collect(),
+                )
+            })
+            .collect::<Vec<(Vec<Node<Feed>>, Vec<Node<Feed>>)>>();
 
-        // Check if `new_circuit_input_wiring` is consistent with `circ.inputs()`
-        let input_feed_map = check_and_create_feed_map(circ.inputs(), new_circuit_input_wiring)?;
+        self.sub_circuit_wiring
+            .extend_from_slice(&circuit_wiring_adapted);
 
-        // * Create a map which maps the feed ids of the input of the new circuit to what they
-        //    should be connected with from the old circuit
-        // * Append the subcircuits from the new circuit to the current builder state
-        // * Add the `sub_circuit_wiring` from the new circuit to the current builder state
-        //   ATTENTION: This needs to be adapted
-        // * Adapt the outputs of the current builder state
-        //
-        // Update the outputs
-        let mut outputs = circ.outputs().to_vec();
-        outputs.iter_mut().for_each(|output| {
-            for node in output.iter_mut() {
-                *node = *input_feed_map.get(node).expect("feed should exist");
-            }
-        });
+        self.outputs = circ
+            .outputs
+            .iter()
+            .cloned()
+            .map(|mut binary| {
+                binary.shift_right(offset);
+                binary
+            })
+            .collect();
 
-        Ok(outputs)
+        Ok(self.outputs.clone())
     }
 
     /// Builds the circuit.
@@ -468,7 +471,21 @@ impl BuilderState {
             .iter_mut()
             .for_each(|output| output.shift_left(2));
 
-        todo!()
+        let feed_count = self.sub_circuits.iter().map(|c| c.feed_count).sum();
+        let and_count = self.sub_circuits.iter().map(|c| c.and_count).sum();
+        let xor_count = self.sub_circuits.iter().map(|c| c.xor_count).sum();
+
+        let circuit = Circuit {
+            inputs: self.inputs,
+            outputs: self.outputs,
+            sub_circuit_wiring: self.sub_circuit_wiring,
+            sub_circuits: self.sub_circuits,
+            feed_count,
+            and_count,
+            xor_count,
+        };
+
+        Ok(circuit)
     }
 }
 

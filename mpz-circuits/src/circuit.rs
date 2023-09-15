@@ -5,7 +5,7 @@ use crate::{
     types::{BinaryRepr, TypeError, Value},
     Feed, Node,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 /// An error that can occur when performing operations with a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -27,6 +27,9 @@ pub struct Circuit {
     pub(crate) outputs: Vec<BinaryRepr>,
     pub(crate) sub_circuit_wiring: Vec<(Vec<Node<Feed>>, Vec<Node<Feed>>)>,
     pub(crate) sub_circuits: Vec<Arc<SubCircuit>>,
+    pub(crate) feed_count: usize,
+    pub(crate) and_count: usize,
+    pub(crate) xor_count: usize,
 }
 
 impl Circuit {
@@ -46,7 +49,7 @@ impl Circuit {
     pub fn gates(&self) -> impl Iterator<Item = Gate> + '_ {
         let mut shift = 0;
         self.sub_circuits.iter().flat_map(move |c| {
-            c.gates().copied().map(move |mut g| {
+            c.gates.iter().copied().map(move |mut g| {
                 g.shift_right({
                     shift += c.feed_count;
                     shift
@@ -58,26 +61,17 @@ impl Circuit {
 
     /// Returns the number of feeds in the circuit.
     pub fn feed_count(&self) -> usize {
-        self.sub_circuits
-            .iter()
-            .map(|c| c.feed_count())
-            .sum::<usize>()
+        self.feed_count
     }
 
     /// Returns the number of AND gates in the circuit.
     pub fn and_count(&self) -> usize {
-        self.sub_circuits
-            .iter()
-            .map(|c| c.and_count())
-            .sum::<usize>()
+        self.and_count
     }
 
     /// Returns the number of XOR gates in the circuit.
     pub fn xor_count(&self) -> usize {
-        self.sub_circuits
-            .iter()
-            .map(|c| c.xor_count())
-            .sum::<usize>()
+        self.xor_count
     }
 
     /// Reverses the order of the inputs.
@@ -209,28 +203,6 @@ pub(crate) struct SubCircuit {
     pub(crate) feed_count: usize,
     pub(crate) and_count: usize,
     pub(crate) xor_count: usize,
-}
-
-impl SubCircuit {
-    /// Returns the number of feeds in the subcircuit.
-    pub fn feed_count(&self) -> usize {
-        self.feed_count()
-    }
-
-    /// Returns an iterator for gates
-    pub fn gates(&self) -> impl Iterator<Item = &Gate> {
-        self.gates.iter()
-    }
-
-    /// Returns the number of AND gates in the subcircuit.
-    pub fn and_count(&self) -> usize {
-        self.and_count
-    }
-
-    /// Returns the number of XOR gates in the subcircuit.
-    pub fn xor_count(&self) -> usize {
-        self.xor_count
-    }
 }
 
 #[cfg(test)]
