@@ -468,13 +468,14 @@ impl BuilderState {
             .for_each(|gate| gate.shift_left(2));
 
         self.sub_circuits.push(sub_circuit.into());
+        let mut wiring: HashMap<Node<Feed>, Node<Feed>> = HashMap::default();
         self.inputs.iter().for_each(|binary| {
-            let mut wiring: HashMap<Node<Feed>, Node<Feed>> = HashMap::default();
             binary.iter().copied().for_each(|mut node| {
                 node.shift_left(2);
                 wiring.insert(node, node);
             })
         });
+        self.sub_circuit_wiring.push(wiring);
     }
 }
 
