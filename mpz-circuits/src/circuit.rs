@@ -5,7 +5,7 @@ use crate::{
     types::{BinaryRepr, TypeError, Value},
     Feed, Node,
 };
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 /// An error that can occur when performing operations with a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -25,7 +25,8 @@ pub enum CircuitError {
 pub struct Circuit {
     pub(crate) inputs: Vec<BinaryRepr>,
     pub(crate) outputs: Vec<BinaryRepr>,
-    pub(crate) sub_circuit_wiring: Vec<(Vec<Node<Feed>>, Vec<Node<Feed>>)>,
+    // Translates the n-th circuit local input wires to the global input wires
+    pub(crate) sub_circuit_wiring: Vec<HashMap<Node<Feed>, Node<Feed>>>,
     pub(crate) sub_circuits: Vec<Arc<SubCircuit>>,
     pub(crate) feed_count: usize,
     pub(crate) and_count: usize,
@@ -48,14 +49,34 @@ impl Circuit {
     /// Shifts the gates to the right by the number of feeds in the subcircuits before
     pub fn gates(&self) -> impl Iterator<Item = Gate> + '_ {
         let mut shift = 0;
-        self.sub_circuits.iter().flat_map(move |c| {
-            let iter = c.gates.iter().copied().map(move |mut g| {
-                g.shift_right(shift);
-                g
-            });
-            shift += c.feed_count;
-            iter
-        })
+        self.sub_circuits
+            .iter()
+            .enumerate()
+            .flat_map(move |(k, circ)| {
+                let wire_map = &self.sub_circuit_wiring[k];
+                let iter = circ.gates.iter().copied().map(move |mut g| {
+                    g.shift_right(shift);
+                    let new_x = wire_map.get(&(g.x().into()));
+                    let new_y = if let Some(y) = g.y() {
+                        wire_map.get(&(y.into()))
+                    } else {
+                        None
+                    };
+                    let new_z = wire_map.get(&(g.z()));
+                    if let Some(new_x) = new_x {
+                        g.set_x(new_x.id);
+                    }
+                    if let Some(new_y) = new_y {
+                        g.set_y(new_y.id);
+                    }
+                    if let Some(new_z) = new_z {
+                        g.set_z(new_z.id);
+                    }
+                    g
+                });
+                shift += circ.feed_count;
+                iter
+            })
     }
 
     /// Returns the number of feeds in the circuit.
@@ -139,7 +160,6 @@ impl Circuit {
         }
 
         let mut feeds: Vec<Option<bool>> = vec![None; self.feed_count()];
-        dbg!(&feeds);
 
         for (input, value) in self.inputs.iter().zip(values) {
             if input.value_type() != value.value_type() {
@@ -153,8 +173,10 @@ impl Circuit {
                 feeds[node.id] = Some(bit);
             }
         }
+        dbg!(&feeds);
 
-        for gate in self.gates() {
+        for (k, gate) in self.gates().enumerate() {
+            dbg!(k);
             match gate {
                 Gate::Xor { x, y, z } => {
                     let x = feeds[x.id].expect("Feed should be set");

@@ -103,6 +103,30 @@ impl Gate {
             }
         }
     }
+
+    pub(crate) fn set_x(&mut self, value: usize) {
+        match self {
+            Gate::Xor { x, .. } => *x = Node::<Sink>::new(value),
+            Gate::And { x, .. } => *x = Node::<Sink>::new(value),
+            Gate::Inv { x, .. } => *x = Node::<Sink>::new(value),
+        }
+    }
+
+    pub(crate) fn set_y(&mut self, value: usize) {
+        match self {
+            Gate::Xor { y, .. } => *y = Node::<Sink>::new(value),
+            Gate::And { y, .. } => *y = Node::<Sink>::new(value),
+            Gate::Inv { .. } => (),
+        }
+    }
+
+    pub(crate) fn set_z(&mut self, value: usize) {
+        match self {
+            Gate::Xor { z, .. } => *z = Node::<Feed>::new(value),
+            Gate::And { z, .. } => *z = Node::<Feed>::new(value),
+            Gate::Inv { z, .. } => *z = Node::<Feed>::new(value),
+        }
+    }
 }
 
 /// The type of a gate.

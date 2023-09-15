@@ -192,7 +192,8 @@ pub struct BuilderState {
     inputs: Vec<BinaryRepr>,
     outputs: Vec<BinaryRepr>,
     gates: Vec<Gate>,
-    sub_circuit_wiring: Vec<(Vec<Node<Feed>>, Vec<Node<Feed>>)>,
+    // Translates the n-th circuit local input wires to the global input wires
+    sub_circuit_wiring: Vec<HashMap<Node<Feed>, Node<Feed>>>,
     sub_circuits: Vec<Arc<SubCircuit>>,
     and_count: usize,
     xor_count: usize,
@@ -397,37 +398,20 @@ impl BuilderState {
             .map(|c| c.feed_count)
             .sum::<usize>();
         self.sub_circuits.extend_from_slice(&circ.sub_circuits);
-        let circuit_wiring_adapted = circ
-            .sub_circuit_wiring
-            .iter()
-            .map(|(inputs, outputs)| {
-                (
-                    inputs
-                        .iter()
-                        .copied()
-                        .map(|mut node| {
-                            if let Some(n) = input_feed_map.get(&node) {
-                                node = *n;
-                            } else {
-                                node.shift_right(offset);
-                            }
-                            node
-                        })
-                        .collect(),
-                    outputs
-                        .iter()
-                        .copied()
-                        .map(|mut node| {
-                            node.shift_right(offset);
-                            node
-                        })
-                        .collect(),
-                )
-            })
-            .collect::<Vec<(Vec<Node<Feed>>, Vec<Node<Feed>>)>>();
+
+        let mut sub_circuit_wiring = circ.sub_circuit_wiring.clone();
+        sub_circuit_wiring.iter_mut().for_each(|circuit_input_map| {
+            for value in circuit_input_map.values_mut() {
+                if let Some(n) = input_feed_map.get(value) {
+                    *value = *n;
+                } else {
+                    value.shift_right(offset);
+                }
+            }
+        });
 
         self.sub_circuit_wiring
-            .extend_from_slice(&circuit_wiring_adapted);
+            .extend_from_slice(&sub_circuit_wiring);
 
         self.outputs = circ
             .outputs
@@ -484,26 +468,13 @@ impl BuilderState {
             .for_each(|gate| gate.shift_left(2));
 
         self.sub_circuits.push(sub_circuit.into());
-        self.sub_circuit_wiring.push((
-            self.inputs
-                .iter()
-                .flat_map(|binary| {
-                    binary.iter().copied().map(|mut node| {
-                        node.shift_left(2);
-                        node
-                    })
-                })
-                .collect(),
-            self.outputs
-                .iter()
-                .flat_map(|binary| {
-                    binary.iter().copied().map(|mut node| {
-                        node.shift_left(2);
-                        node
-                    })
-                })
-                .collect(),
-        ));
+        self.inputs.iter().for_each(|binary| {
+            let mut wiring: HashMap<Node<Feed>, Node<Feed>> = HashMap::default();
+            binary.iter().copied().for_each(|mut node| {
+                node.shift_left(2);
+                wiring.insert(node, node);
+            })
+        });
     }
 }
 
@@ -553,28 +524,6 @@ mod test {
         builder.add_output(c);
 
         builder.build().unwrap()
-    }
-
-    #[test]
-    fn test_builder() {
-        let adder = build_adder();
-        dbg!(adder);
-
-        //        // Build second circuit
-        //        let builder = CircuitBuilder::new();
-        //
-        //        let e = builder.add_input::<u8>();
-        //        let f = builder.add_input::<u8>();
-        //
-        //        let g = e.wrapping_add(f);
-        //
-        //        let mut h = builder.append(adder.into(), &[f.into(), g.into()]).unwrap();
-        //
-        //        let h = h.pop().unwrap();
-        //        builder.add_output(h);
-        //
-        //        let circuit = builder.build().unwrap();
-        //        dbg!(&circuit.sub_circuits);
     }
 
     #[test]
