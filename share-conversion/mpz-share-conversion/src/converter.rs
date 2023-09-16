@@ -6,7 +6,7 @@ use mpz_share_conversion_core::{Field, Share};
 use crate::{
     AdditiveToMultiplicative, GilboaReceiver, GilboaSender, MultiplicativeToAdditive,
     OTReceiveElement, OTSendElement, ReceiverConfig, SenderConfig, ShareConversionChannel,
-    ShareConversionError,
+    ShareConversionError, ShareConversionReveal, ShareConversionVerify,
 };
 
 /// The share conversion sender
@@ -49,9 +49,16 @@ where
             ),
         })
     }
+}
 
+#[async_trait]
+impl<F, OT> ShareConversionReveal for ConverterSender<F, OT>
+where
+    F: Field,
+    OT: OTSendElement<F> + Clone,
+{
     /// Reveals the Sender's seed and tape to the Receiver for verification.
-    pub async fn reveal(&mut self) -> Result<(), ShareConversionError> {
+    async fn reveal(&mut self) -> Result<(), ShareConversionError> {
         let sender = self
             .sender
             .take()
@@ -192,9 +199,16 @@ where
             ),
         })
     }
+}
 
+#[async_trait]
+impl<F, OT> ShareConversionVerify for ConverterReceiver<F, OT>
+where
+    F: Field,
+    OT: OTReceiveElement<F> + Clone,
+{
     /// Verifies the Sender's seed and tape.
-    pub async fn verify(&mut self) -> Result<(), ShareConversionError> {
+    async fn verify(&mut self) -> Result<(), ShareConversionError> {
         let receiver = self
             .receiver
             .take()
