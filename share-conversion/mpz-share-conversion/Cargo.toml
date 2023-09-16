@@ -26,4 +26,9 @@ derive_builder.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = [
+    "net",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+] }
