@@ -5,7 +5,7 @@ use crate::{
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
     Circuit, Tracer,
 };
-use std::{cell::RefCell, collections::HashMap, mem::discriminant, sync::Arc};
+use std::{cell::RefCell, mem::discriminant, sync::Arc};
 
 /// An error that can occur when building a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -189,6 +189,8 @@ pub struct BuilderState {
 
     and_count: usize,
     xor_count: usize,
+    appended_circuits: Vec<Arc<Circuit>>,
+    appended_circuits_inputs: Vec<Vec<BinaryRepr>>,
 }
 
 impl Default for BuilderState {
@@ -201,6 +203,8 @@ impl Default for BuilderState {
             gates: vec![],
             and_count: 0,
             xor_count: 0,
+            appended_circuits: vec![],
+            appended_circuits_inputs: vec![],
         }
     }
 }
@@ -379,8 +383,6 @@ impl BuilderState {
             ));
         }
 
-        // Maps old feed id -> new feed id
-        let mut feed_map: HashMap<Node<Feed>, Node<Feed>> = HashMap::default();
         for (i, (builder_input, append_input)) in
             builder_inputs.iter().zip(circ.inputs()).enumerate()
         {
@@ -390,43 +392,19 @@ impl BuilderState {
                     append_input, builder_input,
                 )));
             }
-            for (builder_node, append_node) in builder_input.iter().zip(append_input.iter()) {
-                feed_map.insert(*append_node, *builder_node);
-            }
         }
 
-        // Add new gates, mapping the node ids from the old circuit to the new circuit
-        for gate in circ.gates() {
-            match gate {
-                Gate::Xor { x, y, z } => {
-                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
-                    let new_y = feed_map.get(&(*y).into()).expect("feed should exist");
-                    let new_z = self.add_xor_gate(*new_x, *new_y);
-                    feed_map.insert(*z, new_z);
-                }
-                Gate::And { x, y, z } => {
-                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
-                    let new_y = feed_map.get(&(*y).into()).expect("feed should exist");
-                    let new_z = self.add_and_gate(*new_x, *new_y);
-                    feed_map.insert(*z, new_z);
-                }
-                Gate::Inv { x, z } => {
-                    let new_x = feed_map.get(&(*x).into()).expect("feed should exist");
-                    let new_z = self.add_inv_gate(*new_x);
-                    feed_map.insert(*z, new_z);
-                }
-            }
-        }
+        // Store the new circuit and the input mappings
+        self.appended_circuits.push(Arc::clone(&circ));
+        self.appended_circuits_inputs.push(builder_inputs.to_vec());
 
         // Update the outputs
-        let mut outputs = circ.outputs().to_vec();
-        outputs.iter_mut().for_each(|output| {
-            for node in output.iter_mut() {
-                *node = *feed_map.get(node).expect("feed should exist");
-            }
-        });
+        self.outputs = circ.outputs().to_vec();
+        self.outputs
+            .iter_mut()
+            .for_each(|output| output.shift_right(circ.feed_count()));
 
-        Ok(outputs)
+        Ok(self.outputs.clone())
     }
 
     /// Builds the circuit.
@@ -446,7 +424,8 @@ impl BuilderState {
             feed_count: self.feed_id,
             and_count: self.and_count,
             xor_count: self.xor_count,
-            appended_circuits: vec![],
+            appended_circuits: self.appended_circuits,
+            appended_circuits_inputs: self.appended_circuits_inputs,
         })
     }
 }
@@ -496,7 +475,7 @@ mod test {
 
         let c = a.wrapping_add(b);
 
-        let mut appended_outputs = builder.append(&circ, &[a.into(), c.into()]).unwrap();
+        let mut appended_outputs = builder.append(circ.into(), &[a.into(), c.into()]).unwrap();
 
         let d = appended_outputs.pop().unwrap();
 

@@ -29,6 +29,7 @@ pub struct Circuit {
     pub(crate) and_count: usize,
     pub(crate) xor_count: usize,
     pub(crate) appended_circuits: Vec<Arc<Circuit>>,
+    pub(crate) appended_circuits_inputs: Vec<Vec<BinaryRepr>>,
 }
 
 impl Circuit {
@@ -50,16 +51,31 @@ impl Circuit {
     /// Returns the number of feeds in the circuit.
     pub fn feed_count(&self) -> usize {
         self.feed_count
+            + self
+                .appended_circuits
+                .iter()
+                .map(|c| c.feed_count())
+                .sum::<usize>()
     }
 
     /// Returns the number of AND gates in the circuit.
     pub fn and_count(&self) -> usize {
         self.and_count
+            + self
+                .appended_circuits
+                .iter()
+                .map(|c| c.and_count())
+                .sum::<usize>()
     }
 
     /// Returns the number of XOR gates in the circuit.
     pub fn xor_count(&self) -> usize {
         self.xor_count
+            + self
+                .appended_circuits
+                .iter()
+                .map(|c| c.xor_count())
+                .sum::<usize>()
     }
 
     /// Reverses the order of the inputs.
