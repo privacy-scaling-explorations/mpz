@@ -48,35 +48,32 @@ impl Circuit {
     ///
     /// Shifts the gates to the right by the number of feeds in the subcircuits before
     pub fn gates(&self) -> impl Iterator<Item = Gate> + '_ {
-        let mut shift = 0;
-        self.sub_circuits
-            .iter()
-            .enumerate()
-            .flat_map(move |(k, circ)| {
-                let wire_map = &self.sub_circuit_wiring[k];
-                let iter = circ.gates.iter().copied().map(move |mut g| {
-                    g.shift_right(shift);
-                    let new_x = wire_map.get(&(g.x().into()));
-                    let new_y = if let Some(y) = g.y() {
-                        wire_map.get(&(y.into()))
-                    } else {
-                        None
-                    };
-                    let new_z = wire_map.get(&(g.z()));
-                    if let Some(new_x) = new_x {
-                        g.set_x(new_x.id);
-                    }
-                    if let Some(new_y) = new_y {
-                        g.set_y(new_y.id);
-                    }
-                    if let Some(new_z) = new_z {
-                        g.set_z(new_z.id);
-                    }
-                    g
-                });
-                shift += circ.feed_count;
-                iter
-            })
+        let mut all_iter = vec![];
+        self.sub_circuits.iter().enumerate().for_each(|(k, circ)| {
+            let wire_map = &self.sub_circuit_wiring[k];
+            let iter = circ.gates.iter().copied().map(move |mut g| {
+                let new_x = wire_map.get(&(g.x().into()));
+                let new_y = if let Some(y) = g.y() {
+                    wire_map.get(&(y.into()))
+                } else {
+                    None
+                };
+                let new_z = wire_map.get(&(g.z()));
+                if let Some(new_x) = new_x {
+                    g.set_x(new_x.id);
+                }
+                if let Some(new_y) = new_y {
+                    g.set_y(new_y.id);
+                }
+                if let Some(new_z) = new_z {
+                    g.set_z(new_z.id);
+                }
+                g
+            });
+            all_iter.push(iter);
+        });
+
+        all_iter.into_iter().flatten()
     }
 
     /// Returns the number of feeds in the circuit.
