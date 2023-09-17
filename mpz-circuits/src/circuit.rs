@@ -44,38 +44,28 @@ impl Circuit {
     }
 
     /// Returns a reference to the gates of the circuit.
-    pub fn gates(&self) -> &[Gate] {
-        &self.gates
+    pub fn gates(&self) -> impl Iterator<Item = &Gate> + '_ {
+        // TODO:
+        // - Iterate through all gates, and also of appended circuits, but iterate FIRST through appended circuits
+        // - If `appended_circuits_inputs` is not empty for current circuit:
+        //     - Need to shift gates according to number of circuits before current in `appended_circuits` * feed count
+        //     - replace inputs of gates with inputs from `appended_circuits_inputs`
+        todo!()
     }
 
     /// Returns the number of feeds in the circuit.
     pub fn feed_count(&self) -> usize {
         self.feed_count
-            + self
-                .appended_circuits
-                .iter()
-                .map(|c| c.feed_count())
-                .sum::<usize>()
     }
 
     /// Returns the number of AND gates in the circuit.
     pub fn and_count(&self) -> usize {
         self.and_count
-            + self
-                .appended_circuits
-                .iter()
-                .map(|c| c.and_count())
-                .sum::<usize>()
     }
 
     /// Returns the number of XOR gates in the circuit.
     pub fn xor_count(&self) -> usize {
         self.xor_count
-            + self
-                .appended_circuits
-                .iter()
-                .map(|c| c.xor_count())
-                .sum::<usize>()
     }
 
     /// Reverses the order of the inputs.
