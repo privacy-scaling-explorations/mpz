@@ -4,6 +4,7 @@ use crate::{
     components::Gate,
     types::{BinaryRepr, TypeError, Value},
 };
+use std::sync::Arc;
 
 /// An error that can occur when performing operations with a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -25,9 +26,9 @@ pub struct Circuit {
     pub(crate) outputs: Vec<BinaryRepr>,
     pub(crate) gates: Vec<Gate>,
     pub(crate) feed_count: usize,
-
     pub(crate) and_count: usize,
     pub(crate) xor_count: usize,
+    pub(crate) appended_circuits: Vec<Arc<Circuit>>,
 }
 
 impl Circuit {
