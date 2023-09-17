@@ -5,7 +5,7 @@ use crate::{
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
     Circuit, Tracer,
 };
-use std::{cell::RefCell, collections::HashMap, mem::discriminant};
+use std::{cell::RefCell, collections::HashMap, mem::discriminant, sync::Arc};
 
 /// An error that can occur when building a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -167,7 +167,7 @@ impl CircuitBuilder {
     /// The outputs of the appended circuit
     pub fn append(
         &self,
-        circ: &Circuit,
+        circ: Arc<Circuit>,
         builder_inputs: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
         self.state.borrow_mut().append(circ, builder_inputs)
@@ -370,7 +370,7 @@ impl BuilderState {
     /// The outputs of the appended circuit
     pub fn append(
         &mut self,
-        circ: &Circuit,
+        circ: Arc<Circuit>,
         builder_inputs: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
         if builder_inputs.len() != circ.inputs().len() {
@@ -446,6 +446,7 @@ impl BuilderState {
             feed_count: self.feed_id,
             and_count: self.and_count,
             xor_count: self.xor_count,
+            appended_circuits: vec![],
         })
     }
 }
