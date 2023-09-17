@@ -84,7 +84,7 @@ mod tests {
     fn test_and_gate() {
         use crate::{evaluator as ev, generator as gen};
 
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut rng = ChaCha12Rng::seed_from_u64(0);
         let cipher = &(*FIXED_KEY_AES);
 
         let delta = Delta::random(&mut rng);
