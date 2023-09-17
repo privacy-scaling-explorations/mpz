@@ -129,6 +129,19 @@ impl BinaryRepr {
         }
     }
 
+    /// Shifts the nodes IDs to the right by the given offset.
+    pub(crate) fn shift_right(&mut self, offset: usize) {
+        match self {
+            BinaryRepr::Bit(v) => v.shift_right(offset),
+            BinaryRepr::U8(v) => v.shift_right(offset),
+            BinaryRepr::U16(v) => v.shift_right(offset),
+            BinaryRepr::U32(v) => v.shift_right(offset),
+            BinaryRepr::U64(v) => v.shift_right(offset),
+            BinaryRepr::U128(v) => v.shift_right(offset),
+            BinaryRepr::Array(v) => v.iter_mut().for_each(|v| v.shift_right(offset)),
+        }
+    }
+
     /// Decodes the type from a binary value.
     ///
     /// # Arguments
@@ -196,6 +209,10 @@ macro_rules! define_binary_value {
 
             pub(crate) fn shift_left(&mut self, offset: usize) {
                 self.0.iter_mut().for_each(|v| v.shift_left(offset))
+            }
+
+            pub(crate) fn shift_right(&mut self, offset: usize) {
+                self.0.iter_mut().for_each(|v| v.shift_right(offset))
             }
         }
 
