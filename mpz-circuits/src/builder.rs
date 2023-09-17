@@ -5,7 +5,11 @@ use crate::{
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
     Circuit, Tracer,
 };
-use std::{cell::RefCell, mem::discriminant, sync::Arc};
+use std::{
+    cell::RefCell,
+    mem::{discriminant, take},
+    sync::Arc,
+};
 
 /// An error that can occur when building a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -394,15 +398,25 @@ impl BuilderState {
             }
         }
 
-        // Store the new circuit and the input mappings
-        self.appended_circuits.push(Arc::clone(&circ));
-        self.appended_circuits_inputs.push(builder_inputs.to_vec());
+        // Append self
+        let current_circ = self.build_current();
+        self.appended_circuits.push(current_circ.into());
+        self.appended_circuits_inputs.push(vec![]);
 
         // Update the outputs
         self.outputs = circ.outputs().to_vec();
         self.outputs
             .iter_mut()
-            .for_each(|output| output.shift_right(circ.feed_count()));
+            .for_each(|output| output.shift_right(self.feed_id));
+
+        // Store the new circuit and the input mappings
+        self.appended_circuits.push(Arc::clone(&circ));
+        self.appended_circuits_inputs.push(builder_inputs.to_vec());
+
+        // Increment variables
+        self.feed_id += circ.feed_count();
+        self.and_count += circ.and_count();
+        self.xor_count += circ.xor_count();
 
         Ok(self.outputs.clone())
     }
@@ -427,6 +441,36 @@ impl BuilderState {
             appended_circuits: self.appended_circuits,
             appended_circuits_inputs: self.appended_circuits_inputs,
         })
+    }
+
+    pub(crate) fn build_current(&mut self) -> Circuit {
+        self.gates.iter_mut().for_each(|gate| gate.shift_left(2));
+
+        Circuit {
+            inputs: vec![],
+            outputs: vec![],
+            gates: take(&mut self.gates),
+            feed_count: self.feed_id
+                - self
+                    .appended_circuits
+                    .iter()
+                    .map(|c| c.feed_count())
+                    .sum::<usize>(),
+            and_count: self.and_count
+                - self
+                    .appended_circuits
+                    .iter()
+                    .map(|c| c.and_count())
+                    .sum::<usize>(),
+            xor_count: self.xor_count
+                - self
+                    .appended_circuits
+                    .iter()
+                    .map(|c| c.xor_count())
+                    .sum::<usize>(),
+            appended_circuits: vec![],
+            appended_circuits_inputs: vec![],
+        }
     }
 }
 
