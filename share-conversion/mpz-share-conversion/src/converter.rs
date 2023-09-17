@@ -55,7 +55,7 @@ where
 impl<F, OT> ShareConversionReveal for ConverterSender<F, OT>
 where
     F: Field,
-    OT: OTSendElement<F> + Clone,
+    OT: OTSendElement<F>,
 {
     /// Reveals the Sender's seed and tape to the Receiver for verification.
     async fn reveal(&mut self) -> Result<(), ShareConversionError> {
@@ -205,7 +205,7 @@ where
 impl<F, OT> ShareConversionVerify for ConverterReceiver<F, OT>
 where
     F: Field,
-    OT: OTReceiveElement<F> + Clone,
+    OT: OTReceiveElement<F>,
 {
     /// Verifies the Sender's seed and tape.
     async fn verify(&mut self) -> Result<(), ShareConversionError> {
