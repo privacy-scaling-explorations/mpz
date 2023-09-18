@@ -46,8 +46,6 @@ impl Circuit {
     /// Returns a reference to the gates of the circuit.
     pub fn gates(&self) -> Box<dyn Iterator<Item = Gate> + '_> {
         let mut feeds_so_far = 0;
-        dbg!(&self.appended_circuits);
-        dbg!(&self.appended_circuits_inputs);
 
         let iter = self
             .appended_circuits
@@ -64,37 +62,39 @@ impl Circuit {
                     .flat_map(|bin| bin.iter())
                     .collect::<Vec<_>>();
 
-                if new_inputs.is_empty() {
-                    return circ.gates();
-                }
+                let gates_iter = if new_inputs.is_empty() {
+                    circ.gates()
+                } else {
+                    let iter = circ.gates().map(move |mut gate| {
+                        gate.shift_right(feeds_so_far);
 
-                let gates_iter = circ.gates().map(move |mut gate| {
-                    gate.shift_right(feeds_so_far);
-
-                    let x = gate.x();
-                    let y = gate.y();
-                    if let Some(pos) = old_inputs
-                        .iter()
-                        .position(|node| node.id + feeds_so_far == x.id)
-                    {
-                        gate.set_x(new_inputs[pos].id);
-                    }
-
-                    if let Some(y) = y {
+                        let x = gate.x();
+                        let y = gate.y();
                         if let Some(pos) = old_inputs
                             .iter()
-                            .position(|node| node.id + feeds_so_far == y.id)
+                            .position(|node| node.id + feeds_so_far == x.id)
                         {
                             gate.set_x(new_inputs[pos].id);
                         }
-                    }
-                    gate
-                });
+
+                        if let Some(y) = y {
+                            if let Some(pos) = old_inputs
+                                .iter()
+                                .position(|node| node.id + feeds_so_far == y.id)
+                            {
+                                gate.set_y(new_inputs[pos].id);
+                            }
+                        }
+                        gate
+                    });
+                    Box::new(iter)
+                };
 
                 // Shift right by the number of feeds so far
                 // Replace gates which have `old_inputs` with `new_inputs`
 
-                feeds_so_far += self.feed_count();
+                dbg!(k, feeds_so_far);
+                feeds_so_far += circ.feed_count();
                 Box::new(gates_iter)
             })
             .chain(self.gates.iter().copied());
@@ -175,6 +175,8 @@ impl Circuit {
     ///
     /// The outputs of the circuit.
     pub fn evaluate(&self, values: &[Value]) -> Result<Vec<Value>, CircuitError> {
+        dbg!(&self);
+        dbg!(&self.gates().collect::<Vec<Gate>>());
         if values.len() != self.inputs.len() {
             return Err(CircuitError::InvalidInputCount(
                 self.inputs.len(),
@@ -222,7 +224,6 @@ impl Circuit {
         let outputs = self
             .outputs
             .iter()
-            .cloned()
             .map(|output| {
                 let bits: Vec<bool> = output
                     .iter()
