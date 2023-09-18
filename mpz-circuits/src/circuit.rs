@@ -90,10 +90,6 @@ impl Circuit {
                     Box::new(iter)
                 };
 
-                // Shift right by the number of feeds so far
-                // Replace gates which have `old_inputs` with `new_inputs`
-
-                dbg!(k, feeds_so_far);
                 feeds_so_far += circ.feed_count();
                 Box::new(gates_iter)
             })
@@ -175,8 +171,6 @@ impl Circuit {
     ///
     /// The outputs of the circuit.
     pub fn evaluate(&self, values: &[Value]) -> Result<Vec<Value>, CircuitError> {
-        dbg!(&self);
-        dbg!(&self.gates().collect::<Vec<Gate>>());
         if values.len() != self.inputs.len() {
             return Err(CircuitError::InvalidInputCount(
                 self.inputs.len(),
