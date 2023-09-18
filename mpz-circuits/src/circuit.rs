@@ -59,7 +59,7 @@ impl Circuit {
                     .iter()
                     .flat_map(|bin| bin.iter())
                     .collect::<Vec<_>>();
-                let new_inputs = circ.appended_circuits_inputs[k]
+                let new_inputs = self.appended_circuits_inputs[k]
                     .iter()
                     .flat_map(|bin| bin.iter())
                     .collect::<Vec<_>>();
