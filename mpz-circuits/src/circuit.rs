@@ -44,13 +44,60 @@ impl Circuit {
     }
 
     /// Returns a reference to the gates of the circuit.
-    pub fn gates(&self) -> impl Iterator<Item = &Gate> + '_ {
-        // TODO:
-        // - Iterate through all gates, and also of appended circuits, but iterate FIRST through appended circuits
-        // - If `appended_circuits_inputs` is not empty for current circuit:
-        //     - Need to shift gates according to number of circuits before current in `appended_circuits` * feed count
-        //     - replace inputs of gates with inputs from `appended_circuits_inputs`
-        todo!()
+    pub fn gates(&self) -> Box<dyn Iterator<Item = Gate> + '_> {
+        let mut feeds_so_far = 0;
+
+        let iter = self
+            .appended_circuits
+            .iter()
+            .enumerate()
+            .flat_map(move |(k, circ)| {
+                let old_inputs = circ
+                    .inputs
+                    .iter()
+                    .flat_map(|bin| bin.iter())
+                    .collect::<Vec<_>>();
+                let new_inputs = circ.appended_circuits_inputs[k]
+                    .iter()
+                    .flat_map(|bin| bin.iter())
+                    .collect::<Vec<_>>();
+
+                if new_inputs.is_empty() {
+                    return circ.gates();
+                }
+
+                let gates_iter = circ.gates().map(move |mut gate| {
+                    gate.shift_right(feeds_so_far);
+
+                    let x = gate.x();
+                    let y = gate.y();
+                    if let Some(pos) = old_inputs
+                        .iter()
+                        .position(|node| node.id == x.id + feeds_so_far)
+                    {
+                        gate.set_x(new_inputs[pos].id);
+                    }
+
+                    if let Some(y) = y {
+                        if let Some(pos) = old_inputs
+                            .iter()
+                            .position(|node| node.id == y.id + feeds_so_far)
+                        {
+                            gate.set_x(new_inputs[pos].id);
+                        }
+                    }
+                    gate
+                });
+
+                // Shift right by the number of feeds so far
+                // Replace gates which have `old_inputs` with `new_inputs`
+
+                feeds_so_far += self.feed_count();
+                Box::new(gates_iter)
+            })
+            .chain(self.gates.iter().copied());
+
+        Box::new(iter)
     }
 
     /// Returns the number of feeds in the circuit.

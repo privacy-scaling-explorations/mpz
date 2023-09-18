@@ -59,6 +59,24 @@ impl Gate {
         }
     }
 
+    /// Sets the x value of this gate
+    pub fn set_x(&mut self, value: usize) {
+        match self {
+            Gate::Xor { x, .. } => x.id = value,
+            Gate::And { x, .. } => x.id = value,
+            Gate::Inv { x, .. } => x.id = value,
+        }
+    }
+
+    /// Sets the y value of this gate
+    pub fn set_y(&mut self, value: usize) {
+        match self {
+            Gate::Xor { y, .. } => y.id = value,
+            Gate::And { y, .. } => y.id = value,
+            Gate::Inv { .. } => (),
+        }
+    }
+
     /// Shifts all the node IDs of the gate to the left by the given offset.
     #[inline]
     pub(crate) fn shift_left(&mut self, offset: usize) {
