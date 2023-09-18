@@ -46,6 +46,8 @@ impl Circuit {
     /// Returns a reference to the gates of the circuit.
     pub fn gates(&self) -> Box<dyn Iterator<Item = Gate> + '_> {
         let mut feeds_so_far = 0;
+        dbg!(&self.appended_circuits);
+        dbg!(&self.appended_circuits_inputs);
 
         let iter = self
             .appended_circuits
@@ -73,7 +75,7 @@ impl Circuit {
                     let y = gate.y();
                     if let Some(pos) = old_inputs
                         .iter()
-                        .position(|node| node.id == x.id + feeds_so_far)
+                        .position(|node| node.id + feeds_so_far == x.id)
                     {
                         gate.set_x(new_inputs[pos].id);
                     }
@@ -81,7 +83,7 @@ impl Circuit {
                     if let Some(y) = y {
                         if let Some(pos) = old_inputs
                             .iter()
-                            .position(|node| node.id == y.id + feeds_so_far)
+                            .position(|node| node.id + feeds_so_far == y.id)
                         {
                             gate.set_x(new_inputs[pos].id);
                         }
@@ -195,7 +197,7 @@ impl Circuit {
             }
         }
 
-        for gate in self.gates.iter() {
+        for gate in self.gates() {
             match gate {
                 Gate::Xor { x, y, z } => {
                     let x = feeds[x.id].expect("Feed should be set");
@@ -234,15 +236,6 @@ impl Circuit {
             .collect();
 
         Ok(outputs)
-    }
-}
-
-impl IntoIterator for Circuit {
-    type Item = Gate;
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.gates.into_iter()
     }
 }
 
