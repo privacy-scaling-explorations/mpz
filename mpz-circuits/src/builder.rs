@@ -411,7 +411,16 @@ impl BuilderState {
 
         // Store the new circuit and the input mappings
         self.appended_circuits.push(Arc::clone(&circ));
-        self.appended_circuits_inputs.push(builder_inputs.to_vec());
+        self.appended_circuits_inputs.push(
+            builder_inputs
+                .iter()
+                .cloned()
+                .map(|mut bin| {
+                    bin.shift_left(2);
+                    bin
+                })
+                .collect(),
+        );
 
         // Increment variables
         self.feed_id += circ.feed_count();
@@ -435,7 +444,7 @@ impl BuilderState {
             inputs: self.inputs,
             outputs: self.outputs,
             gates: self.gates,
-            feed_count: self.feed_id,
+            feed_count: self.feed_id - 2,
             and_count: self.and_count,
             xor_count: self.xor_count,
             appended_circuits: self.appended_circuits,
@@ -455,7 +464,8 @@ impl BuilderState {
                     .appended_circuits
                     .iter()
                     .map(|c| c.feed_count())
-                    .sum::<usize>(),
+                    .sum::<usize>()
+                - 2,
             and_count: self.and_count
                 - self
                     .appended_circuits
@@ -519,19 +529,15 @@ mod test {
 
         let c = a.wrapping_add(b);
 
-        let mut appended_outputs = builder.append(circ.into(), &[a.into(), c.into()]).unwrap();
-
-        let d = appended_outputs.pop().unwrap();
-
-        builder.add_output(d);
+        let _appended_outputs = builder.append(circ.into(), &[a.into(), c.into()]).unwrap();
 
         let circ = builder.build().unwrap();
 
-        let mut output = circ.evaluate(&[1u8.into(), 1u8.into()]).unwrap();
+        let mut output = circ.evaluate(&[2u8.into(), 7u8.into()]).unwrap();
 
         let d: u8 = output.pop().unwrap().try_into().unwrap();
 
         // a + (a + b) = 2a + b
-        assert_eq!(d, 3u8);
+        assert_eq!(d, 11u8);
     }
 }

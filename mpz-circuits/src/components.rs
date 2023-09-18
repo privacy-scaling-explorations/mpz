@@ -68,7 +68,7 @@ impl Gate {
             Gate::Xor { x, .. } => x.id = value,
             Gate::And { x, .. } => x.id = value,
             Gate::Inv { x, .. } => x.id = value,
-        }
+        };
     }
 
     /// Sets the y value of this gate
@@ -77,7 +77,7 @@ impl Gate {
             Gate::Xor { y, .. } => y.id = value,
             Gate::And { y, .. } => y.id = value,
             Gate::Inv { .. } => (),
-        }
+        };
     }
 
     /// Shifts all the node IDs of the gate to the left by the given offset.
