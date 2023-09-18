@@ -13,7 +13,7 @@ use crate::{
 
 // circom crates
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: &'static str = "2.0.0";
 
 use std::path::PathBuf;
 use ansi_term::Colour;
@@ -248,6 +248,41 @@ const SYM: &'static str = "sym";
 const JSON: &'static str = "json";
 
 impl Input {
+    pub fn default() -> Result<Input, ()> {
+       let input = Input { 
+        input_program: PathBuf::from("/Users/namncc/Documents/GitHub/mpz/mpz-circuits/src/assets/circuit.circom"),
+        out_r1cs: PathBuf::from("./assets/tmp"),
+        out_json_constraints: PathBuf::from("./assets/tmp"),
+        out_wat_code: PathBuf::from("./assets/tmp"),
+        out_wasm_code: PathBuf::from("./assets/tmp"),
+        out_wasm_name: String::from("./assets/tmp"),
+        out_js_folder: PathBuf::from("./assets/tmp"),
+        out_c_run_name: String::from("./assets/tmp"),
+        out_c_folder: PathBuf::from("./assets/tmp"),
+        out_c_code: PathBuf::from("./assets/tmp"),
+        out_c_dat: PathBuf::from("./assets/tmp"),
+        out_sym: PathBuf::from("./assets/tmp"),
+        c_flag: true,
+        wasm_flag: false,
+        wat_flag:false,
+        r1cs_flag: false,
+        sym_flag: false,
+        json_constraint_flag: false,
+        json_substitution_flag: false,
+        main_inputs_flag: false,
+        print_ir_flag: true,
+        fast_flag: false,
+        reduced_simplification_flag: false,
+        parallel_simplification_flag: false,
+        flag_old_heuristics: false,
+        inspect_constraints_flag: false,
+        no_rounds: usize::MAX,
+        flag_verbose: true,
+        prime: String::from("bn128"),
+        link_libraries: Vec::new(), 
+        };
+        Ok(input)
+    }
     pub fn new() -> Result<Input, ()> {
         // use SimplificationStyle;
         let matches = view();
@@ -418,6 +453,7 @@ use std::path::Path;
 // use crate::VERSION;
 
 pub fn get_input(matches: &ArgMatches) -> Result<PathBuf, ()> {
+    println!("{:?}", matches.value_of("input"));
     let route = Path::new(matches.value_of("input").unwrap()).to_path_buf();
     if route.is_file() {
         Result::Ok(route)
@@ -558,7 +594,7 @@ pub fn view() -> ArgMatches<'static> {
             .arg(
                 Arg::with_name("input")
                     .multiple(false)
-                    .default_value("./circuit.circom")
+                    .default_value("./assets/circuit.circom")
                     .help("Path to a circuit with a main component"),
             )
             .arg(
@@ -784,7 +820,7 @@ impl Circuit {
         outputs: &[ValueType],
     ) -> Result<(), ()> {
 
-        let user_input = Input::new()?;
+        let user_input = Input::default()?;
         let mut program_archive = parse_project(&user_input)?;
         analyse_project(&mut program_archive)?;
 
@@ -960,4 +996,21 @@ mod tests {
         //assert_eq!(output, 3);
     }
 
+}
+
+
+fn main() {
+    let circ = Circuit::parse_circom(
+        "circuits/bristol/adder64_reverse.txt",
+        &[ValueType::U64, ValueType::U64],
+        &[ValueType::U64],
+    )
+    .unwrap();
+
+    // stupid assert always true
+    assert_eq!(3, 3);
+
+    //let output: u64 = evaluate!(circ, fn(1u64, 2u64) -> u64).unwrap();
+
+    //assert_eq!(output, 3); 
 }
