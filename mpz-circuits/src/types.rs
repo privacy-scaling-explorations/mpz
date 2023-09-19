@@ -103,32 +103,6 @@ impl BinaryRepr {
         }
     }
 
-    /// Returns a mutable iterator over the nodes.
-    pub(crate) fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut Node<Feed>> + '_> {
-        match self {
-            BinaryRepr::Bit(v) => Box::new(v.0.iter_mut()),
-            BinaryRepr::U8(v) => Box::new(v.0.iter_mut()),
-            BinaryRepr::U16(v) => Box::new(v.0.iter_mut()),
-            BinaryRepr::U32(v) => Box::new(v.0.iter_mut()),
-            BinaryRepr::U64(v) => Box::new(v.0.iter_mut()),
-            BinaryRepr::U128(v) => Box::new(v.0.iter_mut()),
-            BinaryRepr::Array(v) => Box::new(v.iter_mut().flat_map(|v| v.iter_mut())),
-        }
-    }
-
-    /// Shifts the nodes IDs to the left by the given offset.
-    pub(crate) fn shift_left(&mut self, offset: usize) {
-        match self {
-            BinaryRepr::Bit(v) => v.shift_left(offset),
-            BinaryRepr::U8(v) => v.shift_left(offset),
-            BinaryRepr::U16(v) => v.shift_left(offset),
-            BinaryRepr::U32(v) => v.shift_left(offset),
-            BinaryRepr::U64(v) => v.shift_left(offset),
-            BinaryRepr::U128(v) => v.shift_left(offset),
-            BinaryRepr::Array(v) => v.iter_mut().for_each(|v| v.shift_left(offset)),
-        }
-    }
-
     /// Shifts the nodes IDs to the right by the given offset.
     pub(crate) fn shift_right(&mut self, offset: usize) {
         match self {
@@ -205,10 +179,6 @@ macro_rules! define_binary_value {
 
             pub(crate) fn nodes(&self) -> [Node<Feed>; $len] {
                 self.0
-            }
-
-            pub(crate) fn shift_left(&mut self, offset: usize) {
-                self.0.iter_mut().for_each(|v| v.shift_left(offset))
             }
 
             pub(crate) fn shift_right(&mut self, offset: usize) {
