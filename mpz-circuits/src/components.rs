@@ -80,6 +80,15 @@ impl Gate {
         };
     }
 
+    /// Sets the z value of this gate
+    pub fn set_z(&mut self, value: usize) {
+        match self {
+            Gate::Xor { z, .. } => z.id = value,
+            Gate::And { z, .. } => z.id = value,
+            Gate::Inv { z, .. } => z.id = value,
+        };
+    }
+
     /// Shifts all the node IDs of the gate to the left by the given offset.
     #[inline]
     pub(crate) fn shift_left(&mut self, offset: usize) {
