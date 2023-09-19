@@ -422,20 +422,12 @@ impl BuilderState {
     }
 
     /// Builds the circuit.
-    pub(crate) fn build(mut self) -> Result<Circuit, BuilderError> {
-        // Shift all the node ids to the left by 2 to eliminate
-        // the reserved constant nodes (which should be factored out during building)
-        self.inputs.iter_mut().for_each(|input| input.shift_left(2));
-        self.gates.iter_mut().for_each(|gate| gate.shift_left(2));
-        self.outputs
-            .iter_mut()
-            .for_each(|output| output.shift_left(2));
-
+    pub(crate) fn build(self) -> Result<Circuit, BuilderError> {
         Ok(Circuit {
             inputs: self.inputs,
             outputs: self.outputs,
             gates: self.gates,
-            feed_count: self.feed_id - 2,
+            feed_count: self.feed_id,
             and_count: self.and_count,
             xor_count: self.xor_count,
             appended_circuits: self.appended_circuits,
@@ -444,8 +436,6 @@ impl BuilderState {
     }
 
     pub(crate) fn build_current(&mut self) -> Circuit {
-        self.gates.iter_mut().for_each(|gate| gate.shift_left(2));
-
         Circuit {
             inputs: vec![],
             outputs: vec![],
@@ -455,8 +445,7 @@ impl BuilderState {
                     .appended_circuits
                     .iter()
                     .map(|c| c.feed_count())
-                    .sum::<usize>()
-                - 2,
+                    .sum::<usize>(),
             and_count: self.and_count
                 - self
                     .appended_circuits
