@@ -4,7 +4,7 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha12Rng;
 
 fn bench_gf2_128_inverse(c: &mut Criterion) {
-    let mut rng = ChaCha12Rng::from_entropy();
+    let mut rng = ChaCha12Rng::seed_from_u64(0);
     let a: Gf2_128 = rng.gen();
 
     c.bench_function("inverse", move |bench| {

@@ -10,7 +10,7 @@ fn chou_orlandi(c: &mut Criterion) {
     for n in [128, 256, 1024] {
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
             let msgs = vec![[Block::ONES; 2]; n];
-            let mut rng = ChaCha12Rng::from_entropy();
+            let mut rng = ChaCha12Rng::seed_from_u64(0);
             let mut choices = vec![0u8; n / 8];
             rng.fill_bytes(&mut choices);
             b.iter(|| {
@@ -33,7 +33,7 @@ fn kos(c: &mut Criterion) {
     for n in [1024, 262144] {
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
             let msgs = vec![[Block::ONES; 2]; n];
-            let mut rng = ChaCha12Rng::from_entropy();
+            let mut rng = ChaCha12Rng::seed_from_u64(0);
             let mut choices = vec![0u8; n / 8];
             rng.fill_bytes(&mut choices);
             let choices = choices.into_lsb0_vec();
