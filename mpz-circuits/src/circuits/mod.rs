@@ -143,11 +143,6 @@ pub fn build_sha256(pos: usize, msg_len: usize) -> Circuit {
 
     debug_assert!(msg.len() % 64 == 0);
 
-    // TODO: For some reason the construction of constants with wires 0 and 1 does not work anymore
-    // Has it ever worked here???
-    let msg_debug: BinaryRepr = msg.clone().into();
-    dbg!(msg_debug);
-
     for block in msg.chunks(64) {
         state = sha256_compress_trace(
             builder.state(),
