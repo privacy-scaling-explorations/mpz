@@ -151,7 +151,7 @@ impl Evaluator {
 
         // Process gates until we run out of encrypted gates
         while self.pos < self.circ.gates_count() {
-            match &self.circ.gates()[self.pos] {
+            match self.circ.gates().nth(self.pos).unwrap() {
                 Gate::Inv {
                     x: node_x,
                     z: node_z,
