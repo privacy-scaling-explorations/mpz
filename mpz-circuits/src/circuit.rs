@@ -52,19 +52,19 @@ impl Circuit {
             .iter()
             .enumerate()
             .flat_map(move |(k, circ)| {
-                let old_inputs = circ
-                    .inputs
-                    .iter()
-                    .flat_map(|bin| bin.iter())
-                    .collect::<Vec<_>>();
-                let new_inputs = self.appended_circuits_inputs[k]
-                    .iter()
-                    .flat_map(|bin| bin.iter())
-                    .collect::<Vec<_>>();
-
-                let gates_iter = if new_inputs.is_empty() {
+                let gates_iter = if self.appended_circuits_inputs[k].is_empty() {
                     circ.gates()
                 } else {
+                    let old_inputs = circ
+                        .inputs
+                        .iter()
+                        .flat_map(|bin| bin.iter())
+                        .collect::<Vec<_>>();
+                    let new_inputs = self.appended_circuits_inputs[k]
+                        .iter()
+                        .flat_map(|bin| bin.iter())
+                        .collect::<Vec<_>>();
+
                     let iter = circ.gates().map(move |mut gate| {
                         gate.shift_right(feeds_so_far);
 
