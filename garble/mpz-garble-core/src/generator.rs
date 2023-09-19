@@ -157,7 +157,7 @@ impl Generator {
 
     /// Returns whether the generator has finished generating the circuit.
     pub fn is_complete(&self) -> bool {
-        self.pos >= self.circ.gates().len()
+        self.pos >= self.circ.gates_count()
     }
 
     /// Returns the encoded outputs of the circuit.

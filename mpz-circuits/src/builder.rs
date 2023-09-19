@@ -423,6 +423,13 @@ impl BuilderState {
 
     /// Builds the circuit.
     pub(crate) fn build(self) -> Result<Circuit, BuilderError> {
+        let gates_count = self
+            .appended_circuits
+            .iter()
+            .map(|g| g.gates_count())
+            .sum::<usize>()
+            + self.gates.len();
+
         Ok(Circuit {
             inputs: self.inputs,
             outputs: self.outputs,
@@ -432,14 +439,18 @@ impl BuilderState {
             xor_count: self.xor_count,
             appended_circuits: self.appended_circuits,
             appended_circuits_inputs: self.appended_circuits_inputs,
+            gates_count,
         })
     }
 
     pub(crate) fn build_current(&mut self) -> Circuit {
+        let gates = take(&mut self.gates);
+        let gates_count = gates.len();
+
         Circuit {
             inputs: vec![],
             outputs: vec![],
-            gates: take(&mut self.gates),
+            gates,
             feed_count: self.feed_id
                 - self
                     .appended_circuits
@@ -460,6 +471,7 @@ impl BuilderState {
                     .sum::<usize>(),
             appended_circuits: vec![],
             appended_circuits_inputs: vec![],
+            gates_count,
         }
     }
 }
