@@ -77,7 +77,7 @@ where
 #[async_trait]
 pub trait ShareConversionReveal {
     /// Reveals the private inputs of the sender to the receiver for verification.
-    async fn reveal(self) -> Result<(), ShareConversionError>;
+    async fn reveal(&mut self) -> Result<(), ShareConversionError>;
 }
 
 /// Verify the recorded inputs of the sender
@@ -87,7 +87,7 @@ pub trait ShareConversionReveal {
 #[async_trait]
 pub trait ShareConversionVerify {
     /// Verifies all share conversions.
-    async fn verify(self) -> Result<(), ShareConversionError>;
+    async fn verify(&mut self) -> Result<(), ShareConversionError>;
 }
 
 #[cfg(test)]
