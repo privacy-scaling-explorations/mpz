@@ -30,6 +30,7 @@ pub struct Circuit {
     pub(crate) xor_count: usize,
     pub(crate) appended_circuits: Vec<Arc<Circuit>>,
     pub(crate) appended_circuits_inputs: Vec<Vec<BinaryRepr>>,
+    pub(crate) gates_count: usize,
 }
 
 impl Circuit {
@@ -103,6 +104,11 @@ impl Circuit {
     /// Returns the number of feeds in the circuit.
     pub fn feed_count(&self) -> usize {
         self.feed_count
+    }
+
+    /// Returns the number of gates
+    pub fn gates_count(&self) -> usize {
+        self.gates_count
     }
 
     /// Returns the number of AND gates in the circuit.

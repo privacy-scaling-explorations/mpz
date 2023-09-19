@@ -150,7 +150,7 @@ impl Evaluator {
         let labels = &mut self.active_labels;
 
         // Process gates until we run out of encrypted gates
-        while self.pos < self.circ.gates().len() {
+        while self.pos < self.circ.gates_count() {
             match &self.circ.gates()[self.pos] {
                 Gate::Inv {
                     x: node_x,
