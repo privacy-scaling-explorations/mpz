@@ -74,7 +74,7 @@ impl Circuit {
                             .iter()
                             .position(|node| node.id + feeds_so_far == x.id)
                         {
-                            gate.set_x(new_inputs[pos].id);
+                            gate.set_x(new_inputs[pos].id - 2);
                         }
 
                         if let Some(y) = y {
@@ -82,9 +82,10 @@ impl Circuit {
                                 .iter()
                                 .position(|node| node.id + feeds_so_far == y.id)
                             {
-                                gate.set_y(new_inputs[pos].id);
+                                gate.set_y(new_inputs[pos].id - 2);
                             }
                         }
+
                         gate
                     });
                     Box::new(iter)

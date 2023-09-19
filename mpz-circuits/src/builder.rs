@@ -411,16 +411,7 @@ impl BuilderState {
 
         // Store the new circuit and the input mappings
         self.appended_circuits.push(Arc::clone(&circ));
-        self.appended_circuits_inputs.push(
-            builder_inputs
-                .iter()
-                .cloned()
-                .map(|mut bin| {
-                    bin.shift_left(2);
-                    bin
-                })
-                .collect(),
-        );
+        self.appended_circuits_inputs.push(builder_inputs.to_vec());
 
         // Increment variables
         self.feed_id += circ.feed_count();
