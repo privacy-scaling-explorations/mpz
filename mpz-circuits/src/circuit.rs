@@ -70,11 +70,12 @@ impl Circuit {
 
                         let x = gate.x();
                         let y = gate.y();
+
                         if let Some(pos) = old_inputs
                             .iter()
                             .position(|node| node.id + feeds_so_far == x.id)
                         {
-                            gate.set_x(new_inputs[pos].id - 2);
+                            gate.set_x(new_inputs[pos].id);
                         }
 
                         if let Some(y) = y {
@@ -82,7 +83,7 @@ impl Circuit {
                                 .iter()
                                 .position(|node| node.id + feeds_so_far == y.id)
                             {
-                                gate.set_y(new_inputs[pos].id - 2);
+                                gate.set_y(new_inputs[pos].id);
                             }
                         }
 
@@ -179,7 +180,9 @@ impl Circuit {
             ));
         }
 
-        let mut feeds: Vec<Option<bool>> = vec![None; self.feed_count];
+        let mut feeds: Vec<Option<bool>> = vec![None; self.feed_count()];
+        feeds[0] = Some(false);
+        feeds[1] = Some(true);
 
         for (input, value) in self.inputs.iter().zip(values) {
             if input.value_type() != value.value_type() {
