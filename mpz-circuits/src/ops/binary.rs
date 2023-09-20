@@ -95,6 +95,7 @@ pub(crate) fn wrapping_add_nbit(
 ///
 /// Returns the result and the bit indicating whether underflow occurred.
 pub(crate) fn const_wrapping_sub_nbit<const N: usize>(
+    // TODO: This here is broken
     state: &mut BuilderState,
     a: [Node<Feed>; N],
     b: [Node<Feed>; N],

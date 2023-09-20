@@ -64,9 +64,7 @@ pub(crate) fn test_impl(item: TokenStream) -> TokenStream {
     quote! {
         {
             let mut outputs = #circ.evaluate(&[#((#input_args).into()),*]).unwrap();
-
             outputs.reverse();
-
             let outputs: #return_type = #return_expr;
 
             let expected = #test_fn(#(#input_args),*);

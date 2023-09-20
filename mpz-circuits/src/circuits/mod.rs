@@ -111,6 +111,8 @@ pub fn sha256_compress_trace<'a>(
 /// `fn(state: [u32; 8], msg: [u8; msg_len]) -> [u8; 32]`
 #[cfg(feature = "sha2")]
 pub fn build_sha256(msg_len: usize) -> Circuit {
+    // TODO: Tidy this up
+
     let builder = CircuitBuilder::new();
     let mut state = builder.add_array_input::<u32, 8>();
 
@@ -265,6 +267,8 @@ mod tests {
     fn test_sha256() {
         for len in [5, 64, 100] {
             let mut msg = vec![0u8; len];
+            // TODO:  Fix this
+
             // append a single '1' bit
             // append K '0' bits, where K is the minimum number >= 0 such that (L + 1 + K + 64) is a multiple of 512
             // append L as a 64-bit big-endian integer, making the total post-processed length a multiple of 512 bits
