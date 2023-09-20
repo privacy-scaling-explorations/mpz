@@ -65,8 +65,7 @@ pub(crate) fn test_impl(item: TokenStream) -> TokenStream {
         {
             let mut outputs = #circ.evaluate(&[#((#input_args).into()),*]).unwrap();
 
-            // TODO Why is this to be reversed?
-            // outputs.reverse();
+            outputs.reverse();
 
             let outputs: #return_type = #return_expr;
 

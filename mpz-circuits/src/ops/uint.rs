@@ -1,4 +1,4 @@
-use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr};
+use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 use crate::{
     types::{BinaryRepr, U128, U16, U32, U64, U8},
@@ -28,26 +28,6 @@ macro_rules! impl_wrapping_add_uint {
                 Tracer::new(self.state, value)
             }
         }
-
-        impl<'a> WrappingAdd<$const_ty> for Tracer<'a, $ty> {
-            type Output = Tracer<'a, $ty>;
-
-            fn wrapping_add(self, rhs: $const_ty) -> Self::Output {
-                let mut state = self.state.borrow_mut();
-
-                let rhs = state.get_constant::<$const_ty>(rhs);
-
-                let value = $ty::new(binary::const_wrapping_add_nbit::<$len>(
-                    &mut state,
-                    self.to_inner().nodes(),
-                    rhs.nodes(),
-                ));
-
-                drop(state);
-
-                Tracer::new(self.state, value)
-            }
-        }
     };
 }
 
@@ -69,28 +49,6 @@ macro_rules! impl_wrapping_sub_uint {
                     &mut state,
                     self.to_inner().nodes(),
                     rhs.to_inner().nodes(),
-                );
-
-                let value = <$ty>::new(nodes);
-
-                drop(state);
-
-                Tracer::new(self.state, value)
-            }
-        }
-
-        impl<'a> WrappingSub<$const_ty> for Tracer<'a, $ty> {
-            type Output = Tracer<'a, $ty>;
-
-            fn wrapping_sub(self, rhs: $const_ty) -> Self::Output {
-                let mut state = self.state.borrow_mut();
-
-                let rhs = state.get_constant::<$const_ty>(rhs);
-
-                let (nodes, _) = binary::const_wrapping_sub_nbit::<$len>(
-                    &mut state,
-                    self.to_inner().nodes(),
-                    rhs.nodes(),
                 );
 
                 let value = <$ty>::new(nodes);
@@ -174,26 +132,6 @@ macro_rules! impl_bitxor_uint {
                 Tracer::new(self.state, value)
             }
         }
-
-        impl<'a> BitXor<$const_ty> for Tracer<'a, $ty> {
-            type Output = Tracer<'a, $ty>;
-
-            fn bitxor(self, rhs: $const_ty) -> Self::Output {
-                let mut state = self.state.borrow_mut();
-
-                let rhs = state.get_constant::<$const_ty>(rhs);
-
-                let value = <$ty>::new(binary::xor_nbit::<$len>(
-                    &mut state,
-                    self.to_inner().nodes(),
-                    rhs.nodes(),
-                ));
-
-                drop(state);
-
-                Tracer::new(self.state, value)
-            }
-        }
     };
 }
 
@@ -215,26 +153,6 @@ macro_rules! impl_bit_and_uint {
                     &mut state,
                     self.to_inner().nodes(),
                     rhs.to_inner().nodes(),
-                ));
-
-                drop(state);
-
-                Tracer::new(self.state, value)
-            }
-        }
-
-        impl<'a> BitAnd<$const_ty> for Tracer<'a, $ty> {
-            type Output = Tracer<'a, $ty>;
-
-            fn bitand(self, rhs: $const_ty) -> Self::Output {
-                let mut state = self.state.borrow_mut();
-
-                let rhs = state.get_constant::<$const_ty>(rhs);
-
-                let value = <$ty>::new(binary::and_nbit::<$len>(
-                    &mut state,
-                    self.to_inner().nodes(),
-                    rhs.nodes(),
                 ));
 
                 drop(state);
@@ -270,26 +188,6 @@ macro_rules! impl_bit_or_uint {
                 Tracer::new(self.state, value)
             }
         }
-
-        impl<'a> BitOr<$const_ty> for Tracer<'a, $ty> {
-            type Output = Tracer<'a, $ty>;
-
-            fn bitor(self, rhs: $const_ty) -> Self::Output {
-                let mut state = self.state.borrow_mut();
-
-                let rhs = state.get_constant::<$const_ty>(rhs);
-
-                let value = <$ty>::new(binary::or_nbit::<$len>(
-                    &mut state,
-                    self.to_inner().nodes(),
-                    rhs.nodes(),
-                ));
-
-                drop(state);
-
-                Tracer::new(self.state, value)
-            }
-        }
     };
 }
 
@@ -298,72 +196,6 @@ impl_bit_or_uint!(U16, u16, 16);
 impl_bit_or_uint!(U32, u32, 32);
 impl_bit_or_uint!(U64, u64, 64);
 impl_bit_or_uint!(U128, u128, 128);
-
-macro_rules! impl_shl_uint {
-    ($ty:ident, $len:expr) => {
-        impl<'a> Shl<usize> for Tracer<'a, $ty> {
-            type Output = Tracer<'a, $ty>;
-
-            fn shl(self, rhs: usize) -> Self::Output {
-                assert!(rhs <= $len);
-
-                let state = self.state.borrow();
-
-                let const_zero = state.get_const_zero();
-
-                let mut nodes = self.to_inner().nodes();
-                // Bits are LSB0, so we rotate right
-                nodes.rotate_right(rhs);
-                // Replace the lsbs with 0s
-                nodes[..rhs].iter_mut().for_each(|node| *node = const_zero);
-
-                let value = <$ty>::new(nodes);
-
-                Tracer::new(self.state, value)
-            }
-        }
-    };
-}
-
-impl_shl_uint!(U8, 8);
-impl_shl_uint!(U16, 16);
-impl_shl_uint!(U32, 32);
-impl_shl_uint!(U64, 64);
-impl_shl_uint!(U128, 128);
-
-macro_rules! impl_shr_uint {
-    ($ty:ident, $len:expr) => {
-        impl<'a> Shr<usize> for Tracer<'a, $ty> {
-            type Output = Tracer<'a, $ty>;
-
-            fn shr(self, rhs: usize) -> Self::Output {
-                assert!(rhs <= $len);
-
-                let state = self.state.borrow();
-
-                let const_zero = state.get_const_zero();
-
-                let mut nodes = self.to_inner().nodes();
-                // Bits are LSB0, so we rotate left
-                nodes.rotate_left(rhs);
-                // Replace the msbs with 0s
-                nodes[$len - rhs - 1..]
-                    .iter_mut()
-                    .for_each(|node| *node = const_zero);
-
-                let value = <$ty>::new(nodes);
-
-                Tracer::new(self.state, value)
-            }
-        }
-    };
-}
-
-impl_shr_uint!(U8, 8);
-impl_shr_uint!(U16, 16);
-impl_shr_uint!(U32, 32);
-impl_shr_uint!(U64, 64);
-impl_shr_uint!(U128, 128);
 
 macro_rules! impl_neg_uint {
     ($ty:ident) => {

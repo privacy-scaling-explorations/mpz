@@ -186,9 +186,7 @@ impl Circuit {
             ));
         }
 
-        let mut feeds: Vec<Option<bool>> = vec![None; self.feed_count()];
-        feeds[0] = Some(false);
-        feeds[1] = Some(true);
+        let mut gate_outputs: Vec<Option<bool>> = vec![None; self.feed_count()];
 
         for (input, value) in self.inputs.iter().zip(values) {
             if input.value_type() != value.value_type() {
@@ -199,28 +197,28 @@ impl Circuit {
             }
 
             for (node, bit) in input.iter().zip(value.clone().into_iter_lsb0()) {
-                feeds[node.id] = Some(bit);
+                gate_outputs[node.id] = Some(bit);
             }
         }
 
         for gate in self.gates() {
             match gate {
                 Gate::Xor { x, y, z } => {
-                    let x = feeds[x.id].expect("Feed should be set");
-                    let y = feeds[y.id].expect("Feed should be set");
+                    let x = gate_outputs[x.id].expect("Feed should be set");
+                    let y = gate_outputs[y.id].expect("Feed should be set");
 
-                    feeds[z.id] = Some(x ^ y);
+                    gate_outputs[z.id] = Some(x ^ y);
                 }
                 Gate::And { x, y, z } => {
-                    let x = feeds[x.id].expect("Feed should be set");
-                    let y = feeds[y.id].expect("Feed should be set");
+                    let x = gate_outputs[x.id].expect("Feed should be set");
+                    let y = gate_outputs[y.id].expect("Feed should be set");
 
-                    feeds[z.id] = Some(x & y);
+                    gate_outputs[z.id] = Some(x & y);
                 }
                 Gate::Inv { x, z } => {
-                    let x = feeds[x.id].expect("Feed should be set");
+                    let x = gate_outputs[x.id].expect("Feed should be set");
 
-                    feeds[z.id] = Some(!x);
+                    gate_outputs[z.id] = Some(!x);
                 }
             }
         }
@@ -231,7 +229,7 @@ impl Circuit {
             .map(|output| {
                 let bits: Vec<bool> = output
                     .iter()
-                    .map(|node| feeds[node.id].expect("Feed should be set"))
+                    .map(|node| gate_outputs[node.id].expect("Feed should be set"))
                     .collect();
 
                 output

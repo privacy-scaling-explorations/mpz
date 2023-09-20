@@ -1,5 +1,3 @@
-use itybity::{BitIterable, IntoBits};
-
 use crate::{
     components::{Feed, Gate, Node},
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
@@ -151,14 +149,6 @@ impl CircuitBuilder {
         state.outputs.push(value.into());
     }
 
-    /// Returns a tracer for a constant value
-    pub fn get_constant<T: ToBinaryRepr + BitIterable>(&self, value: T) -> Tracer<'_, T::Repr> {
-        let mut state = self.state.borrow_mut();
-
-        let value = state.get_constant(value);
-        Tracer::new(&self.state, value)
-    }
-
     /// Appends an existing circuit
     ///
     /// # Arguments
@@ -184,63 +174,19 @@ impl CircuitBuilder {
 }
 
 /// The internal state of the [`CircuitBuilder`]
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct BuilderState {
     feed_id: usize,
     inputs: Vec<BinaryRepr>,
     outputs: Vec<BinaryRepr>,
     gates: Vec<Gate>,
-
     and_count: usize,
     xor_count: usize,
     appended_circuits: Vec<Arc<Circuit>>,
     appended_circuits_inputs: Vec<Vec<BinaryRepr>>,
 }
 
-impl Default for BuilderState {
-    fn default() -> Self {
-        Self {
-            // ids 0 and 1 are reserved for constant zero and one
-            feed_id: 2,
-            inputs: vec![],
-            outputs: vec![],
-            gates: vec![],
-            and_count: 0,
-            xor_count: 0,
-            appended_circuits: vec![],
-            appended_circuits_inputs: vec![],
-        }
-    }
-}
-
 impl BuilderState {
-    /// Returns constant zero node.
-    pub(crate) fn get_const_zero(&self) -> Node<Feed> {
-        Node::<Feed>::new(0)
-    }
-
-    /// Returns constant one node.
-    pub(crate) fn get_const_one(&self) -> Node<Feed> {
-        Node::<Feed>::new(1)
-    }
-
-    /// Returns a value encoded using constant nodes.
-    ///
-    /// # Arguments
-    ///
-    /// * `value` - The value to encode.
-    pub fn get_constant<T: ToBinaryRepr + BitIterable>(&mut self, value: T) -> T::Repr {
-        let zero = self.get_const_zero();
-        let one = self.get_const_one();
-
-        let nodes: Vec<_> = value
-            .into_iter_lsb0()
-            .map(|bit| if bit { one } else { zero })
-            .collect();
-
-        T::new_bin_repr(&nodes).expect("Value should have correct bit length")
-    }
-
     /// Adds a feed to the circuit.
     pub(crate) fn add_feed(&mut self) -> Node<Feed> {
         let feed = Node::<Feed>::new(self.feed_id);
@@ -277,39 +223,14 @@ impl BuilderState {
     ///
     /// The output of the gate.
     pub(crate) fn add_xor_gate(&mut self, x: Node<Feed>, y: Node<Feed>) -> Node<Feed> {
-        // if either input is a constant, we can simplify the gate
-        if x.id() == 0 && y.id() == 0 {
-            self.get_const_zero()
-        } else if x.id() == 1 && y.id() == 1 {
-            return self.get_const_zero();
-        } else if x.id() == 0 {
-            return y;
-        } else if y.id() == 0 {
-            return x;
-        } else if x.id() == 1 {
-            let out = self.add_feed();
-            self.gates.push(Gate::Inv {
-                x: y.into(),
-                z: out,
-            });
-            return out;
-        } else if y.id() == 1 {
-            let out = self.add_feed();
-            self.gates.push(Gate::Inv {
-                x: x.into(),
-                z: out,
-            });
-            return out;
-        } else {
-            let out = self.add_feed();
-            self.gates.push(Gate::Xor {
-                x: x.into(),
-                y: y.into(),
-                z: out,
-            });
-            self.xor_count += 1;
-            return out;
-        }
+        let out = self.add_feed();
+        self.gates.push(Gate::Xor {
+            x: x.into(),
+            y: y.into(),
+            z: out,
+        });
+        self.xor_count += 1;
+        out
     }
 
     /// Adds an AND gate to the circuit.
@@ -323,23 +244,14 @@ impl BuilderState {
     ///
     /// The output of the gate.
     pub(crate) fn add_and_gate(&mut self, x: Node<Feed>, y: Node<Feed>) -> Node<Feed> {
-        // if either input is a constant, we can simplify the gate
-        if x.id() == 0 || y.id() == 0 {
-            self.get_const_zero()
-        } else if x.id() == 1 {
-            return y;
-        } else if y.id() == 1 {
-            return x;
-        } else {
-            let out = self.add_feed();
-            self.gates.push(Gate::And {
-                x: x.into(),
-                y: y.into(),
-                z: out,
-            });
-            self.and_count += 1;
-            return out;
-        }
+        let out = self.add_feed();
+        self.gates.push(Gate::And {
+            x: x.into(),
+            y: y.into(),
+            z: out,
+        });
+        self.and_count += 1;
+        out
     }
 
     /// Adds an INV gate to the circuit.
@@ -352,18 +264,12 @@ impl BuilderState {
     ///
     /// The output of the gate.
     pub(crate) fn add_inv_gate(&mut self, x: Node<Feed>) -> Node<Feed> {
-        if x.id() == 0 {
-            self.get_const_one()
-        } else if x.id() == 1 {
-            return self.get_const_zero();
-        } else {
-            let out = self.add_feed();
-            self.gates.push(Gate::Inv {
-                x: x.into(),
-                z: out,
-            });
-            return out;
-        }
+        let out = self.add_feed();
+        self.gates.push(Gate::Inv {
+            x: x.into(),
+            z: out,
+        });
+        out
     }
 
     /// Appends an existing circuit

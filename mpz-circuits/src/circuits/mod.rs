@@ -104,20 +104,15 @@ pub fn sha256_compress_trace<'a>(
 ///
 /// # Arguments
 ///
-/// * `pos` - The number of bytes in the message that have already been hashed.
 /// * `msg_len` - The total length of the hashed message.
 ///
 /// # Returns a circuit with the following signature:
 ///
 /// `fn(state: [u32; 8], msg: [u8; msg_len]) -> [u8; 32]`
 #[cfg(feature = "sha2")]
-pub fn build_sha256(pos: usize, msg_len: usize) -> Circuit {
+pub fn build_sha256(msg_len: usize) -> Circuit {
     let builder = CircuitBuilder::new();
     let mut state = builder.add_array_input::<u32, 8>();
-    let mut msg = builder.add_vec_input::<u8>(msg_len);
-
-    let bit_len = msg_len * 8;
-    let processed_bit_len = (bit_len + (pos * 8)) as u64;
 
     // minimum length of padded message in bytes
     let min_padded_len = msg_len + 9;
@@ -125,21 +120,8 @@ pub fn build_sha256(pos: usize, msg_len: usize) -> Circuit {
     let block_count = (min_padded_len / 64) + (min_padded_len % 64 != 0) as usize;
     // message is padded to a multiple of 64 bytes
     let padded_len = block_count * 64;
-    // number of bytes to pad
-    let pad_len = padded_len - msg_len;
 
-    // append a single '1' bit
-    // append K '0' bits, where K is the minimum number >= 0 such that (L + 1 + K + 64) is a multiple of 512
-    // append L as a 64-bit big-endian integer, making the total post-processed length a multiple of 512 bits
-    // such that the bits in the message are: <original message of length L> 1 <K zeros> <L as 64 bit integer> , (the number of bits will be a multiple of 512)
-    msg.push(builder.get_constant(128u8));
-    msg.extend((0..pad_len - 9).map(|_| builder.get_constant(0u8)));
-    msg.extend(
-        processed_bit_len
-            .to_be_bytes()
-            .iter()
-            .map(|&value| builder.get_constant(value)),
-    );
+    let msg = builder.add_vec_input::<u8>(padded_len);
 
     debug_assert!(msg.len() % 64 == 0);
 
@@ -171,16 +153,14 @@ pub fn build_sha256(pos: usize, msg_len: usize) -> Circuit {
 ///
 /// * `builder_state` - The builder state to append the circuit to.
 /// * `state` - The SHA256 state.
-/// * `pos` - The number of bytes processed in the current state.
 /// * `msg` - The message to hash.
 #[cfg(feature = "sha2")]
 pub fn sha256_trace<'a>(
     builder_state: &'a RefCell<BuilderState>,
     state: [Tracer<'a, U32>; 8],
-    pos: usize,
     msg: &[Tracer<'a, U8>],
 ) -> [Tracer<'a, U8>; 32] {
-    let circ = build_sha256(pos, msg.len());
+    let circ = build_sha256(msg.len());
     let mut outputs = builder_state
         .borrow_mut()
         .append(circ.into(), &[state.into(), msg.to_vec().into()])
@@ -284,8 +264,21 @@ mod tests {
     #[cfg(feature = "sha2")]
     fn test_sha256() {
         for len in [5, 64, 100] {
-            let msg = vec![0u8; len];
-            let circ = build_sha256(0, len);
+            let mut msg = vec![0u8; len];
+            // append a single '1' bit
+            // append K '0' bits, where K is the minimum number >= 0 such that (L + 1 + K + 64) is a multiple of 512
+            // append L as a 64-bit big-endian integer, making the total post-processed length a multiple of 512 bits
+            // such that the bits in the message are: <original message of length L> 1 <K zeros> <L as 64
+            // bit integer> , (the number of bits will be a multiple of 512)
+            let mut k_len: i128 = 64 - len as i128 - 1 - 64;
+            while k_len < 0 {
+                k_len += 64;
+            }
+            msg.push(0xff);
+            msg.resize(len + 1 + k_len as usize, 0);
+            msg.extend_from_slice(&(len as u64).to_be_bytes());
+
+            let circ = build_sha256(len);
             let reference = |state, msg| sha256(state, 0, msg);
 
             test_circ!(circ, reference, fn(SHA2_INITIAL_STATE, msg.as_slice()) -> [u8; 32]);
