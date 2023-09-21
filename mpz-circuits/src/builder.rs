@@ -1,6 +1,6 @@
 use crate::{
     components::{Feed, Gate, Node},
-    types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
+    types::{BinaryLength, BinaryRepr, ToBinaryRepr, Value, ValueType},
     Circuit, Tracer,
 };
 use std::{
@@ -182,8 +182,9 @@ pub struct BuilderState {
     gates: Vec<Gate>,
     and_count: usize,
     xor_count: usize,
+    constant_inputs: Vec<Value>,
     appended_circuits: Vec<Arc<Circuit>>,
-    appended_circuits_inputs: Vec<Vec<BinaryRepr>>,
+    appended_circuits_input_feeds: Vec<Vec<BinaryRepr>>,
 }
 
 impl BuilderState {
@@ -307,7 +308,7 @@ impl BuilderState {
         // Append self
         let current_circ = self.build_current();
         self.appended_circuits.push(current_circ.into());
-        self.appended_circuits_inputs.push(vec![]);
+        self.appended_circuits_input_feeds.push(vec![]);
 
         // Update the outputs
         self.outputs = circ.outputs().to_vec();
@@ -317,7 +318,8 @@ impl BuilderState {
 
         // Store the new circuit and the input mappings
         self.appended_circuits.push(Arc::clone(&circ));
-        self.appended_circuits_inputs.push(builder_inputs.to_vec());
+        self.appended_circuits_input_feeds
+            .push(builder_inputs.to_vec());
 
         // Increment variables
         self.feed_id += circ.feed_count();
@@ -343,8 +345,9 @@ impl BuilderState {
             feed_count: self.feed_id,
             and_count: self.and_count,
             xor_count: self.xor_count,
+            constant_inputs: self.constant_inputs,
             appended_circuits: self.appended_circuits,
-            appended_circuits_inputs: self.appended_circuits_inputs,
+            appended_circuits_input_feeds: self.appended_circuits_input_feeds,
             gates_count,
         })
     }
@@ -375,8 +378,9 @@ impl BuilderState {
                     .iter()
                     .map(|c| c.xor_count())
                     .sum::<usize>(),
+            constant_inputs: take(&mut self.constant_inputs),
             appended_circuits: vec![],
-            appended_circuits_inputs: vec![],
+            appended_circuits_input_feeds: vec![],
             gates_count,
         }
     }

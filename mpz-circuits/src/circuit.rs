@@ -28,8 +28,9 @@ pub struct Circuit {
     pub(crate) feed_count: usize,
     pub(crate) and_count: usize,
     pub(crate) xor_count: usize,
+    pub(crate) constant_inputs: Vec<Value>,
     pub(crate) appended_circuits: Vec<Arc<Circuit>>,
-    pub(crate) appended_circuits_inputs: Vec<Vec<BinaryRepr>>,
+    pub(crate) appended_circuits_input_feeds: Vec<Vec<BinaryRepr>>,
     pub(crate) gates_count: usize,
 }
 
@@ -53,7 +54,7 @@ impl Circuit {
             .iter()
             .enumerate()
             .flat_map(move |(k, circ)| {
-                let gates_iter = if self.appended_circuits_inputs[k].is_empty() {
+                let gates_iter = if self.appended_circuits_input_feeds[k].is_empty() {
                     circ.gates()
                 } else {
                     let old_inputs = circ
@@ -61,7 +62,7 @@ impl Circuit {
                         .iter()
                         .flat_map(|bin| bin.iter())
                         .collect::<Vec<_>>();
-                    let new_inputs = self.appended_circuits_inputs[k]
+                    let new_inputs = self.appended_circuits_input_feeds[k]
                         .iter()
                         .flat_map(|bin| bin.iter())
                         .collect::<Vec<_>>();

@@ -516,6 +516,7 @@ impl_value_type!(u128, U128);
 
 /// A value that can be encoded into a binary representation.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 #[allow(missing_docs)]
 pub enum Value {
