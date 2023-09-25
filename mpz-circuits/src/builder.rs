@@ -481,15 +481,19 @@ mod test {
 
         let c = a.wrapping_add(b);
 
-        let _appended_outputs = builder.append(circ.into(), &[a.into(), c.into()]).unwrap();
+        let mut appended_outputs = builder.append(circ.into(), &[a.into(), c.into()]).unwrap();
+
+        let d = appended_outputs.pop().unwrap();
+
+        builder.add_output(d);
 
         let circ = builder.build().unwrap();
 
-        let mut output = circ.evaluate(&[2u8.into(), 7u8.into()]).unwrap();
+        let mut output = circ.evaluate(&[1u8.into(), 1u8.into()]).unwrap();
 
         let d: u8 = output.pop().unwrap().try_into().unwrap();
 
         // a + (a + b) = 2a + b
-        assert_eq!(d, 11u8);
+        assert_eq!(d, 3u8);
     }
 }
