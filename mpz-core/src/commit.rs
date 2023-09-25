@@ -117,7 +117,7 @@ mod test {
         let message = [0, 1, 2, 3u8];
         let (mut decommitment, commitment) = message.hash_commit();
 
-        decommitment.nonce.0[0] -= 1;
+        decommitment.nonce.0[0] = decommitment.nonce.0[0].wrapping_add(1);
 
         let err = decommitment.verify(&commitment).unwrap_err();
 
@@ -129,7 +129,7 @@ mod test {
         let message = [0, 1, 2, 3u8];
         let (mut decommitment, commitment) = message.hash_commit();
 
-        decommitment.data[0] += 1;
+        decommitment.data[0] = decommitment.data[0].wrapping_add(1);
 
         let err = decommitment.verify(&commitment).unwrap_err();
 

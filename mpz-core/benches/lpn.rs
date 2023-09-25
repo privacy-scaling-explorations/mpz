@@ -3,51 +3,6 @@ use mpz_core::{lpn::Lpn, prg::Prg, Block};
 use std::time::Duration;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("lpn-native-small", move |bench| {
-        let seed = Block::ZERO;
-        let k = 5_060;
-        let n = 166_400;
-        let lpn = Lpn::<10>::new(seed, k);
-        let mut x = vec![Block::ZERO; k as usize];
-        let mut y = vec![Block::ZERO; n];
-        let mut prg = Prg::new();
-        prg.random_blocks(&mut x);
-        prg.random_blocks(&mut y);
-        bench.iter(|| {
-            black_box(lpn.compute_naive(&mut y, &x));
-        });
-    });
-
-    c.bench_function("lpn-native-medium", move |bench| {
-        let seed = Block::ZERO;
-        let k = 158_000;
-        let n = 10_168_320;
-        let lpn = Lpn::<10>::new(seed, k);
-        let mut x = vec![Block::ZERO; k as usize];
-        let mut y = vec![Block::ZERO; n];
-        let mut prg = Prg::new();
-        prg.random_blocks(&mut x);
-        prg.random_blocks(&mut y);
-        bench.iter(|| {
-            black_box(lpn.compute_naive(&mut y, &x));
-        });
-    });
-
-    c.bench_function("lpn-native-large", move |bench| {
-        let seed = Block::ZERO;
-        let k = 588_160;
-        let n = 10_616_092;
-        let lpn = Lpn::<10>::new(seed, k);
-        let mut x = vec![Block::ZERO; k as usize];
-        let mut y = vec![Block::ZERO; n];
-        let mut prg = Prg::new();
-        prg.random_blocks(&mut x);
-        prg.random_blocks(&mut y);
-        bench.iter(|| {
-            black_box(lpn.compute_naive(&mut y, &x));
-        });
-    });
-
     c.bench_function("lpn-rayon-small", move |bench| {
         let seed = Block::ZERO;
         let k = 5_060;
@@ -94,7 +49,6 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 }
 
-// criterion_group!(benches, criterion_benchmark);
 criterion_group! {
     name = lpn;
     config = Criterion::default().warm_up_time(Duration::from_millis(1000)).sample_size(10);

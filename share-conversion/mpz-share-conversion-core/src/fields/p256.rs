@@ -43,6 +43,7 @@ impl From<P256> for [u8; 32] {
 impl TryFrom<[u8; 32]> for P256 {
     type Error = ark_serialize::SerializationError;
 
+    /// Converts little-endian bytes into a P256 field element.
     fn try_from(value: [u8; 32]) -> Result<Self, Self::Error> {
         Fq::deserialize_with_mode(&value[..], Compress::No, Validate::Yes).map(P256)
     }

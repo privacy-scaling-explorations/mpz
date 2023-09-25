@@ -18,16 +18,20 @@ impl GgmTree {
         Self { tkprp, depth }
     }
 
-    /// Input : `seed` - a seed.
-    /// Output: `tree` - a GGM (binary tree) `tree`, with size `2^{depth}`.
-    /// Output: `k0` - XORs of all the left-node values in each level, with size `depth`.
-    /// Output: `k1`- XORs of all the right-node values in each level, with size `depth`.
-    /// This implementation is adapted from EMP Toolkit.
+    /// Create a GGM tree in-place.
+    ///
+    /// # Arguments
+    ///
+    /// * `seed` - a seed.
+    /// * `tree` - the destination of write the GGM (binary tree) `tree`, with size `2^{depth}`.
+    /// * `k0` - XORs of all the left-node values in each level, with size `depth`.
+    /// * `k1`- XORs of all the right-node values in each level, with size `depth`.
+    // This implementation is adapted from EMP Toolkit.
     pub fn gen(&self, seed: Block, tree: &mut [Block], k0: &mut [Block], k1: &mut [Block]) {
-        assert!(tree.len() == 1 << (self.depth));
-        assert!(k0.len() == self.depth);
-        assert!(k1.len() == self.depth);
-        let mut buf = vec![Block::ZERO; 8];
+        assert_eq!(tree.len(), 1 << (self.depth));
+        assert_eq!(k0.len(), self.depth);
+        assert_eq!(k1.len(), self.depth);
+        let mut buf = [Block::ZERO; 8];
         self.tkprp.expand_1to2(tree, seed);
         k0[0] = tree[0];
         k1[0] = tree[1];
@@ -58,9 +62,14 @@ impl GgmTree {
     }
 
     /// Reconstruct the GGM tree except the value in a given position.
-    /// Input : `k` - a slice of blocks with length `depth`, the values of k are chosen via OT from k0 and k1. For the i-th value, if alpha[i] == 1, k[i] = k1[i]; else k[i] = k0[i].
-    /// Input : `alpha` - a slice of bits with length `depth`.
-    /// Output : `tree` - the ggm tree, except `tree[pos] == Block::ZERO`. The bit decomposition of `pos` is the complement of `alpha`. I.e., `pos[i] = 1 xor alpha[i]`.
+    ///
+    /// This reconstructs the GGM tree entirely except `tree[pos] == Block::ZERO`. The bit decomposition of `pos` is the complement of `alpha`. i.e., `pos[i] = 1 xor alpha[i]`.
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - a slice of blocks with length `depth`, the values of k are chosen via OT from k0 and k1. For the i-th value, if alpha[i] == 1, k[i] = k1[i]; else k[i] = k0[i].
+    /// * `alpha` - a slice of bits with length `depth`.
+    /// * `tree` - the destination to write the GGM tree.
     pub fn reconstruct(&self, tree: &mut [Block], k: &[Block], alpha: &[bool]) {
         let mut pos = 0;
         for i in 1..=self.depth {
@@ -98,7 +107,7 @@ impl GgmTree {
             return;
         }
 
-        let mut buf = vec![Block::ZERO; 8];
+        let mut buf = [Block::ZERO; 8];
         if sz == 2 {
             self.tkprp.expand_2to4(&mut buf, tree);
             tree[0..4].copy_from_slice(&buf[0..4]);

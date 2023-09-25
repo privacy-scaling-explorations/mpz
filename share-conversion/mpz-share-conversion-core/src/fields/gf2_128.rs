@@ -213,7 +213,7 @@ mod tests {
     #[test]
     // Test multiplication against RustCrypto
     fn test_gf2_128_against_ghash_impl() {
-        let mut rng = ChaCha12Rng::seed_from_u64(0u64);
+        let mut rng = ChaCha12Rng::seed_from_u64(0);
 
         let a = Block::random(&mut rng);
         let b = Block::random(&mut rng);

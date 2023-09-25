@@ -5,7 +5,8 @@ use rstest::*;
 use mpz_ot::mock::{mock_ot_shared_pair, MockSharedOTReceiver, MockSharedOTSender};
 use mpz_share_conversion::{
     AdditiveToMultiplicative, ConverterReceiver, ConverterSender, Field, Gf2_128,
-    MultiplicativeToAdditive, OTReceiveElement, OTSendElement, ReceiverConfig, SenderConfig, P256,
+    MultiplicativeToAdditive, OTReceiveElement, OTSendElement, ReceiverConfig, SenderConfig,
+    ShareConversionReveal, ShareConversionVerify, P256,
 };
 use utils_aio::duplex::MemoryDuplex;
 

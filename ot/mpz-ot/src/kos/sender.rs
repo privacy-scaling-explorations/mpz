@@ -259,14 +259,14 @@ where
             return Ok(());
         }
 
-        // If the sender is committed, we sample delta using a coin toss.
-        let delta = if self
+        let sender = self
             .state
-            .as_initialized()
-            .map_err(SenderError::from)?
-            .config()
-            .sender_commit()
-        {
+            .replace(State::Error)
+            .into_initialized()
+            .map_err(SenderError::from)?;
+
+        // If the sender is committed, we sample delta using a coin toss.
+        let delta = if sender.config().sender_commit() {
             let (cointoss_sender, commitment) =
                 cointoss::Sender::new(vec![thread_rng().gen()]).send();
 
@@ -288,6 +288,8 @@ where
         } else {
             Block::random(&mut thread_rng())
         };
+
+        self.state = State::Initialized(sender);
 
         // Set up base OT if not already done
         self.base

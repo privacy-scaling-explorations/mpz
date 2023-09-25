@@ -2,11 +2,11 @@
 
 use crate::{aes::AesEncryptor, Block};
 
-/// Struct of PRP
+/// Pseudo Random Permutation (PRP) based on AES.
 pub struct Prp(AesEncryptor);
 
 impl Prp {
-    /// New an instance of Prp.
+    /// Creates a new instance of Prp.
     #[inline(always)]
     pub fn new(seed: Block) -> Self {
         Prp(AesEncryptor::new(seed))
@@ -26,7 +26,7 @@ impl Prp {
 
     /// Permute block slice.
     #[inline(always)]
-    pub fn permute_block_slice(&self, blks: &mut [Block]) {
+    pub fn permute_block_inplace(&self, blks: &mut [Block]) {
         self.0.encrypt_block_slice(blks);
     }
 }

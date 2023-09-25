@@ -90,7 +90,7 @@ pub mod receiver_state {
 
     opaque_debug::implement!(Initialized);
 
-    /// The receiver's state after receiving the sender's commitment.
+    /// The receiver's state after receiving the sender's commitment and revealing one's own seed.
     pub struct Received {
         pub(super) seeds: Vec<Block>,
         pub(super) commitment: Hash,

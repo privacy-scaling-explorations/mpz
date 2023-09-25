@@ -472,7 +472,10 @@ pub mod state {
 
     opaque_debug::implement!(Initialized);
 
-    /// The sender's state after base OT setup
+    /// The sender's state after the setup phase.
+    ///
+    /// In this state the sender performs OT extension (potentially multiple times). Also in this
+    /// state the sender responds to OT requests.
     pub struct Extension {
         /// Sender's base OT choices
         pub(super) delta: Block,

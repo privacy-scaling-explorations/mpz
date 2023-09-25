@@ -67,7 +67,7 @@ mod tests {
         use soft32::Clmul as s32;
         use soft64::Clmul as s64;
 
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut rng = ChaCha12Rng::from_seed([0; 32]);
         let a: [u8; 16] = rng.gen();
         let b: [u8; 16] = rng.gen();
 
@@ -183,5 +183,57 @@ mod tests {
         assert!(b.1 == c.1);
         // d.0 is zero
         assert!(b.1 != d.1);
+    }
+
+    #[test]
+    // Test against test vectors from
+    // Intel® Carry-Less Multiplication Instruction and its Usage for Computing the GCM Mode
+    fn clmul_test_vectors() {
+        use super::backend::Clmul;
+
+        let xmm1_high: [u8; 16] = 0x7b5b546573745665_u128.to_le_bytes();
+        let xmm1_low: [u8; 16] = 0x63746f725d53475d_u128.to_le_bytes();
+        let xmm2_high: [u8; 16] = 0x4869285368617929_u128.to_le_bytes();
+        let xmm2_low: [u8; 16] = 0x5b477565726f6e5d_u128.to_le_bytes();
+
+        assert_eq!(
+            Clmul::new(&xmm2_low).clmul(Clmul::new(&xmm1_low)),
+            (
+                Clmul::new(&0x1d4d84c85c3440c0929633d5d36f0451_u128.to_le_bytes()),
+                Clmul::new(&[0u8; 16]),
+            ),
+        );
+
+        assert_eq!(
+            Clmul::new(&xmm2_high).clmul(Clmul::new(&xmm1_low)),
+            (
+                Clmul::new(&0x1bd17c8d556ab5a17fa540ac2a281315_u128.to_le_bytes()),
+                Clmul::new(&[0u8; 16]),
+            ),
+        );
+
+        assert_eq!(
+            Clmul::new(&xmm2_low).clmul(Clmul::new(&xmm1_high)),
+            (
+                Clmul::new(&0x1a2bf6db3a30862fbabf262df4b7d5c9_u128.to_le_bytes()),
+                Clmul::new(&[0u8; 16]),
+            ),
+        );
+
+        assert_eq!(
+            Clmul::new(&xmm2_high).clmul(Clmul::new(&xmm1_high)),
+            (
+                Clmul::new(&0x1d1e1f2c592e7c45d66ee03e410fd4ed_u128.to_le_bytes()),
+                Clmul::new(&[0u8; 16]),
+            ),
+        );
+
+        let xmm1 = 0x00000000000000008000000000000000_u128.to_le_bytes();
+        let xmm2 = 0x00000000000000008000000000000000_u128.to_le_bytes();
+        let result = 0x40000000000000000000000000000000_u128.to_le_bytes();
+        assert_eq!(
+            Clmul::new(&xmm1).clmul(Clmul::new(&xmm2)),
+            (Clmul::new(&result), Clmul::new(&[0u8; 16])),
+        );
     }
 }

@@ -1,9 +1,9 @@
 //! A block of 128 bits and its operations.
 
 use bytemuck::{Pod, Zeroable};
-use cipher::{consts::U16, generic_array::GenericArray};
 use clmul::Clmul;
 use core::ops::{BitAnd, BitAndAssign, BitXor, BitXorAssign};
+use generic_array::{typenum::consts::U16, GenericArray};
 use itybity::{BitIterable, BitLength, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -121,6 +121,40 @@ impl Block {
         x[0] ^= x[1];
         bytemuck::cast([x[1], x[0]])
     }
+
+    /// Converts a block to a [`GenericArray<u8, U16>`](cipher::generic_array::GenericArray)
+    /// from the [`generic-array`](https://docs.rs/generic-array/latest/generic_array/) crate.
+    #[allow(dead_code)]
+    pub(crate) fn as_generic_array(&self) -> &GenericArray<u8, U16> {
+        (&self.0).into()
+    }
+
+    /// Converts a mutable block to a mutable [`GenericArray<u8, U16>`](cipher::generic_array::GenericArray)
+    /// from the [`generic-array`](https://docs.rs/generic-array/latest/generic_array/) crate.
+    pub(crate) fn as_generic_array_mut(&mut self) -> &mut GenericArray<u8, U16> {
+        (&mut self.0).into()
+    }
+
+    /// Converts a slice of blocks to a slice of [`GenericArray<u8, U16>`](cipher::generic_array::GenericArray)
+    /// from the [`generic-array`](https://docs.rs/generic-array/latest/generic_array/) crate.
+    #[allow(dead_code)]
+    pub(crate) fn as_generic_array_slice(slice: &[Self]) -> &[GenericArray<u8, U16>] {
+        // # Safety
+        // This is always safe because `Block` and `GenericArray<u8, U16>` have the same memory layout.
+        // See https://github.com/fizyk20/generic-array/blob/37dc6aefc3ed5c423ad7402d4febf06a3e78a223/src/lib.rs#L838-L845
+        // TODO: Use methods provided by `generic-array` once 1.0 is released.
+        unsafe { std::mem::transmute(slice) }
+    }
+
+    /// Converts a mutable slice of blocks to a mutable slice of [`GenericArray<u8, U16>`](cipher::generic_array::GenericArray)
+    /// from the [`generic-array`](https://docs.rs/generic-array/latest/generic_array/) crate.
+    pub(crate) fn as_generic_array_mut_slice(slice: &mut [Self]) -> &mut [GenericArray<u8, U16>] {
+        // # Safety
+        // This is always safe because `Block` and `GenericArray<u8, U16>` have the same memory layout.
+        // See https://github.com/fizyk20/generic-array/blob/37dc6aefc3ed5c423ad7402d4febf06a3e78a223/src/lib.rs#L847-L854
+        // TODO: Use methods provided by `generic-array` once 1.0 is released.
+        unsafe { std::mem::transmute(slice) }
+    }
 }
 
 /// A trait for converting a type to blocks
@@ -160,6 +194,12 @@ impl From<[u8; 16]> for Block {
     }
 }
 
+impl<'a> From<&'a [u8; 16]> for &'a Block {
+    fn from(bytes: &'a [u8; 16]) -> Self {
+        bytemuck::cast_ref(bytes)
+    }
+}
+
 impl<'a> TryFrom<&'a [u8]> for Block {
     type Error = <[u8; 16] as TryFrom<&'a [u8]>>::Error;
 
@@ -175,6 +215,13 @@ impl From<Block> for GenericArray<u8, U16> {
     }
 }
 
+impl<'a> From<&'a Block> for &'a GenericArray<u8, U16> {
+    #[inline]
+    fn from(b: &'a Block) -> Self {
+        (&b.0).into()
+    }
+}
+
 impl From<GenericArray<u8, U16>> for Block {
     #[inline]
     fn from(b: GenericArray<u8, U16>) -> Self {
@@ -182,10 +229,25 @@ impl From<GenericArray<u8, U16>> for Block {
     }
 }
 
+impl<'a> From<&'a GenericArray<u8, U16>> for &'a Block {
+    #[inline]
+    fn from(b: &'a GenericArray<u8, U16>) -> Self {
+        let b: &'a [u8; 16] = b.as_ref();
+        b.into()
+    }
+}
+
 impl From<Block> for [u8; 16] {
     #[inline]
     fn from(b: Block) -> Self {
         b.0
+    }
+}
+
+impl<'a> From<&'a Block> for &'a [u8; 16] {
+    #[inline]
+    fn from(b: &'a Block) -> Self {
+        &b.0
     }
 }
 

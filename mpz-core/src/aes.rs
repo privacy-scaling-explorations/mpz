@@ -1,7 +1,7 @@
 //! Fixed-key AES cipher
 
-use aes::{cipher::generic_array::GenericArray, Aes128, Aes128Enc};
-use cipher::{generic_array::functional::FunctionalSequence, BlockEncrypt, KeyInit};
+use aes::Aes128Enc;
+use cipher::{BlockEncrypt, KeyInit};
 use once_cell::sync::Lazy;
 
 use crate::Block;
@@ -13,12 +13,12 @@ pub const FIXED_KEY: [u8; 16] = [
 
 /// Fixed-key AES cipher
 pub static FIXED_KEY_AES: Lazy<FixedKeyAes> = Lazy::new(|| FixedKeyAes {
-    aes: Aes128::new_from_slice(&FIXED_KEY).unwrap(),
+    aes: Aes128Enc::new_from_slice(&FIXED_KEY).unwrap(),
 });
 
 /// Fixed-key AES cipher
 pub struct FixedKeyAes {
-    aes: Aes128,
+    aes: Aes128Enc,
 }
 
 impl FixedKeyAes {
@@ -30,39 +30,103 @@ impl FixedKeyAes {
     /// `π(π(x) ⊕ i) ⊕ π(x)`, where `π` is instantiated using fixed-key AES.
     #[inline]
     pub fn tccr(&self, tweak: Block, block: Block) -> Block {
-        let tweak = GenericArray::from(tweak);
+        let mut h1 = block;
+        self.aes.encrypt_block(h1.as_generic_array_mut());
 
-        let mut h1 = GenericArray::from(block);
-        self.aes.encrypt_block(&mut h1);
+        let mut h2 = h1 ^ tweak;
+        self.aes.encrypt_block(h2.as_generic_array_mut());
 
-        let mut h2 = h1.zip(tweak, |a, b| a ^ b);
-        self.aes.encrypt_block(&mut h2);
-
-        let out: [u8; 16] = h2.zip(h1, |a, b| a ^ b).into();
-
-        Block::from(out)
+        h1 ^ h2
     }
 
-    /// Correlation-robust hash function for 128-bit inputs
+    /// Tweakable circular correlation-robust hash function instantiated
+    /// using fixed-key AES.
+    ///
+    /// See <https://eprint.iacr.org/2019/074> (Section 7.4)
+    ///
+    /// `π(π(x) ⊕ i) ⊕ π(x)`, where `π` is instantiated using fixed-key AES.
+    ///
+    /// # Arguments
+    ///
+    /// * `tweaks` - The tweaks to use for each block in `blocks`.
+    /// * `blocks` - The blocks to hash in-place.
+    #[inline]
+    pub fn tccr_many_inplace<const N: usize>(&self, tweaks: &[Block; N], blocks: &mut [Block; N]) {
+        // Store π(x) in `blocks`
+        self.aes
+            .encrypt_blocks(Block::as_generic_array_mut_slice(blocks));
+
+        // Write π(x) ⊕ i into `buf`
+        let mut buf: [Block; N] = std::array::from_fn(|i| blocks[i] ^ tweaks[i]);
+
+        // Write π(π(x) ⊕ i) in `buf`
+        self.aes
+            .encrypt_blocks(Block::as_generic_array_mut_slice(&mut buf));
+
+        // Write π(π(x) ⊕ i) ⊕ π(x) into `blocks`
+        blocks
+            .iter_mut()
+            .zip(buf.iter())
+            .for_each(|(a, b)| *a ^= *b);
+    }
+
+    /// Correlation-robust hash function instantiated using fixed-key AES
     /// (cf. <https://eprint.iacr.org/2019/074>, §7.2).
-    /// The function computes `π(x) ⊕ x`.
-    /// π(x) = AES(fixedkey,x)
+    ///
+    /// `π(x) ⊕ x`, where `π` is instantiated using fixed-key AES.
     #[inline]
     pub fn cr(&self, block: Block) -> Block {
-        let mut x = GenericArray::from(block);
-        self.aes.encrypt_block(&mut x);
-        Block::from(x) ^ block
+        let mut h = block;
+        self.aes.encrypt_block(h.as_generic_array_mut());
+        h ^ block
     }
 
-    /// Circular correlation-robust hash function
+    /// Correlation-robust hash function instantiated using fixed-key AES
+    /// (cf. <https://eprint.iacr.org/2019/074>, §7.2).
+    ///
+    /// `π(x) ⊕ x`, where `π` is instantiated using fixed-key AES.
+    ///
+    /// # Arguments
+    ///
+    /// * `blocks` - The blocks to hash in-place.
+    #[inline]
+    pub fn cr_many_inplace<const N: usize>(&self, blocks: &mut [Block; N]) {
+        let mut buf = *blocks;
+
+        self.aes
+            .encrypt_blocks(Block::as_generic_array_mut_slice(&mut buf));
+
+        blocks
+            .iter_mut()
+            .zip(buf.iter())
+            .for_each(|(a, b)| *a ^= *b);
+    }
+
+    /// Circular correlation-robust hash function instantiated using fixed-key AES
     /// (cf.<https://eprint.iacr.org/2019/074>, §7.3).
     ///
-    /// The function computes `H(sigma(x))`, where `H` is a correlation-robust hash
-    /// function and `sigma( x = x0 || x1 ) = x1 || (x0 xor x1)`.
-    /// `x0` and `x1` are the lower and higher halves of `x`, respectively.
+    /// `π(σ(x)) ⊕ σ(x)`, where `π` is instantiated using fixed-key AES
+    ///
+    /// See [`Block::sigma`](Block::sigma) for more details on `σ`.
     #[inline]
     pub fn ccr(&self, block: Block) -> Block {
         self.cr(Block::sigma(block))
+    }
+
+    /// Circular correlation-robust hash function instantiated using fixed-key AES
+    /// (cf.<https://eprint.iacr.org/2019/074>, §7.3).
+    ///
+    /// `π(σ(x)) ⊕ σ(x)`, where `π` is instantiated using fixed-key AES
+    ///
+    /// See [`Block::sigma`](Block::sigma) for more details on `σ`.
+    ///
+    /// # Arguments
+    ///
+    /// * `blocks` - The blocks to hash in-place.
+    #[inline]
+    pub fn ccr_many_inplace<const N: usize>(&self, blocks: &mut [Block; N]) {
+        blocks.iter_mut().for_each(|b| *b = Block::sigma(*b));
+        self.cr_many_inplace(blocks);
     }
 }
 
@@ -84,20 +148,24 @@ impl AesEncryptor {
 
     /// Encrypt a block.
     #[inline(always)]
-    pub fn encrypt_block(&self, blk: Block) -> Block {
-        let mut ctxt = GenericArray::from(blk);
-        self.0.encrypt_block(&mut ctxt);
-        Block::from(ctxt)
+    pub fn encrypt_block(&self, mut blk: Block) -> Block {
+        self.0.encrypt_block(blk.as_generic_array_mut());
+        blk
     }
 
     /// Encrypt many blocks.
     #[inline(always)]
-    pub fn encrypt_many_blocks<const N: usize>(&self, blks: [Block; N]) -> [Block; N] {
-        let mut ctxt = [Block::default(); N];
-        for i in 0..N {
-            ctxt[i] = self.encrypt_block(blks[i]);
-        }
-        ctxt
+    pub fn encrypt_many_blocks<const N: usize>(&self, mut blks: [Block; N]) -> [Block; N] {
+        self.0
+            .encrypt_blocks(Block::as_generic_array_mut_slice(blks.as_mut_slice()));
+        blks
+    }
+
+    /// Encrypt many blocks in-place.
+    #[inline]
+    pub fn encrypt_many_blocks_inplace(&self, blks: &mut [Block]) {
+        self.0
+            .encrypt_blocks(Block::as_generic_array_mut_slice(blks));
     }
 
     /// Encrypt block slice.
@@ -119,17 +187,28 @@ impl AesEncryptor {
     }
 
     /// Encrypt many blocks with many keys.
-    /// Input: `NK` AES keys `keys`, and `NK * NM` blocks `blks`
-    /// Output: each batch of NM blocks encrypted by a corresponding AES key.
-    /// Only handle the first NK * NM blocks of blks, do not handle the rest.
+    ///
+    /// Each batch of NM blocks is encrypted by a corresponding AES key.
+    ///
+    /// **Only the first NK * NM blocks of blks are handled, the rest are ignored.**
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - A slice of keys used to encrypt the blocks.
+    /// * `blks` - A slice of blocks to be encrypted.
+    ///
+    /// # Panics
+    ///
+    /// * If the length of `blks` is less than `NM * NK`.
     #[inline(always)]
     pub fn para_encrypt<const NK: usize, const NM: usize>(keys: &[Self; NK], blks: &mut [Block]) {
         assert!(blks.len() >= NM * NK);
-        let mut ctxt = [Block::default(); NM];
-        keys.iter().enumerate().for_each(|(i, key)| {
-            ctxt.copy_from_slice(&blks[i * NM..(i + 1) * NM]);
-            blks[i * NM..(i + 1) * NM].copy_from_slice(&key.encrypt_many_blocks(ctxt))
-        });
+
+        keys.iter()
+            .zip(blks.chunks_exact_mut(NM))
+            .for_each(|(key, blks)| {
+                key.encrypt_many_blocks_inplace(blks);
+            });
     }
 }
 

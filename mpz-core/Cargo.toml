@@ -7,8 +7,9 @@ edition = "2021"
 name = "mpz_core"
 
 [features]
-default = ["cointoss"]
+default = ["cointoss", "rayon"]
 cointoss = ["dep:rand_chacha"]
+rayon = ["dep:rayon"]
 
 [dependencies]
 aes = { workspace = true, features = [] }
@@ -25,7 +26,9 @@ opaque-debug.workspace = true
 bcs = "0.1.5"
 rand_core = "0.6.4"
 bytemuck = { workspace = true, features = ["derive"] }
-rayon = { version = "1.7.0" }
+generic-array.workspace = true
+rayon = { workspace = true, optional = true }
+cfg-if.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true

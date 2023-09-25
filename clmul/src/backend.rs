@@ -58,14 +58,14 @@ cfg_if! {
 
 cfg_if! {
     if #[cfg(any(all(target_arch = "aarch64", feature = "armv8"), any(target_arch = "x86_64", target_arch = "x86")))]{
-        #[derive(Clone, Copy)]
+        #[derive(Clone, Copy, Debug)]
         /// Carryless multiplication
         pub struct Clmul {
             intrinsics: Option<intrinsics::Clmul>,
             soft: Option<soft::Clmul>,
         }
     } else {
-        #[derive(Clone, Copy)]
+        #[derive(Clone, Copy, Debug)]
         /// Carryless multiplication
         pub struct Clmul {
             // intrinsics will never be used on a non-supported arch but Rust

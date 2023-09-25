@@ -10,7 +10,7 @@ use core::arch::x86_64::*;
 
 pub type Clmul = ClmulX86;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct ClmulX86(pub __m128i);
 
 impl From<ClmulX86> for [u8; 16] {
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn test_against_emptool_impl() {
-        let mut rng = ChaCha12Rng::from_entropy();
+        let mut rng = ChaCha12Rng::from_seed([0; 32]);
         let a: [u8; 16] = rng.gen();
         let b: [u8; 16] = rng.gen();
 
