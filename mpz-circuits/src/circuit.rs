@@ -244,6 +244,29 @@ impl Circuit {
     }
 }
 
+pub struct GatesIterator {
+    gates: Box<dyn Iterator<Item = Gate>>,
+}
+
+impl Iterator for GatesIterator {
+    type Item = Gate;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.gates.next()
+    }
+}
+
+impl IntoIterator for Circuit {
+    type Item = Gate;
+    type IntoIter = GatesIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        GatesIterator {
+            gates: Box::new(self.gates.into_iter()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use mpz_circuits_macros::evaluate;
