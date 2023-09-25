@@ -277,39 +277,14 @@ impl BuilderState {
     ///
     /// The output of the gate.
     pub(crate) fn add_xor_gate(&mut self, x: Node<Feed>, y: Node<Feed>) -> Node<Feed> {
-        // if either input is a constant, we can simplify the gate
-        if x.id() == 0 && y.id() == 0 {
-            self.get_const_zero()
-        } else if x.id() == 1 && y.id() == 1 {
-            return self.get_const_zero();
-        } else if x.id() == 0 {
-            return y;
-        } else if y.id() == 0 {
-            return x;
-        } else if x.id() == 1 {
-            let out = self.add_feed();
-            self.gates.push(Gate::Inv {
-                x: y.into(),
-                z: out,
-            });
-            return out;
-        } else if y.id() == 1 {
-            let out = self.add_feed();
-            self.gates.push(Gate::Inv {
-                x: x.into(),
-                z: out,
-            });
-            return out;
-        } else {
-            let out = self.add_feed();
-            self.gates.push(Gate::Xor {
-                x: x.into(),
-                y: y.into(),
-                z: out,
-            });
-            self.xor_count += 1;
-            return out;
-        }
+        let out = self.add_feed();
+        self.gates.push(Gate::Xor {
+            x: x.into(),
+            y: y.into(),
+            z: out,
+        });
+        self.xor_count += 1;
+        out
     }
 
     /// Adds an AND gate to the circuit.
@@ -323,23 +298,14 @@ impl BuilderState {
     ///
     /// The output of the gate.
     pub(crate) fn add_and_gate(&mut self, x: Node<Feed>, y: Node<Feed>) -> Node<Feed> {
-        // if either input is a constant, we can simplify the gate
-        if x.id() == 0 || y.id() == 0 {
-            self.get_const_zero()
-        } else if x.id() == 1 {
-            return y;
-        } else if y.id() == 1 {
-            return x;
-        } else {
-            let out = self.add_feed();
-            self.gates.push(Gate::And {
-                x: x.into(),
-                y: y.into(),
-                z: out,
-            });
-            self.and_count += 1;
-            return out;
-        }
+        let out = self.add_feed();
+        self.gates.push(Gate::And {
+            x: x.into(),
+            y: y.into(),
+            z: out,
+        });
+        self.and_count += 1;
+        out
     }
 
     /// Adds an INV gate to the circuit.
@@ -352,18 +318,12 @@ impl BuilderState {
     ///
     /// The output of the gate.
     pub(crate) fn add_inv_gate(&mut self, x: Node<Feed>) -> Node<Feed> {
-        if x.id() == 0 {
-            self.get_const_one()
-        } else if x.id() == 1 {
-            return self.get_const_zero();
-        } else {
-            let out = self.add_feed();
-            self.gates.push(Gate::Inv {
-                x: x.into(),
-                z: out,
-            });
-            return out;
-        }
+        let out = self.add_feed();
+        self.gates.push(Gate::Inv {
+            x: x.into(),
+            z: out,
+        });
+        out
     }
 
     /// Appends an existing circuit
