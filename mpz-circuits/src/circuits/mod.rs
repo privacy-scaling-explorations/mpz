@@ -157,6 +157,7 @@ pub fn build_sha256(pos: usize, msg_len: usize) -> Circuit {
         .collect::<Vec<_>>();
     let hash: [_; 32] = hash.try_into().expect("hash is 32 bytes");
 
+    builder.clear_outputs();
     builder.add_output(hash);
 
     builder.build().expect("circuit is valid")

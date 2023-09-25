@@ -151,6 +151,10 @@ impl CircuitBuilder {
         state.outputs.push(value.into());
     }
 
+    pub(crate) fn clear_outputs(&self) {
+        self.state.borrow_mut().outputs.clear();
+    }
+
     /// Returns a tracer for a constant value
     pub fn get_constant<T: ToBinaryRepr + BitIterable>(&self, value: T) -> Tracer<'_, T::Repr> {
         let mut state = self.state.borrow_mut();
