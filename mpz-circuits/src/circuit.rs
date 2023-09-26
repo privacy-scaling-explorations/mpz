@@ -281,6 +281,7 @@ impl<'a> Iterator for SubCircuitIterator<'a> {
     }
 }
 
+/// An iterator over the gates of a circuit
 pub struct GatesIterator<'a> {
     gates: Iter<'a, Gate>,
     sub_circuits: Iter<'a, SubCircuit>,

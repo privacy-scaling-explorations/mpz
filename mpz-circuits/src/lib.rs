@@ -16,7 +16,7 @@ pub mod types;
 #[doc(hidden)]
 pub use builder::BuilderState;
 pub use builder::{BuilderError, CircuitBuilder};
-pub use circuit::{Circuit, CircuitError};
+pub use circuit::{Circuit, CircuitError, GatesIterator};
 #[doc(hidden)]
 pub use components::{Feed, Node, Sink};
 pub use components::{Gate, GateType};
