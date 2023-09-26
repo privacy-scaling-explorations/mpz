@@ -212,8 +212,7 @@ impl<'a> IntoIterator for &'a SubCircuit {
         SubCircuitIterator {
             feed_map: &self.feed_map,
             feed_offset: self.feed_offset,
-            circuit: &self.circuit,
-            pos: 0,
+            gates_iter: Box::new(self.circuit.gates()),
         }
     }
 }
@@ -221,16 +220,14 @@ impl<'a> IntoIterator for &'a SubCircuit {
 pub(crate) struct SubCircuitIterator<'a> {
     feed_map: &'a BTreeMap<usize, usize>,
     feed_offset: usize,
-    circuit: &'a Circuit,
-    pos: usize,
+    gates_iter: Box<GatesIterator<'a>>,
 }
 
 impl<'a> Iterator for SubCircuitIterator<'a> {
     type Item = Gate;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut gate = self.circuit.gates().nth(self.pos)?;
-        self.pos += 1;
+        let mut gate = self.gates_iter.next()?;
 
         gate.shift_right(self.feed_offset);
         let x = gate.x();
