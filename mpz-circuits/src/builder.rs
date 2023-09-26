@@ -365,7 +365,7 @@ impl BuilderState {
 
         // Update break points
         self.circuit_break_points
-            .push_back(self.gates.len() - *self.circuit_break_points.back().unwrap_or(&0));
+            .push_back(self.gates.len() - self.circuit_break_points.iter().sum::<usize>());
 
         // Update the outputs
         self.outputs = circuit.outputs().to_vec();
@@ -407,13 +407,17 @@ impl BuilderState {
     }
 
     /// Builds the circuit.
-    pub(crate) fn build(self) -> Result<Circuit, BuilderError> {
+    pub(crate) fn build(mut self) -> Result<Circuit, BuilderError> {
         let gates_count = self
             .sub_circuits
             .iter()
             .map(|g| g.circuit.gates_count())
             .sum::<usize>()
             + self.gates.len();
+
+        // Update break points
+        self.circuit_break_points
+            .push_back(self.gates.len() - self.circuit_break_points.iter().sum::<usize>());
 
         Ok(Circuit {
             inputs: self.inputs,

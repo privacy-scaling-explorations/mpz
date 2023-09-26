@@ -49,60 +49,9 @@ impl Circuit {
     }
 
     /// Returns a reference to the gates of the circuit.
-    pub fn gates(&self) -> GatesIterator {
+    pub fn gates(&self) -> GatesIterator<'_> {
         self.into_iter()
     }
-
-    // pub fn gates(&self) -> Box<dyn Iterator<Item = Gate> + '_> {
-    //     let iter = self
-    //         .sub_circuits
-    //         .iter()
-    //         .enumerate()
-    //         .flat_map(move |(k, sub_circ)| {
-    //             let old_inputs = sub_circ
-    //                 .circuit
-    //                 .inputs
-    //                 .iter()
-    //                 .flat_map(|bin| bin.iter())
-    //                 .collect::<Vec<_>>();
-    //             let new_inputs = self.sub_circuits_inputs[k]
-    //                 .iter()
-    //                 .flat_map(|bin| bin.iter())
-    //                 .collect::<Vec<_>>();
-
-    //             let gates_iter = {
-    //                 let offset = sub_circ.feed_offset;
-    //                 let iter = sub_circ.circuit.gates().map(move |mut gate| {
-    //                     gate.shift_right(offset);
-
-    //                     let x = gate.x();
-    //                     let y = gate.y();
-
-    //                     if let Some(pos) =
-    //                         old_inputs.iter().position(|node| node.id + offset == x.id)
-    //                     {
-    //                         gate.set_x(new_inputs[pos].id);
-    //                     }
-
-    //                     if let Some(y) = y {
-    //                         if let Some(pos) =
-    //                             old_inputs.iter().position(|node| node.id + offset == y.id)
-    //                         {
-    //                             gate.set_y(new_inputs[pos].id);
-    //                         }
-    //                     }
-
-    //                     gate
-    //                 });
-    //                 Box::new(iter)
-    //             };
-
-    //             Box::new(gates_iter)
-    //         })
-    //         .chain(self.gates.iter().copied());
-
-    //     Box::new(iter)
-    // }
 
     /// Returns the number of feeds in the circuit.
     pub fn feed_count(&self) -> usize {
@@ -255,11 +204,55 @@ pub(crate) struct SubCircuit {
     pub(crate) circuit: Arc<Circuit>,
 }
 
+impl<'a> IntoIterator for &'a SubCircuit {
+    type Item = Gate;
+    type IntoIter = SubCircuitIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        SubCircuitIterator {
+            feed_map: &self.feed_map,
+            feed_offset: self.feed_offset,
+            circuit: &self.circuit,
+            pos: 0,
+        }
+    }
+}
+
+pub(crate) struct SubCircuitIterator<'a> {
+    feed_map: &'a BTreeMap<usize, usize>,
+    feed_offset: usize,
+    circuit: &'a Circuit,
+    pos: usize,
+}
+
+impl<'a> Iterator for SubCircuitIterator<'a> {
+    type Item = Gate;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut gate = self.circuit.gates().nth(self.pos)?;
+        self.pos += 1;
+
+        gate.shift_right(self.feed_offset);
+        let x = gate.x();
+        let y = gate.y();
+
+        if let Some(new_x) = self.feed_map.get(&(x.id - self.feed_offset)) {
+            gate.set_x(*new_x);
+        }
+
+        if let Some(y) = y {
+            if let Some(new_y) = self.feed_map.get(&(y.id - self.feed_offset)) {
+                gate.set_y(*new_y);
+            }
+        }
+        Some(gate)
+    }
+}
+
 pub struct GatesIterator<'a> {
     gates: Iter<'a, Gate>,
     sub_circuits: Iter<'a, SubCircuit>,
-    current_sub_circuit: Option<Iter<'a, Gate>>,
-    sub_circuit_pos: usize,
+    current_sub_circuit: Option<SubCircuitIterator<'a>>,
     break_points: VecDeque<usize>,
     current_break_point: Option<usize>,
 }
@@ -271,24 +264,21 @@ impl<'a> Iterator for GatesIterator<'a> {
         if let Some(current_break_point) = self.current_break_point {
             if current_break_point == 0 {
                 self.current_break_point = None;
+                self.current_sub_circuit = self.sub_circuits.next().map(|c| c.into_iter());
                 return self.next();
             }
             self.current_break_point = Some(current_break_point - 1);
             return self.gates.next().copied();
         }
-        self.current_break_point = self.break_points.pop_front();
 
-        if let Some(current_sub_circuit) = self.current_sub_circuit {
-            if let Some(gate) = current_sub_circuit.next().cloned() {
+        if let Some(ref mut current_sub_circuit) = self.current_sub_circuit {
+            if let Some(gate) = current_sub_circuit.next() {
                 return Some(gate);
             }
-
-            self.current_sub_circuit = None;
+            self.current_break_point = self.break_points.pop_front();
             return self.next();
         }
-        if let Some(sub_circuit) = self.sub_circuits.next() {
-            self.current_sub_circuit = return self.next();
-        }
+        None
     }
 }
 
@@ -297,13 +287,15 @@ impl<'a> IntoIterator for &'a Circuit {
     type IntoIter = GatesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
+        let mut break_points = self.break_points.clone();
+        let current_break_point = break_points.pop_front();
+
         GatesIterator {
             gates: self.gates.iter(),
             sub_circuits: self.sub_circuits.iter(),
-            sub_circuit_pos: 0,
-            break_points: self.break_points,
             current_sub_circuit: None,
-            current_break_point: None,
+            break_points,
+            current_break_point,
         }
     }
 }
