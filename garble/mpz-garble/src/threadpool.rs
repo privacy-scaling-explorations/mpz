@@ -116,16 +116,21 @@ where
 mod tests {
     use super::*;
 
-    use crate::{protocol::deap::mock::create_mock_deap_vm, Decode, Execute, Vm, VmError};
+    use crate::{
+        config::Visibility, protocol::deap::mock::create_mock_deap_vm, Decode, Execute, Vm, VmError,
+    };
     use mpz_circuits::circuits::AES128;
 
     async fn test_fn_leader<T: Thread + Execute + Decode>(
         thread: &mut T,
         n: usize,
     ) -> Result<[u8; 16], VmError> {
-        let key = thread.new_private_input(&format!("key/{n}"), Some([0u8; 16]))?;
-        let msg = thread.new_private_input(&format!("msg/{n}"), Some([0u8; 16]))?;
+        let key = thread.new_input::<[u8; 16]>(&format!("key/{n}"), Visibility::Private)?;
+        let msg = thread.new_input::<[u8; 16]>(&format!("msg/{n}"), Visibility::Private)?;
         let ciphertext = thread.new_output::<[u8; 16]>(&format!("ciphertext/{n}"))?;
+
+        thread.assign(&key, [0u8; 16]).unwrap();
+        thread.assign(&msg, [0u8; 16]).unwrap();
 
         thread
             .execute(AES128.clone(), &[key, msg], &[ciphertext.clone()])
@@ -140,8 +145,8 @@ mod tests {
         thread: &mut T,
         n: usize,
     ) -> Result<[u8; 16], VmError> {
-        let key = thread.new_private_input::<[u8; 16]>(&format!("key/{n}"), None)?;
-        let msg = thread.new_private_input::<[u8; 16]>(&format!("msg/{n}"), None)?;
+        let key = thread.new_input::<[u8; 16]>(&format!("key/{n}"), Visibility::Blind)?;
+        let msg = thread.new_input::<[u8; 16]>(&format!("msg/{n}"), Visibility::Blind)?;
         let ciphertext = thread.new_output::<[u8; 16]>(&format!("ciphertext/{n}"))?;
 
         thread

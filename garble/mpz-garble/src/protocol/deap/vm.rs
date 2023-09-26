@@ -19,7 +19,7 @@ use utils::id::NestedId;
 use utils_aio::{duplex::Duplex, mux::MuxChannel};
 
 use crate::{
-    config::Role,
+    config::{Role, Visibility},
     ot::{VerifiableOTReceiveEncoding, VerifiableOTSendEncoding},
     Decode, DecodeError, DecodePrivate, Execute, ExecutionError, Memory, MemoryError, Prove,
     ProveError, Thread, Verify, VerifyError, Vm, VmError,
@@ -204,63 +204,31 @@ impl<OTS, OTR> Thread for DEAPThread<OTS, OTR> {}
 
 #[async_trait]
 impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
-    fn new_public_input<T: StaticValueType>(
+    fn new_input<T: StaticValueType>(
         &self,
         id: &str,
-        value: T,
+        vis: Visibility,
     ) -> Result<ValueRef, MemoryError> {
-        self.deap().new_public_input(id, value)
+        unimplemented!()
     }
 
-    fn new_public_array_input<T: StaticValueType>(
+    fn new_input_array<T: StaticValueType>(
         &self,
         id: &str,
-        value: Vec<T>,
-    ) -> Result<ValueRef, MemoryError>
-    where
-        Vec<T>: Into<Value>,
-    {
-        self.deap().new_public_array_input(id, value)
-    }
-
-    fn new_public_input_by_type(&self, id: &str, value: Value) -> Result<ValueRef, MemoryError> {
-        self.deap().new_public_input_by_type(id, value)
-    }
-
-    fn new_private_input<T: StaticValueType>(
-        &self,
-        id: &str,
-        value: Option<T>,
-    ) -> Result<ValueRef, MemoryError> {
-        self.deap().new_private_input(id, value)
-    }
-
-    fn new_private_array_input<T: StaticValueType>(
-        &self,
-        id: &str,
-        value: Option<Vec<T>>,
+        vis: Visibility,
         len: usize,
     ) -> Result<ValueRef, MemoryError>
     where
         Vec<T>: Into<Value>,
     {
-        self.deap().new_private_array_input(id, value, len)
-    }
-
-    fn new_private_input_by_type(
-        &self,
-        id: &str,
-        ty: &ValueType,
-        value: Option<Value>,
-    ) -> Result<ValueRef, MemoryError> {
-        self.deap().new_private_input_by_type(id, ty, value)
+        unimplemented!()
     }
 
     fn new_output<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
-        self.deap().new_output::<T>(id)
+        unimplemented!()
     }
 
-    fn new_array_output<T: StaticValueType>(
+    fn new_output_array<T: StaticValueType>(
         &self,
         id: &str,
         len: usize,
@@ -268,11 +236,15 @@ impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
     where
         Vec<T>: Into<Value>,
     {
-        self.deap().new_array_output::<T>(id, len)
+        unimplemented!()
     }
 
-    fn new_output_by_type(&self, id: &str, ty: &ValueType) -> Result<ValueRef, MemoryError> {
-        self.deap().new_output_by_type(id, ty)
+    fn assign<T: StaticValueType>(
+        &self,
+        value_ref: &ValueRef,
+        value: T,
+    ) -> Result<(), MemoryError> {
+        unimplemented!()
     }
 
     fn get_value(&self, id: &str) -> Option<ValueRef> {
@@ -512,12 +484,14 @@ mod tests {
 
         let leader_fut = {
             let key_ref = leader_thread
-                .new_private_input::<[u8; 16]>("key", Some(key))
+                .new_input::<[u8; 16]>("key", Visibility::Private)
                 .unwrap();
             let msg_ref = leader_thread
-                .new_private_input::<[u8; 16]>("msg", None)
+                .new_input::<[u8; 16]>("msg", Visibility::Blind)
                 .unwrap();
             let ciphertext_ref = leader_thread.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            leader_thread.assign(&key_ref, key).unwrap();
 
             async move {
                 leader_thread
@@ -535,14 +509,16 @@ mod tests {
 
         let follower_fut = {
             let key_ref = follower_thread
-                .new_private_input::<[u8; 16]>("key", None)
+                .new_input::<[u8; 16]>("key", Visibility::Blind)
                 .unwrap();
             let msg_ref = follower_thread
-                .new_private_input::<[u8; 16]>("msg", Some(msg))
+                .new_input::<[u8; 16]>("msg", Visibility::Private)
                 .unwrap();
             let ciphertext_ref = follower_thread
                 .new_output::<[u8; 16]>("ciphertext")
                 .unwrap();
+
+            follower_thread.assign(&msg_ref, msg).unwrap();
 
             async move {
                 follower_thread

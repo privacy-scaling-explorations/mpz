@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use config::Visibility;
 use mpz_circuits::{
     types::{StaticValueType, Value, ValueType},
     Circuit,
@@ -144,55 +145,28 @@ pub trait Thread: Memory {}
 
 /// This trait provides methods for interacting with values in memory.
 pub trait Memory {
-    /// Adds a new public input value, returning a reference to it.
-    fn new_public_input<T: StaticValueType>(
+    /// Defines a new input value, returning a reference to it.
+    fn new_input<T: StaticValueType>(
         &self,
         id: &str,
-        value: T,
+        vis: Visibility,
     ) -> Result<ValueRef, MemoryError>;
 
-    /// Adds a new public array input value, returning a reference to it.
-    fn new_public_array_input<T: StaticValueType>(
+    /// Defines a new array input value, returning a reference to it.
+    fn new_input_array<T: StaticValueType>(
         &self,
         id: &str,
-        value: Vec<T>,
-    ) -> Result<ValueRef, MemoryError>
-    where
-        Vec<T>: Into<Value>;
-
-    /// Adds a new public input value, returning a reference to it.
-    fn new_public_input_by_type(&self, id: &str, value: Value) -> Result<ValueRef, MemoryError>;
-
-    /// Adds a new private input value, returning a reference to it.
-    fn new_private_input<T: StaticValueType>(
-        &self,
-        id: &str,
-        value: Option<T>,
-    ) -> Result<ValueRef, MemoryError>;
-
-    /// Adds a new private array input value, returning a reference to it.
-    fn new_private_array_input<T: StaticValueType>(
-        &self,
-        id: &str,
-        value: Option<Vec<T>>,
+        vis: Visibility,
         len: usize,
     ) -> Result<ValueRef, MemoryError>
     where
         Vec<T>: Into<Value>;
 
-    /// Adds a new private input value, returning a reference to it.
-    fn new_private_input_by_type(
-        &self,
-        id: &str,
-        ty: &ValueType,
-        value: Option<Value>,
-    ) -> Result<ValueRef, MemoryError>;
-
-    /// Creates a new output value, returning a reference to it.
+    /// Defines a new output value, returning a reference to it.
     fn new_output<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError>;
 
-    /// Creates a new array output value, returning a reference to it.
-    fn new_array_output<T: StaticValueType>(
+    /// Defines a new array output value, returning a reference to it.
+    fn new_output_array<T: StaticValueType>(
         &self,
         id: &str,
         len: usize,
@@ -200,8 +174,9 @@ pub trait Memory {
     where
         Vec<T>: Into<Value>;
 
-    /// Creates a new output value, returning a reference to it.
-    fn new_output_by_type(&self, id: &str, ty: &ValueType) -> Result<ValueRef, MemoryError>;
+    /// Assigns a value
+    fn assign<T: StaticValueType>(&self, value_ref: &ValueRef, value: T)
+        -> Result<(), MemoryError>;
 
     /// Returns a value if it exists.
     fn get_value(&self, id: &str) -> Option<ValueRef>;
