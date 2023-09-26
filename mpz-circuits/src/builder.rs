@@ -6,7 +6,12 @@ use crate::{
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
     Circuit, Tracer,
 };
-use std::{cell::RefCell, collections::BTreeMap, mem::discriminant, sync::Arc};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, VecDeque},
+    mem::discriminant,
+    sync::Arc,
+};
 
 /// An error that can occur when building a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -193,7 +198,8 @@ pub struct BuilderState {
     gates: Vec<Gate>,
     and_count: usize,
     xor_count: usize,
-    appended_circuits: Vec<SubCircuit>,
+    sub_circuits: Vec<SubCircuit>,
+    circuit_break_points: VecDeque<usize>,
 }
 
 impl Default for BuilderState {
@@ -206,7 +212,8 @@ impl Default for BuilderState {
             gates: vec![],
             and_count: 0,
             xor_count: 0,
-            appended_circuits: vec![],
+            sub_circuits: vec![],
+            circuit_break_points: VecDeque::new(),
         }
     }
 }
@@ -356,6 +363,10 @@ impl BuilderState {
             }
         }
 
+        // Update break points
+        self.circuit_break_points
+            .push_back(self.gates.len() - *self.circuit_break_points.back().unwrap_or(&0));
+
         // Update the outputs
         self.outputs = circuit.outputs().to_vec();
         self.outputs
@@ -390,7 +401,7 @@ impl BuilderState {
             circuit,
             feed_map,
         };
-        self.appended_circuits.push(sub_circuit);
+        self.sub_circuits.push(sub_circuit);
 
         Ok(self.outputs.clone())
     }
@@ -398,7 +409,7 @@ impl BuilderState {
     /// Builds the circuit.
     pub(crate) fn build(self) -> Result<Circuit, BuilderError> {
         let gates_count = self
-            .appended_circuits
+            .sub_circuits
             .iter()
             .map(|g| g.circuit.gates_count())
             .sum::<usize>()
@@ -411,7 +422,8 @@ impl BuilderState {
             feed_count: self.feed_id,
             and_count: self.and_count,
             xor_count: self.xor_count,
-            sub_circuits: self.appended_circuits,
+            sub_circuits: self.sub_circuits,
+            break_points: self.circuit_break_points,
             gates_count,
         })
     }
@@ -469,7 +481,6 @@ mod test {
         builder.add_output(d);
 
         let circ = builder.build().unwrap();
-        dbg!(&circ);
 
         let mut output = circ.evaluate(&[1u8.into(), 1u8.into()]).unwrap();
 

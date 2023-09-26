@@ -4,7 +4,11 @@ use crate::{
     components::Gate,
     types::{BinaryRepr, TypeError, Value},
 };
-use std::{collections::BTreeMap, slice::Iter, sync::Arc};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    slice::Iter,
+    sync::Arc,
+};
 
 /// An error that can occur when performing operations with a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -29,6 +33,7 @@ pub struct Circuit {
     pub(crate) and_count: usize,
     pub(crate) xor_count: usize,
     pub(crate) sub_circuits: Vec<SubCircuit>,
+    pub(crate) break_points: VecDeque<usize>,
     pub(crate) gates_count: usize,
 }
 
@@ -45,7 +50,7 @@ impl Circuit {
 
     /// Returns a reference to the gates of the circuit.
     pub fn gates(&self) -> GatesIterator {
-        todo!()
+        self.into_iter()
     }
 
     // pub fn gates(&self) -> Box<dyn Iterator<Item = Gate> + '_> {
@@ -251,17 +256,39 @@ pub(crate) struct SubCircuit {
 }
 
 pub struct GatesIterator<'a> {
-    pos: usize,
     gates: Iter<'a, Gate>,
     sub_circuits: Iter<'a, SubCircuit>,
-    current: Option<&'a SubCircuit>,
+    current_sub_circuit: Option<Iter<'a, Gate>>,
+    sub_circuit_pos: usize,
+    break_points: VecDeque<usize>,
+    current_break_point: Option<usize>,
 }
 
 impl<'a> Iterator for GatesIterator<'a> {
     type Item = Gate;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        if let Some(current_break_point) = self.current_break_point {
+            if current_break_point == 0 {
+                self.current_break_point = None;
+                return self.next();
+            }
+            self.current_break_point = Some(current_break_point - 1);
+            return self.gates.next().copied();
+        }
+        self.current_break_point = self.break_points.pop_front();
+
+        if let Some(current_sub_circuit) = self.current_sub_circuit {
+            if let Some(gate) = current_sub_circuit.next().cloned() {
+                return Some(gate);
+            }
+
+            self.current_sub_circuit = None;
+            return self.next();
+        }
+        if let Some(sub_circuit) = self.sub_circuits.next() {
+            self.current_sub_circuit = return self.next();
+        }
     }
 }
 
@@ -271,10 +298,12 @@ impl<'a> IntoIterator for &'a Circuit {
 
     fn into_iter(self) -> Self::IntoIter {
         GatesIterator {
-            pos: 0,
             gates: self.gates.iter(),
             sub_circuits: self.sub_circuits.iter(),
-            current: None,
+            sub_circuit_pos: 0,
+            break_points: self.break_points,
+            current_sub_circuit: None,
+            current_break_point: None,
         }
     }
 }
