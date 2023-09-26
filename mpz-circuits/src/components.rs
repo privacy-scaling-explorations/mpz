@@ -61,54 +61,6 @@ impl Gate {
             Gate::Inv { z, .. } => *z,
         }
     }
-
-    /// Sets the x value of this gate
-    pub fn set_x(&mut self, value: usize) {
-        match self {
-            Gate::Xor { x, .. } => x.id = value,
-            Gate::And { x, .. } => x.id = value,
-            Gate::Inv { x, .. } => x.id = value,
-        };
-    }
-
-    /// Sets the y value of this gate
-    pub fn set_y(&mut self, value: usize) {
-        match self {
-            Gate::Xor { y, .. } => y.id = value,
-            Gate::And { y, .. } => y.id = value,
-            Gate::Inv { .. } => (),
-        };
-    }
-
-    /// Sets the z value of this gate
-    pub fn set_z(&mut self, value: usize) {
-        match self {
-            Gate::Xor { z, .. } => z.id = value,
-            Gate::And { z, .. } => z.id = value,
-            Gate::Inv { z, .. } => z.id = value,
-        };
-    }
-
-    /// Shifts all the node IDs of the gate to the right by the given offset.
-    #[inline]
-    pub(crate) fn shift_right(&mut self, offset: usize) {
-        match self {
-            Gate::Xor { x, y, z } => {
-                x.id += offset;
-                y.id += offset;
-                z.id += offset;
-            }
-            Gate::And { x, y, z } => {
-                x.id += offset;
-                y.id += offset;
-                z.id += offset;
-            }
-            Gate::Inv { x, z } => {
-                x.id += offset;
-                z.id += offset;
-            }
-        }
-    }
 }
 
 impl Debug for Gate {
