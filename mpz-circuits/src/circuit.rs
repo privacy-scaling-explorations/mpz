@@ -3,9 +3,10 @@ use itybity::IntoBits;
 use crate::{
     components::Gate,
     types::{BinaryRepr, TypeError, Value},
+    Feed, Node, Sink,
 };
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{HashMap, VecDeque},
     slice::Iter,
     sync::Arc,
 };
@@ -199,7 +200,7 @@ impl Circuit {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub(crate) struct SubCircuit {
-    pub(crate) feed_map: BTreeMap<usize, usize>,
+    pub(crate) feed_map: HashMap<usize, usize>,
     pub(crate) feed_offset: usize,
     pub(crate) circuit: Arc<Circuit>,
 }
@@ -218,7 +219,7 @@ impl<'a> IntoIterator for &'a SubCircuit {
 }
 
 pub(crate) struct SubCircuitIterator<'a> {
-    feed_map: &'a BTreeMap<usize, usize>,
+    feed_map: &'a HashMap<usize, usize>,
     feed_offset: usize,
     gates_iter: Box<GatesIterator<'a>>,
 }
@@ -227,22 +228,56 @@ impl<'a> Iterator for SubCircuitIterator<'a> {
     type Item = Gate;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut gate = self.gates_iter.next()?;
+        let gate = self.gates_iter.next()?;
 
-        gate.shift_right(self.feed_offset);
-        let x = gate.x();
-        let y = gate.y();
+        let adapt_gates = |x: Node<Sink>, y: Option<Node<Sink>>, z: Node<Feed>| {
+            let mut x = x.id();
+            let mut y = y.map(|y| y.id());
+            let mut z = z.id();
 
-        if let Some(new_x) = self.feed_map.get(&(x.id - self.feed_offset)) {
-            gate.set_x(*new_x);
-        }
+            x += self.feed_offset;
+            y = y.map(|y| y + self.feed_offset);
+            z += self.feed_offset;
 
-        if let Some(y) = y {
-            if let Some(new_y) = self.feed_map.get(&(y.id - self.feed_offset)) {
-                gate.set_y(*new_y);
+            if let Some(new_x) = self.feed_map.get(&(x - self.feed_offset)) {
+                x = *new_x;
             }
-        }
-        Some(gate)
+
+            if let Some(ref mut y) = y {
+                if let Some(new_y) = self.feed_map.get(&(*y - self.feed_offset)) {
+                    *y = *new_y;
+                }
+            }
+
+            (Node::new(x), y.map(Node::new), Node::new(z))
+        };
+
+        let new_gate = match gate {
+            Gate::Xor { x, y, z } => {
+                let new_nodes = adapt_gates(x, Some(y), z);
+                Gate::Xor {
+                    x: new_nodes.0,
+                    y: new_nodes.1.unwrap(),
+                    z: new_nodes.2,
+                }
+            }
+            Gate::And { x, y, z } => {
+                let new_nodes = adapt_gates(x, Some(y), z);
+                Gate::And {
+                    x: new_nodes.0,
+                    y: new_nodes.1.unwrap(),
+                    z: new_nodes.2,
+                }
+            }
+            Gate::Inv { x, z } => {
+                let new_nodes = adapt_gates(x, None, z);
+                Gate::Inv {
+                    x: new_nodes.0,
+                    z: new_nodes.2,
+                }
+            }
+        };
+        Some(new_gate)
     }
 }
 

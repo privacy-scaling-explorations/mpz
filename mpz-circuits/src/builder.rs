@@ -8,7 +8,7 @@ use crate::{
 };
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, VecDeque},
+    collections::{HashMap, VecDeque},
     mem::discriminant,
     sync::Arc,
 };
@@ -382,7 +382,7 @@ impl BuilderState {
         self.xor_count += circuit.xor_count();
 
         // Store the new circuit as sub-circuit and the input mappings
-        let mut feed_map = BTreeMap::new();
+        let mut feed_map = HashMap::new();
         circuit
             .inputs()
             .iter()
