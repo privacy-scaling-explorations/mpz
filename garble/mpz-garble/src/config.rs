@@ -21,10 +21,15 @@ pub struct ValueConfigError {
     visibility: Visibility,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Visibility {
+/// The visibility of a value
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Visibility {
+    /// A value known to all parties
     Public,
+    /// A private value known to this party
     Private,
+    /// A private value not known to this party
+    Blind,
 }
 
 /// Configuration of a value
