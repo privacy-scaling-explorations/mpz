@@ -1,15 +1,12 @@
 use itybity::{BitIterable, IntoBits};
 
 use crate::{
+    circuit::SubCircuit,
     components::{Feed, Gate, Node},
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
     Circuit, Tracer,
 };
-use std::{
-    cell::RefCell,
-    mem::{discriminant, take},
-    sync::Arc,
-};
+use std::{cell::RefCell, collections::BTreeMap, mem::discriminant, sync::Arc};
 
 /// An error that can occur when building a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -194,11 +191,9 @@ pub struct BuilderState {
     inputs: Vec<BinaryRepr>,
     outputs: Vec<BinaryRepr>,
     gates: Vec<Gate>,
-
     and_count: usize,
     xor_count: usize,
-    appended_circuits: Vec<Arc<Circuit>>,
-    appended_circuits_inputs: Vec<Vec<BinaryRepr>>,
+    appended_circuits: Vec<SubCircuit>,
 }
 
 impl Default for BuilderState {
@@ -212,7 +207,6 @@ impl Default for BuilderState {
             and_count: 0,
             xor_count: 0,
             appended_circuits: vec![],
-            appended_circuits_inputs: vec![],
         }
     }
 }
@@ -342,17 +336,17 @@ impl BuilderState {
     /// The outputs of the appended circuit
     pub fn append(
         &mut self,
-        circ: Arc<Circuit>,
+        circuit: Arc<Circuit>,
         builder_inputs: &[BinaryRepr],
     ) -> Result<Vec<BinaryRepr>, BuilderError> {
-        if builder_inputs.len() != circ.inputs().len() {
+        if builder_inputs.len() != circuit.inputs().len() {
             return Err(BuilderError::AppendError(
                 "Number of inputs does not match number of inputs in circuit".to_string(),
             ));
         }
 
         for (i, (builder_input, append_input)) in
-            builder_inputs.iter().zip(circ.inputs()).enumerate()
+            builder_inputs.iter().zip(circuit.inputs()).enumerate()
         {
             if discriminant(builder_input) != discriminant(append_input) {
                 return Err(BuilderError::AppendError(format!(
@@ -362,25 +356,41 @@ impl BuilderState {
             }
         }
 
-        // Append self
-        let current_circ = self.build_current();
-        self.appended_circuits.push(current_circ.into());
-        self.appended_circuits_inputs.push(vec![]);
-
         // Update the outputs
-        self.outputs = circ.outputs().to_vec();
+        self.outputs = circuit.outputs().to_vec();
         self.outputs
             .iter_mut()
             .for_each(|output| output.shift_right(self.feed_id));
 
-        // Store the new circuit and the input mappings
-        self.appended_circuits.push(Arc::clone(&circ));
-        self.appended_circuits_inputs.push(builder_inputs.to_vec());
+        // Capture current offset
+        let offset = self.feed_id;
 
         // Increment variables
-        self.feed_id += circ.feed_count();
-        self.and_count += circ.and_count();
-        self.xor_count += circ.xor_count();
+        self.feed_id += circuit.feed_count();
+        self.and_count += circuit.and_count();
+        self.xor_count += circuit.xor_count();
+
+        // Store the new circuit as sub-circuit and the input mappings
+        let mut feed_map = BTreeMap::new();
+        circuit
+            .inputs()
+            .iter()
+            .zip(builder_inputs)
+            .for_each(|(input, builder_input)| {
+                input
+                    .iter()
+                    .zip(builder_input.iter())
+                    .for_each(|(old_input, new_input)| {
+                        feed_map.insert(old_input.id(), new_input.id());
+                    });
+            });
+
+        let sub_circuit = SubCircuit {
+            feed_offset: offset,
+            circuit,
+            feed_map,
+        };
+        self.appended_circuits.push(sub_circuit);
 
         Ok(self.outputs.clone())
     }
@@ -390,7 +400,7 @@ impl BuilderState {
         let gates_count = self
             .appended_circuits
             .iter()
-            .map(|g| g.gates_count())
+            .map(|g| g.circuit.gates_count())
             .sum::<usize>()
             + self.gates.len();
 
@@ -401,42 +411,9 @@ impl BuilderState {
             feed_count: self.feed_id,
             and_count: self.and_count,
             xor_count: self.xor_count,
-            appended_circuits: self.appended_circuits,
-            appended_circuits_inputs: self.appended_circuits_inputs,
+            sub_circuits: self.appended_circuits,
             gates_count,
         })
-    }
-
-    pub(crate) fn build_current(&mut self) -> Circuit {
-        let gates = take(&mut self.gates);
-        let gates_count = gates.len();
-
-        Circuit {
-            inputs: vec![],
-            outputs: vec![],
-            gates,
-            feed_count: self.feed_id
-                - self
-                    .appended_circuits
-                    .iter()
-                    .map(|c| c.feed_count())
-                    .sum::<usize>(),
-            and_count: self.and_count
-                - self
-                    .appended_circuits
-                    .iter()
-                    .map(|c| c.and_count())
-                    .sum::<usize>(),
-            xor_count: self.xor_count
-                - self
-                    .appended_circuits
-                    .iter()
-                    .map(|c| c.xor_count())
-                    .sum::<usize>(),
-            appended_circuits: vec![],
-            appended_circuits_inputs: vec![],
-            gates_count,
-        }
     }
 }
 
@@ -492,6 +469,7 @@ mod test {
         builder.add_output(d);
 
         let circ = builder.build().unwrap();
+        dbg!(&circ);
 
         let mut output = circ.evaluate(&[1u8.into(), 1u8.into()]).unwrap();
 

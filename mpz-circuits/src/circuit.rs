@@ -4,7 +4,7 @@ use crate::{
     components::Gate,
     types::{BinaryRepr, TypeError, Value},
 };
-use std::sync::Arc;
+use std::{collections::BTreeMap, slice::Iter, sync::Arc};
 
 /// An error that can occur when performing operations with a circuit.
 #[derive(Debug, thiserror::Error)]
@@ -28,8 +28,7 @@ pub struct Circuit {
     pub(crate) feed_count: usize,
     pub(crate) and_count: usize,
     pub(crate) xor_count: usize,
-    pub(crate) appended_circuits: Vec<Arc<Circuit>>,
-    pub(crate) appended_circuits_inputs: Vec<Vec<BinaryRepr>>,
+    pub(crate) sub_circuits: Vec<SubCircuit>,
     pub(crate) gates_count: usize,
 }
 
@@ -45,61 +44,60 @@ impl Circuit {
     }
 
     /// Returns a reference to the gates of the circuit.
-    pub fn gates(&self) -> Box<dyn Iterator<Item = Gate> + '_> {
-        let mut feeds_so_far = 0;
-
-        let iter = self
-            .appended_circuits
-            .iter()
-            .enumerate()
-            .flat_map(move |(k, circ)| {
-                let gates_iter = if self.appended_circuits_inputs[k].is_empty() {
-                    circ.gates()
-                } else {
-                    let old_inputs = circ
-                        .inputs
-                        .iter()
-                        .flat_map(|bin| bin.iter())
-                        .collect::<Vec<_>>();
-                    let new_inputs = self.appended_circuits_inputs[k]
-                        .iter()
-                        .flat_map(|bin| bin.iter())
-                        .collect::<Vec<_>>();
-
-                    let iter = circ.gates().map(move |mut gate| {
-                        gate.shift_right(feeds_so_far);
-
-                        let x = gate.x();
-                        let y = gate.y();
-
-                        if let Some(pos) = old_inputs
-                            .iter()
-                            .position(|node| node.id + feeds_so_far == x.id)
-                        {
-                            gate.set_x(new_inputs[pos].id);
-                        }
-
-                        if let Some(y) = y {
-                            if let Some(pos) = old_inputs
-                                .iter()
-                                .position(|node| node.id + feeds_so_far == y.id)
-                            {
-                                gate.set_y(new_inputs[pos].id);
-                            }
-                        }
-
-                        gate
-                    });
-                    Box::new(iter)
-                };
-
-                feeds_so_far += circ.feed_count();
-                Box::new(gates_iter)
-            })
-            .chain(self.gates.iter().copied());
-
-        Box::new(iter)
+    pub fn gates(&self) -> GatesIterator {
+        todo!()
     }
+
+    // pub fn gates(&self) -> Box<dyn Iterator<Item = Gate> + '_> {
+    //     let iter = self
+    //         .sub_circuits
+    //         .iter()
+    //         .enumerate()
+    //         .flat_map(move |(k, sub_circ)| {
+    //             let old_inputs = sub_circ
+    //                 .circuit
+    //                 .inputs
+    //                 .iter()
+    //                 .flat_map(|bin| bin.iter())
+    //                 .collect::<Vec<_>>();
+    //             let new_inputs = self.sub_circuits_inputs[k]
+    //                 .iter()
+    //                 .flat_map(|bin| bin.iter())
+    //                 .collect::<Vec<_>>();
+
+    //             let gates_iter = {
+    //                 let offset = sub_circ.feed_offset;
+    //                 let iter = sub_circ.circuit.gates().map(move |mut gate| {
+    //                     gate.shift_right(offset);
+
+    //                     let x = gate.x();
+    //                     let y = gate.y();
+
+    //                     if let Some(pos) =
+    //                         old_inputs.iter().position(|node| node.id + offset == x.id)
+    //                     {
+    //                         gate.set_x(new_inputs[pos].id);
+    //                     }
+
+    //                     if let Some(y) = y {
+    //                         if let Some(pos) =
+    //                             old_inputs.iter().position(|node| node.id + offset == y.id)
+    //                         {
+    //                             gate.set_y(new_inputs[pos].id);
+    //                         }
+    //                     }
+
+    //                     gate
+    //                 });
+    //                 Box::new(iter)
+    //             };
+
+    //             Box::new(gates_iter)
+    //         })
+    //         .chain(self.gates.iter().copied());
+
+    //     Box::new(iter)
+    // }
 
     /// Returns the number of feeds in the circuit.
     pub fn feed_count(&self) -> usize {
@@ -244,25 +242,39 @@ impl Circuit {
     }
 }
 
-pub struct GatesIterator {
-    gates: Box<dyn Iterator<Item = Gate>>,
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub(crate) struct SubCircuit {
+    pub(crate) feed_map: BTreeMap<usize, usize>,
+    pub(crate) feed_offset: usize,
+    pub(crate) circuit: Arc<Circuit>,
 }
 
-impl Iterator for GatesIterator {
+pub struct GatesIterator<'a> {
+    pos: usize,
+    gates: Iter<'a, Gate>,
+    sub_circuits: Iter<'a, SubCircuit>,
+    current: Option<&'a SubCircuit>,
+}
+
+impl<'a> Iterator for GatesIterator<'a> {
     type Item = Gate;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.gates.next()
+        todo!()
     }
 }
 
-impl IntoIterator for Circuit {
+impl<'a> IntoIterator for &'a Circuit {
     type Item = Gate;
-    type IntoIter = GatesIterator;
+    type IntoIter = GatesIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         GatesIterator {
-            gates: Box::new(self.gates.into_iter()),
+            pos: 0,
+            gates: self.gates.iter(),
+            sub_circuits: self.sub_circuits.iter(),
+            current: None,
         }
     }
 }
