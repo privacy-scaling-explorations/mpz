@@ -1,10 +1,7 @@
-use mpz_circuits::types::{StaticValueType, TypeError, Value, ValueType};
+use mpz_circuits::types::{StaticValueType, Value, ValueType};
 use mpz_core::value::ValueRef;
 
-use crate::{
-    config::{ValueConfig, Visibility},
-    Memory, MemoryError,
-};
+use crate::{config::Visibility, Memory, MemoryError};
 
 use super::{BufferedValue, DEAP};
 

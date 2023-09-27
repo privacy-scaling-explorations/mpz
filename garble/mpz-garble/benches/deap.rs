@@ -4,8 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures::Future;
 use mpz_circuits::circuits::AES128;
 use mpz_garble::{
-    config::Visibility, protocol::deap::mock::create_mock_deap_vm, Decode, Execute, Memory, Thread,
-    Vm, VmError,
+    protocol::deap::mock::create_mock_deap_vm, Decode, Execute, Memory, Thread, Vm, VmError,
 };
 
 async fn bench_deap() {
@@ -17,12 +16,8 @@ async fn bench_deap() {
     let msg = [0u8; 16];
 
     let leader_fut = {
-        let key_ref = leader_thread
-            .new_input::<[u8; 16]>("key", Visibility::Private)
-            .unwrap();
-        let msg_ref = leader_thread
-            .new_input::<[u8; 16]>("msg", Visibility::Blind)
-            .unwrap();
+        let key_ref = leader_thread.new_private_input::<[u8; 16]>("key").unwrap();
+        let msg_ref = leader_thread.new_blind_input::<[u8; 16]>("msg").unwrap();
         let ciphertext_ref = leader_thread.new_output::<[u8; 16]>("ciphertext").unwrap();
 
         leader_thread.assign(&key_ref, key).unwrap();
@@ -44,11 +39,9 @@ async fn bench_deap() {
     };
 
     let follower_fut = {
-        let key_ref = follower_thread
-            .new_input::<[u8; 16]>("key", Visibility::Blind)
-            .unwrap();
+        let key_ref = follower_thread.new_blind_input::<[u8; 16]>("key").unwrap();
         let msg_ref = follower_thread
-            .new_input::<[u8; 16]>("msg", Visibility::Private)
+            .new_private_input::<[u8; 16]>("msg")
             .unwrap();
         let ciphertext_ref = follower_thread
             .new_output::<[u8; 16]>("ciphertext")
@@ -80,8 +73,8 @@ fn bench_aes_leader<T: Thread + Execute + Decode + Send>(
     block: usize,
 ) -> Pin<Box<dyn Future<Output = Result<[u8; 16], VmError>> + Send + '_>> {
     Box::pin(async move {
-        let key_ref = thread.new_input::<[u8; 16]>(&format!("key/{block}"), Visibility::Private)?;
-        let msg_ref = thread.new_input::<[u8; 16]>(&format!("msg/{block}"), Visibility::Private)?;
+        let key_ref = thread.new_private_input::<[u8; 16]>(&format!("key/{block}"))?;
+        let msg_ref = thread.new_private_input::<[u8; 16]>(&format!("msg/{block}"))?;
         let ciphertext = thread.new_output::<[u8; 16]>(&format!("ciphertext/{block}"))?;
 
         thread.assign(&key_ref, [0u8; 16]).unwrap();
@@ -102,8 +95,8 @@ fn bench_aes_follower<T: Thread + Execute + Decode + Send>(
     block: usize,
 ) -> Pin<Box<dyn Future<Output = Result<[u8; 16], VmError>> + Send + '_>> {
     Box::pin(async move {
-        let key = thread.new_input::<[u8; 16]>(&format!("key/{block}"), Visibility::Blind)?;
-        let msg = thread.new_input::<[u8; 16]>(&format!("msg/{block}"), Visibility::Blind)?;
+        let key = thread.new_blind_input::<[u8; 16]>(&format!("key/{block}"))?;
+        let msg = thread.new_blind_input::<[u8; 16]>(&format!("msg/{block}"))?;
         let ciphertext = thread.new_output::<[u8; 16]>(&format!("ciphertext/{block}"))?;
 
         thread

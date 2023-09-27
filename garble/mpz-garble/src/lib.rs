@@ -157,18 +157,69 @@ pub trait Memory {
     fn new_input<T: StaticValueType>(
         &self,
         id: &str,
-        vis: Visibility,
+        visibility: Visibility,
     ) -> Result<ValueRef, MemoryError>;
+
+    /// Defines a new public input value, returning a reference to it.
+    fn new_public_input<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_input::<T>(id, Visibility::Public)
+    }
+
+    /// Defines a new private input value, returning a reference to it.
+    fn new_private_input<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_input::<T>(id, Visibility::Private)
+    }
+
+    /// Defines a new blind input value, returning a reference to it.
+    fn new_blind_input<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_input::<T>(id, Visibility::Blind)
+    }
 
     /// Defines a new array input value, returning a reference to it.
     fn new_input_array<T: StaticValueType>(
         &self,
         id: &str,
-        vis: Visibility,
+        visibility: Visibility,
         len: usize,
     ) -> Result<ValueRef, MemoryError>
     where
         Vec<T>: Into<Value>;
+
+    /// Defines a new public array input value, returning a reference to it.
+    fn new_public_input_array<T: StaticValueType>(
+        &self,
+        id: &str,
+        len: usize,
+    ) -> Result<ValueRef, MemoryError>
+    where
+        Vec<T>: Into<Value>,
+    {
+        self.new_input_array::<T>(id, Visibility::Public, len)
+    }
+
+    /// Defines a new private array input value, returning a reference to it.
+    fn new_private_input_array<T: StaticValueType>(
+        &self,
+        id: &str,
+        len: usize,
+    ) -> Result<ValueRef, MemoryError>
+    where
+        Vec<T>: Into<Value>,
+    {
+        self.new_input_array::<T>(id, Visibility::Private, len)
+    }
+
+    /// Defines a new blind array input value, returning a reference to it.
+    fn new_blind_input_array<T: StaticValueType>(
+        &self,
+        id: &str,
+        len: usize,
+    ) -> Result<ValueRef, MemoryError>
+    where
+        Vec<T>: Into<Value>,
+    {
+        self.new_input_array::<T>(id, Visibility::Blind, len)
+    }
 
     /// Defines a new output value, returning a reference to it.
     fn new_output<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError>;

@@ -24,7 +24,7 @@ use mpz_garble_core::{
 };
 use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 
-use crate::{config::ValueConfig, ot::OTSendEncoding, registry::EncodingRegistry};
+use crate::{ot::OTSendEncoding, registry::EncodingRegistry};
 
 pub use config::{GeneratorConfig, GeneratorConfigBuilder};
 pub use error::GeneratorError;

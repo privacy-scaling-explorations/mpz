@@ -28,7 +28,7 @@ use rand::thread_rng;
 use utils_aio::expect_msg_or_err;
 
 use crate::{
-    config::{Role, ValueConfig, Visibility},
+    config::{Role, Visibility},
     evaluator::{Evaluator, EvaluatorConfigBuilder},
     generator::{Generator, GeneratorConfigBuilder},
     internal_circuits::{build_otp_circuit, build_otp_shared_circuit},
@@ -153,6 +153,9 @@ impl DEAP {
                 .evaluate(circ.clone(), inputs, outputs, stream)
                 .map_err(DEAPError::from)
         )?;
+
+        // Set output values as active
+        self.state().set_many_active(outputs);
 
         Ok(())
     }
@@ -933,10 +936,10 @@ impl State {
                     continue;
                 }
 
-                let value = self
-                    .buffer
-                    .remove(id)
-                    .ok_or_else(|| MemoryError::Undefined(id.clone()))?;
+                let value = self.buffer.remove(id).ok_or_else(|| {
+                    println!("here");
+                    MemoryError::Undefined(id.clone())
+                })?;
 
                 match value {
                     BufferedValue::Public { value } => public.push((id.clone(), value)),
@@ -951,6 +954,19 @@ impl State {
             private,
             blind,
         })
+    }
+
+    fn set_many_active(&mut self, values: &[ValueRef]) {
+        values.iter().for_each(|value| self.set_active(value))
+    }
+
+    fn set_active(&mut self, value_ref: &ValueRef) {
+        match value_ref {
+            ValueRef::Value { id } => _ = self.active_values.insert(id.clone()),
+            ValueRef::Array(ids) => ids
+                .iter()
+                .for_each(|id| _ = self.active_values.insert(id.clone())),
+        }
     }
 
     fn set_visibility(&mut self, value_ref: &ValueRef, visibility: Visibility) {
@@ -1044,12 +1060,8 @@ mod tests {
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
 
-            let key_ref = leader
-                .new_input::<[u8; 16]>("key", Visibility::Private)
-                .unwrap();
-            let msg_ref = leader
-                .new_input::<[u8; 16]>("msg", Visibility::Blind)
-                .unwrap();
+            let key_ref = leader.new_private_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = leader.new_blind_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = leader.new_output::<[u8; 16]>("ciphertext").unwrap();
 
             leader.assign(&key_ref, key).unwrap();
@@ -1086,12 +1098,8 @@ mod tests {
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
 
-            let key_ref = follower
-                .new_input::<[u8; 16]>("key", Visibility::Blind)
-                .unwrap();
-            let msg_ref = follower
-                .new_input::<[u8; 16]>("msg", Visibility::Private)
-                .unwrap();
+            let key_ref = follower.new_blind_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = follower.new_private_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = follower.new_output::<[u8; 16]>("ciphertext").unwrap();
 
             follower.assign(&msg_ref, msg).unwrap();
@@ -1148,8 +1156,8 @@ mod tests {
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
             let circ = circ.clone();
-            let a_ref = leader.new_input::<u8>("a", Visibility::Private).unwrap();
-            let b_ref = leader.new_input::<u8>("b", Visibility::Blind).unwrap();
+            let a_ref = leader.new_private_input::<u8>("a").unwrap();
+            let b_ref = leader.new_blind_input::<u8>("b").unwrap();
             let c_ref = leader.new_output::<u8>("c").unwrap();
 
             leader.assign(&a_ref, a).unwrap();
@@ -1193,8 +1201,8 @@ mod tests {
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
 
-            let a_ref = follower.new_input::<u8>("a", Visibility::Blind).unwrap();
-            let b_ref = follower.new_input::<u8>("b", Visibility::Private).unwrap();
+            let a_ref = follower.new_blind_input::<u8>("a").unwrap();
+            let b_ref = follower.new_private_input::<u8>("b").unwrap();
             let c_ref = follower.new_output::<u8>("c").unwrap();
 
             follower.assign(&b_ref, b).unwrap();
@@ -1256,8 +1264,8 @@ mod tests {
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
             let circ = circ.clone();
-            let a_ref = leader.new_input::<u8>("a", Visibility::Private).unwrap();
-            let b_ref = leader.new_input::<u8>("b", Visibility::Blind).unwrap();
+            let a_ref = leader.new_private_input::<u8>("a").unwrap();
+            let b_ref = leader.new_blind_input::<u8>("b").unwrap();
             let c_ref = leader.new_output::<u8>("c").unwrap();
 
             leader.assign(&a_ref, a).unwrap();
@@ -1301,8 +1309,8 @@ mod tests {
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
 
-            let a_ref = follower.new_input::<u8>("a", Visibility::Blind).unwrap();
-            let b_ref = follower.new_input::<u8>("b", Visibility::Private).unwrap();
+            let a_ref = follower.new_blind_input::<u8>("a").unwrap();
+            let b_ref = follower.new_private_input::<u8>("b").unwrap();
             let c_ref = follower.new_output::<u8>("c").unwrap();
 
             follower.assign(&b_ref, b).unwrap();
@@ -1387,12 +1395,8 @@ mod tests {
 
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
-            let key_ref = leader
-                .new_input::<[u8; 16]>("key", Visibility::Private)
-                .unwrap();
-            let msg_ref = leader
-                .new_input::<[u8; 16]>("msg", Visibility::Blind)
-                .unwrap();
+            let key_ref = leader.new_private_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = leader.new_blind_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = leader.new_output::<[u8; 16]>("ciphertext").unwrap();
 
             leader.assign(&key_ref, key).unwrap();
@@ -1420,12 +1424,8 @@ mod tests {
 
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
-            let key_ref = follower
-                .new_input::<[u8; 16]>("key", Visibility::Blind)
-                .unwrap();
-            let msg_ref = follower
-                .new_input::<[u8; 16]>("msg", Visibility::Private)
-                .unwrap();
+            let key_ref = follower.new_blind_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = follower.new_private_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = follower.new_output::<[u8; 16]>("ciphertext").unwrap();
 
             follower.assign(&msg_ref, msg).unwrap();

@@ -483,12 +483,8 @@ mod tests {
         let msg = [69u8; 16];
 
         let leader_fut = {
-            let key_ref = leader_thread
-                .new_input::<[u8; 16]>("key", Visibility::Private)
-                .unwrap();
-            let msg_ref = leader_thread
-                .new_input::<[u8; 16]>("msg", Visibility::Blind)
-                .unwrap();
+            let key_ref = leader_thread.new_private_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = leader_thread.new_blind_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = leader_thread.new_output::<[u8; 16]>("ciphertext").unwrap();
 
             leader_thread.assign(&key_ref, key).unwrap();
@@ -508,11 +504,9 @@ mod tests {
         };
 
         let follower_fut = {
-            let key_ref = follower_thread
-                .new_input::<[u8; 16]>("key", Visibility::Blind)
-                .unwrap();
+            let key_ref = follower_thread.new_blind_input::<[u8; 16]>("key").unwrap();
             let msg_ref = follower_thread
-                .new_input::<[u8; 16]>("msg", Visibility::Private)
+                .new_private_input::<[u8; 16]>("msg")
                 .unwrap();
             let ciphertext_ref = follower_thread
                 .new_output::<[u8; 16]>("ciphertext")
