@@ -279,6 +279,9 @@ impl Label {
     /// Length of a label in bytes
     pub const LEN: usize = Block::LEN;
 
+    /// One label which encodes the bit value 1
+    pub const ONE: Self = Self(Block::ZERO);
+
     /// Creates a new label
     #[inline]
     pub fn new(value: Block) -> Self {
