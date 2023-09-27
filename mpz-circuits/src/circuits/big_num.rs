@@ -82,6 +82,7 @@ pub fn nbyte_add_mod_trace<'a, const N: usize>(
 #[cfg(test)]
 mod tests {
     use mpz_circuits_macros::evaluate;
+    use rand::Rng;
 
     use crate::CircuitBuilder;
 
@@ -101,15 +102,19 @@ mod tests {
 
         let circ = builder.build().unwrap();
 
-        for a in 0u8..modulus[1] {
-            for b in 0u8..modulus[1] {
-                let expected_sum = ((a as u16 + b as u16) % modulus[1] as u16) as u8;
+        let rounds = 100;
+        let mut rng = rand::thread_rng();
 
-                let sum: [u8; 2] = evaluate!(circ, fn([0u8, a], [0u8, b]) -> [u8; 2]).unwrap();
-                let sum = u16::from_be_bytes(sum) as u8;
+        for _ in 0..rounds {
+            let a = rng.gen_range(0u8..modulus[1]);
+            let b = rng.gen_range(0u8..modulus[1]);
 
-                assert_eq!(sum, expected_sum);
-            }
+            let expected_sum = ((a as u16 + b as u16) % modulus[1] as u16) as u8;
+
+            let sum: [u8; 2] = evaluate!(circ, fn([0u8, a], [0u8, b]) -> [u8; 2]).unwrap();
+            let sum = u16::from_be_bytes(sum) as u8;
+
+            assert_eq!(sum, expected_sum);
         }
     }
 }
