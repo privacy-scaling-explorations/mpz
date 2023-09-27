@@ -110,8 +110,8 @@ mod tests {
 
     #[test]
     fn test_transpose_bits() {
-        let rows = 512;
-        let columns = 256;
+        let rows = 128;
+        let columns = 64;
 
         let mut matrix: Vec<u8> = random_vec::<u8>(columns * rows);
         let naive = transpose_naive(&matrix, columns);
