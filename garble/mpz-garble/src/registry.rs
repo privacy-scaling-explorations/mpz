@@ -137,6 +137,10 @@ impl From<u64> for EncodingId {
 pub enum EncodingRegistryError {
     #[error("encoding for value {0:?} is already defined")]
     DuplicateId(ValueId),
+    #[error("encoding for value {0:?} has not been set")]
+    MissingValueEncoding(ValueId),
+    #[error("encoding for reference {0:?} has not been set")]
+    MissingEncoding(ValueRef),
 }
 
 /// A registry of encodings.
@@ -209,24 +213,37 @@ where
         Ok(())
     }
 
-    /// Get the encoding for a value id if it exists.
-    pub(crate) fn get_encoding_by_id(&self, id: &ValueId) -> Option<EncodedValue<T>> {
-        self.encodings.get(&id.to_u64().into()).cloned()
+    /// Get the encoding for a value id.
+    pub(crate) fn get_encoding_by_id(
+        &self,
+        id: &ValueId,
+    ) -> Result<EncodedValue<T>, EncodingRegistryError> {
+        self.encodings
+            .get(&id.to_u64().into())
+            .cloned()
+            .ok_or_else(|| EncodingRegistryError::MissingValueEncoding(id.clone()))
     }
 
-    /// Get the encoding for a value if it exists.
+    /// Get the encoding for a value.
     ///
     /// # Panics
     ///
     /// Panics if the value is an array and if the type of its elements are not consistent.
-    pub(crate) fn get_encoding(&self, value: &ValueRef) -> Option<EncodedValue<T>> {
+    pub(crate) fn get_encoding(
+        &self,
+        value: &ValueRef,
+    ) -> Result<EncodedValue<T>, EncodingRegistryError> {
         match value {
-            ValueRef::Value { id, .. } => self.encodings.get(&id.to_u64().into()).cloned(),
+            ValueRef::Value { id, .. } => self
+                .encodings
+                .get(&id.to_u64().into())
+                .cloned()
+                .ok_or_else(|| EncodingRegistryError::MissingEncoding(value.clone())),
             ValueRef::Array(ids) => {
                 let encodings = ids
                     .iter()
-                    .map(|id| self.encodings.get(&id.to_u64().into()).cloned())
-                    .collect::<Option<Vec<_>>>()?;
+                    .map(|id| self.get_encoding_by_id(id))
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 assert!(
                     encodings
@@ -236,7 +253,7 @@ where
                     value
                 );
 
-                Some(EncodedValue::Array(encodings))
+                Ok(EncodedValue::Array(encodings))
             }
         }
     }

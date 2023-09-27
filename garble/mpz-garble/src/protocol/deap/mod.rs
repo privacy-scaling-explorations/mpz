@@ -90,6 +90,42 @@ impl DEAP {
         self.state.lock().unwrap()
     }
 
+    /// Pre-garbles a circuit, transferring the encrypted gates to the other party.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The ID of the circuit.
+    /// * `circ` - The circuit to pre-garble.
+    /// * `inputs` - The inputs to the circuit.
+    /// * `outputs` - The outputs of the circuit.
+    /// * `sink` - The sink to send messages to.
+    /// * `stream` - The stream to receive messages from.
+    pub async fn load<T, U>(
+        &self,
+        circ: Arc<Circuit>,
+        inputs: &[ValueRef],
+        outputs: &[ValueRef],
+        sink: &mut T,
+        stream: &mut U,
+    ) -> Result<(), DEAPError>
+    where
+        T: Sink<GarbleMessage, Error = std::io::Error> + Unpin,
+        U: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
+    {
+        // Generate and receive concurrently.
+        // Drop the encoded outputs, we don't need them here
+        _ = futures::try_join!(
+            self.gen
+                .generate(circ.clone(), inputs, outputs, sink, false)
+                .map_err(DEAPError::from),
+            self.ev
+                .receive_garbled_circuit(circ.clone(), inputs, outputs, stream)
+                .map_err(DEAPError::from)
+        )?;
+
+        Ok(())
+    }
+
     /// Executes a circuit.
     ///
     /// # Arguments
@@ -457,6 +493,8 @@ impl DEAP {
             for ((otp_ref, otp_ty), otp_value) in
                 otp_refs.iter().zip(otp_tys.iter()).zip(otp_values.iter())
             {
+                self.gen.generate_encoding_by_ref(otp_ref, otp_ty)?;
+
                 match otp_ref {
                     ValueRef::Value { id } => {
                         state
@@ -556,6 +594,8 @@ impl DEAP {
                 .collect::<Result<Vec<_>, _>>()?;
 
             for (otp_ref, otp_ty) in otp_refs.iter().zip(otp_tys.iter()) {
+                self.gen.generate_encoding_by_ref(otp_ref, otp_ty)?;
+
                 match otp_ref {
                     ValueRef::Value { id } => {
                         state
@@ -1105,6 +1145,121 @@ mod tests {
             follower.assign(&msg_ref, msg).unwrap();
 
             async move {
+                follower
+                    .execute(
+                        "test",
+                        AES128.clone(),
+                        &[key_ref, msg_ref],
+                        &[ciphertext_ref.clone()],
+                        &mut sink,
+                        &mut stream,
+                        &follower_ot_send,
+                        &follower_ot_recv,
+                    )
+                    .await
+                    .unwrap();
+
+                let outputs = follower
+                    .decode("test", &[ciphertext_ref], &mut sink, &mut stream)
+                    .await
+                    .unwrap();
+
+                follower
+                    .finalize(&mut sink, &mut stream, &follower_ot_recv)
+                    .await
+                    .unwrap();
+
+                outputs
+            }
+        };
+
+        let (leader_output, follower_output) = tokio::join!(leader_fut, follower_fut);
+
+        assert_eq!(leader_output, follower_output);
+    }
+
+    #[tokio::test]
+    async fn test_deap_load() {
+        let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
+        let (leader_ot_send, follower_ot_recv) = mock_ot_shared_pair();
+        let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
+
+        let mut leader = DEAP::new(Role::Leader, [42u8; 32]);
+        let mut follower = DEAP::new(Role::Follower, [69u8; 32]);
+
+        let key = [42u8; 16];
+        let msg = [69u8; 16];
+
+        let leader_fut = {
+            let (mut sink, mut stream) = leader_channel.split();
+
+            let key_ref = leader.new_private_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = leader.new_blind_input::<[u8; 16]>("msg").unwrap();
+            let ciphertext_ref = leader.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            leader.assign(&key_ref, key).unwrap();
+
+            async move {
+                leader
+                    .load(
+                        AES128.clone(),
+                        &[key_ref.clone(), msg_ref.clone()],
+                        &[ciphertext_ref.clone()],
+                        &mut sink,
+                        &mut stream,
+                    )
+                    .await
+                    .unwrap();
+
+                leader
+                    .execute(
+                        "test",
+                        AES128.clone(),
+                        &[key_ref, msg_ref],
+                        &[ciphertext_ref.clone()],
+                        &mut sink,
+                        &mut stream,
+                        &leader_ot_send,
+                        &leader_ot_recv,
+                    )
+                    .await
+                    .unwrap();
+
+                let outputs = leader
+                    .decode("test", &[ciphertext_ref], &mut sink, &mut stream)
+                    .await
+                    .unwrap();
+
+                leader
+                    .finalize(&mut sink, &mut stream, &leader_ot_recv)
+                    .await
+                    .unwrap();
+
+                outputs
+            }
+        };
+
+        let follower_fut = {
+            let (mut sink, mut stream) = follower_channel.split();
+
+            let key_ref = follower.new_blind_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = follower.new_private_input::<[u8; 16]>("msg").unwrap();
+            let ciphertext_ref = follower.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            follower.assign(&msg_ref, msg).unwrap();
+
+            async move {
+                follower
+                    .load(
+                        AES128.clone(),
+                        &[key_ref.clone(), msg_ref.clone()],
+                        &[ciphertext_ref.clone()],
+                        &mut sink,
+                        &mut stream,
+                    )
+                    .await
+                    .unwrap();
+
                 follower
                     .execute(
                         "test",

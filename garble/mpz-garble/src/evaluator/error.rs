@@ -1,4 +1,4 @@
-use mpz_core::value::{ValueId, ValueRef};
+use mpz_core::value::ValueId;
 
 /// Errors that can occur while performing the role of an evaluator
 #[derive(Debug, thiserror::Error)]
@@ -19,10 +19,12 @@ pub enum EvaluatorError {
     ValueError(#[from] mpz_garble_core::ValueError),
     #[error(transparent)]
     EncodingRegistryError(#[from] crate::registry::EncodingRegistryError),
-    #[error("missing active encoding for value")]
-    MissingEncoding(ValueRef),
     #[error("duplicate decoding for value: {0:?}")]
     DuplicateDecoding(ValueId),
+    #[error("duplicate garbled circuit")]
+    DuplicateGarbledCircuit,
+    #[error("generator did not send commitments")]
+    MissingCommitments,
     #[error(transparent)]
     VerificationError(#[from] VerificationError),
 }

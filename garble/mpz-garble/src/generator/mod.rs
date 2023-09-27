@@ -42,6 +42,8 @@ struct State {
     encoder: ChaChaEncoder,
     /// Encodings of values
     encoding_registry: EncodingRegistry<encoding_state::Full>,
+    /// Already garbled circuits
+    garbled: HashSet<(Vec<ValueRef>, Vec<ValueRef>)>,
     /// The set of values that are currently active.
     ///
     /// A value is considered active when it has been encoded and sent to the evaluator.
@@ -72,7 +74,7 @@ impl Generator {
 
     /// Returns the encoding for a value.
     pub fn get_encoding(&self, value: &ValueRef) -> Option<EncodedValue<encoding_state::Full>> {
-        self.state().encoding_registry.get_encoding(value)
+        self.state().encoding_registry.get_encoding(value).ok()
     }
 
     pub(crate) fn get_encodings_by_id(
@@ -83,7 +85,8 @@ impl Generator {
 
         ids.iter()
             .map(|id| state.encoding_registry.get_encoding_by_id(id))
-            .collect::<Option<Vec<_>>>()
+            .collect::<Result<Vec<_>, _>>()
+            .ok()
     }
 
     /// Generate encodings for a slice of values
@@ -96,6 +99,19 @@ impl Generator {
         for (id, ty) in values {
             _ = state.encode_by_id(id, ty)?;
         }
+
+        Ok(())
+    }
+
+    /// Generate encoding for a value.
+    pub(crate) fn generate_encoding_by_ref(
+        &self,
+        value_ref: &ValueRef,
+        value_type: &ValueType,
+    ) -> Result<(), GeneratorError> {
+        let mut state = self.state();
+
+        _ = state.encode(value_ref, value_type)?;
 
         Ok(())
     }
@@ -155,12 +171,12 @@ impl Generator {
                 .iter()
                 .filter(|(id, _)| state.active.insert(id.clone()))
                 .collect::<Vec<_>>();
-            values.sort_by_cached_key(|(id, _)| id.clone());
+            values.sort_by_cached_key(|(id, _)| id);
 
             values
                 .iter()
-                .map(|(id, ty)| state.encode_by_id(id, ty))
-                .collect::<Result<Vec<_>, GeneratorError>>()?
+                .map(|(id, _)| state.encoding_registry.get_encoding_by_id(id))
+                .collect::<Result<Vec<_>, _>>()?
         };
 
         if full_encodings.is_empty() {
@@ -201,7 +217,7 @@ impl Generator {
             values
                 .iter()
                 .map(|(id, value)| {
-                    let full_encoding = state.encode_by_id(id, &value.value_type())?;
+                    let full_encoding = state.encoding_registry.get_encoding_by_id(id)?;
                     Ok(full_encoding.select(value.clone())?)
                 })
                 .collect::<Result<Vec<_>, GeneratorError>>()?
@@ -236,17 +252,25 @@ impl Generator {
         sink: &mut S,
         hash: bool,
     ) -> Result<(Vec<EncodedValue<encoding_state::Full>>, Option<Hash>), GeneratorError> {
+        let io = (inputs.to_vec(), outputs.to_vec());
         let (delta, inputs) = {
             let state = self.state();
+
+            // If we've already transferred this garbled circuit, return early.
+            if state.garbled.contains(&io) {
+                return Ok((
+                    outputs
+                        .iter()
+                        .map(|output| state.encoding_registry.get_encoding(output))
+                        .collect::<Result<Vec<_>, _>>()?,
+                    None,
+                ));
+            }
+
             let delta = state.encoder.delta();
             let inputs = inputs
                 .iter()
-                .map(|value| {
-                    state
-                        .encoding_registry
-                        .get_encoding(value)
-                        .ok_or(GeneratorError::MissingEncoding(value.clone()))
-                })
+                .map(|value| state.encoding_registry.get_encoding(value))
                 .collect::<Result<Vec<_>, _>>()?;
 
             (delta, inputs)
@@ -298,6 +322,9 @@ impl Generator {
             });
         }
 
+        // Mark the circuit as garbled
+        state.garbled.insert(io);
+
         Ok((encoded_outputs, hash))
     }
 
@@ -320,7 +347,6 @@ impl Generator {
                     state
                         .encoding_registry
                         .get_encoding(value)
-                        .ok_or(GeneratorError::MissingEncoding(value.clone()))
                         .map(|encoding| encoding.decoding())
                 })
                 .collect::<Result<Vec<_>, _>>()?
@@ -340,7 +366,6 @@ impl State {
         }
     }
 
-    #[allow(dead_code)]
     fn encode(
         &mut self,
         value: &ValueRef,

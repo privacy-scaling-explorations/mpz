@@ -1,4 +1,4 @@
-use mpz_core::value::ValueRef;
+use mpz_core::value::ValueId;
 use mpz_garble_core::ValueError;
 
 /// Errors that can occur while performing the role of a generator
@@ -14,8 +14,8 @@ pub enum GeneratorError {
     IOError(#[from] std::io::Error),
     #[error(transparent)]
     ValueError(#[from] ValueError),
-    #[error("missing encoding for value")]
-    MissingEncoding(ValueRef),
+    #[error("missing encoding for value: {0:?}")]
+    MissingEncoding(ValueId),
     #[error(transparent)]
     EncodingRegistryError(#[from] crate::registry::EncodingRegistryError),
 }

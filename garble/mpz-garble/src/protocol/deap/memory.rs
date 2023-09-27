@@ -19,10 +19,12 @@ impl Memory for DEAP {
         if let Visibility::Blind = vis {
             match &value_ref {
                 ValueRef::Value { id } => {
-                    _ = state.buffer.insert(id.clone(), BufferedValue::Blind { ty })
+                    _ = state
+                        .buffer
+                        .insert(id.clone(), BufferedValue::Blind { ty: ty.clone() })
                 }
                 ValueRef::Array(ids) => {
-                    let ValueType::Array(elem_ty, _) = ty else {
+                    let ValueType::Array(elem_ty, _) = ty.clone() else {
                         panic!();
                     };
 
@@ -42,6 +44,10 @@ impl Memory for DEAP {
             state.set_visibility(&value_ref, vis);
         }
 
+        self.gen
+            .generate_encoding_by_ref(&value_ref, &ty)
+            .expect("ref and value match");
+
         Ok(value_ref)
     }
 
@@ -57,8 +63,12 @@ impl Memory for DEAP {
         let mut state = self.state();
 
         let ty = ValueType::Array(Box::new(T::value_type()), len);
-        let value_ref = state.value_registry.add_value(id, ty)?;
+        let value_ref = state.value_registry.add_value(id, ty.clone())?;
         state.set_visibility(&value_ref, vis);
+
+        self.gen
+            .generate_encoding_by_ref(&value_ref, &ty)
+            .expect("ref and value match");
 
         Ok(value_ref)
     }

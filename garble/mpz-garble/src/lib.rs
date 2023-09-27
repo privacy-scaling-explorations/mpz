@@ -79,6 +79,16 @@ pub enum MemoryError {
     InvalidType(ValueId, mpz_circuits::types::ValueType),
 }
 
+/// Errors that can occur when loading a circuit.
+#[derive(Debug, thiserror::Error)]
+#[allow(missing_docs)]
+pub enum LoadError {
+    #[error(transparent)]
+    IOError(#[from] std::io::Error),
+    #[error(transparent)]
+    ProtocolError(#[from] Box<dyn std::error::Error + Send + Sync>),
+}
+
 /// Errors that can occur when executing a circuit.
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
@@ -242,6 +252,18 @@ pub trait Memory {
 
     /// Returns the type of a value if it exists.
     fn get_value_type(&self, id: &str) -> Option<ValueType>;
+}
+
+/// This trait provides methods for performing pre-computation for executing a circuit.
+#[async_trait]
+pub trait Load {
+    /// Loads a circuit with the provided inputs, assigning to the provided output values
+    async fn load(
+        &mut self,
+        circ: Arc<Circuit>,
+        inputs: &[ValueRef],
+        output: &[ValueRef],
+    ) -> Result<(), LoadError>;
 }
 
 /// This trait provides methods for executing a circuit.
