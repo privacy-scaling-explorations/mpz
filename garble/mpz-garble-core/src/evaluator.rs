@@ -1,12 +1,10 @@
-use std::sync::Arc;
-
 use blake3::Hasher;
 
 use crate::{
     circuit::EncryptedGate,
     encoding::{state, EncodedValue, Label},
 };
-use mpz_circuits::{types::TypeError, Circuit, CircuitError, Gate};
+use mpz_circuits::{types::TypeError, CircuitError, CircuitIterator, Gate};
 use mpz_core::{
     aes::{FixedKeyAes, FIXED_KEY_AES},
     hash::Hash,
@@ -55,11 +53,11 @@ pub(crate) fn and_gate(
 }
 
 /// Core evaluator type for evaluating a garbled circuit.
-pub struct Evaluator {
+pub struct Evaluator<'a> {
     /// Cipher to use to encrypt the gates
     cipher: &'static FixedKeyAes,
-    /// Circuit to evaluate
-    circ: Arc<Circuit>,
+    /// An iterator over the gates of a circuit
+    circuit_iterator: CircuitIterator<'a>,
     /// Active label state
     active_labels: Vec<Option<Label>>,
     /// Current position in the circuit
@@ -72,7 +70,7 @@ pub struct Evaluator {
     hasher: Option<Hasher>,
 }
 
-impl Evaluator {
+impl<'a> Evaluator<'a> {
     /// Creates a new evaluator for the given circuit.
     ///
     /// # Arguments
@@ -80,10 +78,10 @@ impl Evaluator {
     /// * `circ` - The circuit to evaluate.
     /// * `inputs` - The inputs to the circuit.
     pub fn new(
-        circ: Arc<Circuit>,
+        circuit_iterator: CircuitIterator<'a>,
         inputs: &[EncodedValue<state::Active>],
     ) -> Result<Self, EvaluatorError> {
-        Self::new_with(circ, inputs, None)
+        Self::new_with(circuit_iterator, inputs, None)
     }
 
     /// Creates a new evaluator for the given circuit. Evaluator will compute
@@ -94,26 +92,28 @@ impl Evaluator {
     /// * `circ` - The circuit to evaluate.
     /// * `inputs` - The inputs to the circuit.
     pub fn new_with_hasher(
-        circ: Arc<Circuit>,
+        circuit_iterator: CircuitIterator<'a>,
         inputs: &[EncodedValue<state::Active>],
     ) -> Result<Self, EvaluatorError> {
-        Self::new_with(circ, inputs, Some(Hasher::new()))
+        Self::new_with(circuit_iterator, inputs, Some(Hasher::new()))
     }
 
     fn new_with(
-        circ: Arc<Circuit>,
+        circuit_iterator: CircuitIterator<'a>,
         inputs: &[EncodedValue<state::Active>],
         hasher: Option<Hasher>,
     ) -> Result<Self, EvaluatorError> {
-        if inputs.len() != circ.inputs().len() {
+        if inputs.len() != circuit_iterator.circuit().inputs().len() {
             return Err(CircuitError::InvalidInputCount(
-                circ.inputs().len(),
+                circuit_iterator.circuit().inputs().len(),
                 inputs.len(),
             ))?;
         }
 
-        let mut active_labels: Vec<Option<Label>> = vec![None; circ.feed_count()];
-        for (encoded, input) in inputs.iter().zip(circ.inputs()) {
+        let mut active_labels: Vec<Option<Label>> =
+            vec![None; circuit_iterator.circuit().feed_count()];
+
+        for (encoded, input) in inputs.iter().zip(circuit_iterator.circuit().inputs()) {
             if encoded.value_type() != input.value_type() {
                 return Err(TypeError::UnexpectedType {
                     expected: input.value_type(),
@@ -128,7 +128,7 @@ impl Evaluator {
 
         let mut ev = Self {
             cipher: &(*FIXED_KEY_AES),
-            circ,
+            circuit_iterator,
             active_labels,
             pos: 0,
             gid: 1,
@@ -137,7 +137,7 @@ impl Evaluator {
         };
 
         // If circuit has no AND gates we can evaluate it immediately for cheap
-        if ev.circ.and_count() == 0 {
+        if ev.circuit_iterator.circuit().and_count() == 0 {
             ev.evaluate(std::iter::empty());
         }
 
@@ -146,12 +146,12 @@ impl Evaluator {
 
     /// Evaluates the next batch of encrypted gates.
     #[inline]
-    pub fn evaluate<'a>(&mut self, mut encrypted_gates: impl Iterator<Item = &'a EncryptedGate>) {
+    pub fn evaluate<'b>(&mut self, mut encrypted_gates: impl Iterator<Item = &'b EncryptedGate>) {
         let labels = &mut self.active_labels;
 
         // Process gates until we run out of encrypted gates
-        while self.pos < self.circ.gates_count() {
-            match self.circ.gates().nth(self.pos).unwrap() {
+        while self.pos < self.circuit_iterator.circuit().feed_count() {
+            match self.circuit_iterator.next().unwrap() {
                 Gate::Inv {
                     x: node_x,
                     z: node_z,
@@ -207,7 +207,8 @@ impl Evaluator {
         }
 
         Ok(self
-            .circ
+            .circuit_iterator
+            .circuit()
             .outputs()
             .iter()
             .map(|output| {

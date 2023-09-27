@@ -129,9 +129,10 @@ mod tests {
             full_inputs[1].clone().select(msg).unwrap(),
         ];
 
+        let aes_ref = &**AES128;
         let mut gen =
-            Generator::new_with_hasher(AES128.clone(), encoder.delta(), &full_inputs).unwrap();
-        let mut ev = Evaluator::new_with_hasher(AES128.clone(), &active_inputs).unwrap();
+            Generator::new_with_hasher(aes_ref.into_iter(), encoder.delta(), &full_inputs).unwrap();
+        let mut ev = Evaluator::new_with_hasher(aes_ref.into_iter(), &active_inputs).unwrap();
 
         while !(gen.is_complete() && ev.is_complete()) {
             let mut batch = Vec::with_capacity(BATCH_SIZE);

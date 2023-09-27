@@ -1,12 +1,10 @@
-use std::sync::Arc;
-
 use blake3::Hasher;
 
 use crate::{
     circuit::EncryptedGate,
     encoding::{state, Delta, EncodedValue, Label},
 };
-use mpz_circuits::{types::TypeError, Circuit, CircuitError, Gate};
+use mpz_circuits::{types::TypeError, CircuitError, CircuitIterator, Gate};
 use mpz_core::{
     aes::{FixedKeyAes, FIXED_KEY_AES},
     hash::Hash,
@@ -68,11 +66,11 @@ pub(crate) fn and_gate(
 /// A generator is to be used as an iterator of encrypted gates. Each
 /// iteration will return the next encrypted gate in the circuit until the
 /// entire garbled circuit has been yielded.
-pub struct Generator {
+pub struct Generator<'a> {
     /// Cipher to use to encrypt the gates
     cipher: &'static FixedKeyAes,
-    /// Circuit to generate a garbled circuit for
-    circ: Arc<Circuit>,
+    /// An iterator over the gates of a circuit
+    circuit_iterator: CircuitIterator<'a>,
     /// Delta value to use while generating the circuit
     delta: Delta,
     /// The 0 bit labels for the garbled circuit
@@ -85,7 +83,7 @@ pub struct Generator {
     hasher: Option<Hasher>,
 }
 
-impl Generator {
+impl<'a> Generator<'a> {
     /// Creates a new generator for the given circuit.
     ///
     /// # Arguments
@@ -94,11 +92,11 @@ impl Generator {
     /// * `delta` - The delta value to use.
     /// * `inputs` - The inputs to the circuit.
     pub fn new(
-        circ: Arc<Circuit>,
+        circuit_iterator: CircuitIterator<'a>,
         delta: Delta,
         inputs: &[EncodedValue<state::Full>],
     ) -> Result<Self, GeneratorError> {
-        Self::new_with(circ, delta, inputs, None)
+        Self::new_with(circuit_iterator, delta, inputs, None)
     }
 
     /// Creates a new generator for the given circuit. Generator will compute a hash
@@ -110,28 +108,29 @@ impl Generator {
     /// * `delta` - The delta value to use.
     /// * `inputs` - The inputs to the circuit.
     pub fn new_with_hasher(
-        circ: Arc<Circuit>,
+        circuit_iterator: CircuitIterator<'a>,
         delta: Delta,
         inputs: &[EncodedValue<state::Full>],
     ) -> Result<Self, GeneratorError> {
-        Self::new_with(circ, delta, inputs, Some(Hasher::new()))
+        Self::new_with(circuit_iterator, delta, inputs, Some(Hasher::new()))
     }
 
     fn new_with(
-        circ: Arc<Circuit>,
+        circuit_iterator: CircuitIterator<'a>,
         delta: Delta,
         inputs: &[EncodedValue<state::Full>],
         hasher: Option<Hasher>,
     ) -> Result<Self, GeneratorError> {
-        if inputs.len() != circ.inputs().len() {
+        if inputs.len() != circuit_iterator.circuit().inputs().len() {
             return Err(CircuitError::InvalidInputCount(
-                circ.inputs().len(),
+                circuit_iterator.circuit().inputs().len(),
                 inputs.len(),
             ))?;
         }
 
-        let mut low_labels: Vec<Option<Label>> = vec![None; circ.feed_count()];
-        for (encoded, input) in inputs.iter().zip(circ.inputs()) {
+        let mut low_labels: Vec<Option<Label>> =
+            vec![None; circuit_iterator.circuit().feed_count()];
+        for (encoded, input) in inputs.iter().zip(circuit_iterator.circuit().inputs()) {
             if encoded.value_type() != input.value_type() {
                 return Err(TypeError::UnexpectedType {
                     expected: input.value_type(),
@@ -146,7 +145,7 @@ impl Generator {
 
         Ok(Self {
             cipher: &(*FIXED_KEY_AES),
-            circ,
+            circuit_iterator,
             delta,
             low_labels,
             pos: 0,
@@ -157,7 +156,7 @@ impl Generator {
 
     /// Returns whether the generator has finished generating the circuit.
     pub fn is_complete(&self) -> bool {
-        self.pos >= self.circ.gates_count()
+        self.pos >= self.circuit_iterator.circuit().gates_count()
     }
 
     /// Returns the encoded outputs of the circuit.
@@ -167,7 +166,8 @@ impl Generator {
         }
 
         Ok(self
-            .circ
+            .circuit_iterator
+            .circuit()
             .outputs()
             .iter()
             .map(|output| {
@@ -191,13 +191,13 @@ impl Generator {
     }
 }
 
-impl Iterator for Generator {
+impl<'a> Iterator for Generator<'a> {
     type Item = EncryptedGate;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let low_labels = &mut self.low_labels;
-        while let Some(gate) = self.circ.gates().nth(self.pos) {
+        for gate in self.circuit_iterator.by_ref() {
             self.pos += 1;
             match gate {
                 Gate::Inv {
@@ -257,7 +257,9 @@ mod tests {
             .map(|input| encoder.encode_by_type(0, &input.value_type()))
             .collect();
 
-        let mut gen = Generator::new_with_hasher(AES128.clone(), encoder.delta(), &inputs).unwrap();
+        let aes_ref = &**AES128;
+        let mut gen =
+            Generator::new_with_hasher(aes_ref.into_iter(), encoder.delta(), &inputs).unwrap();
 
         let enc_gates: Vec<EncryptedGate> = gen.by_ref().collect();
 
