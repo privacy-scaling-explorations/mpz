@@ -155,6 +155,10 @@ mod tests {
 
     #[test]
     fn test_against_emptool_impl() {
+        if !is_x86_feature_detected!("pclmulqdq") {
+            return;
+        }
+
         let mut rng = ChaCha12Rng::from_seed([0; 32]);
         let a: [u8; 16] = rng.gen();
         let b: [u8; 16] = rng.gen();

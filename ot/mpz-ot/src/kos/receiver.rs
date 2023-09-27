@@ -182,7 +182,7 @@ where
         let actual_delta = <[u8; 16]>::from_lsb0_iter(choices).into();
 
         if expected_delta != actual_delta {
-            return Err(ReceiverVerifyError::InconsistentDelta).map_err(ReceiverError::from)?;
+            return Err(ReceiverError::from(ReceiverVerifyError::InconsistentDelta));
         }
 
         self.state = State::Verify(receiver.start_verification(actual_delta)?);
