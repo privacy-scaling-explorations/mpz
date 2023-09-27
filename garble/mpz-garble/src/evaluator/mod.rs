@@ -28,7 +28,6 @@ use utils_aio::{
 };
 
 use crate::{
-    config::ValueIdConfig,
     ot::{OTReceiveEncoding, OTVerifyEncoding},
     registry::EncodingRegistry,
     Generator, GeneratorConfigBuilder,
@@ -129,38 +128,41 @@ impl Evaluator {
     >(
         &self,
         id: &str,
-        input_configs: &[ValueIdConfig],
+        public: &[(ValueId, Value)],
+        private: &[(ValueId, Value)],
+        blind: &[(ValueId, ValueType)],
         stream: &mut S,
         ot: &OT,
     ) -> Result<(), EvaluatorError> {
         let (ot_recv_values, direct_recv_values) = {
-            let state = self.state();
-
-            // Filter out any values that are already active.
-            let mut input_configs: Vec<ValueIdConfig> = input_configs
-                .iter()
-                .filter(|config| !state.encoding_registry.contains(config.id()))
-                .cloned()
-                .collect();
-
-            input_configs.sort_by_key(|config| config.id().clone());
-
             let mut ot_recv_values = Vec::new();
             let mut direct_recv_values = Vec::new();
-            for config in input_configs.into_iter() {
-                match config {
-                    ValueIdConfig::Public { id, ty, .. } => {
-                        direct_recv_values.push((id, ty));
-                    }
-                    ValueIdConfig::Private { id, ty, value } => {
-                        if let Some(value) = value {
-                            ot_recv_values.push((id, value));
-                        } else {
-                            direct_recv_values.push((id, ty));
-                        }
-                    }
+
+            let state = self.state();
+
+            for (id, value) in public {
+                if state.encoding_registry.contains(id) {
+                    continue;
                 }
+                direct_recv_values.push((id.clone(), value.value_type()));
             }
+
+            for (id, ty) in blind {
+                if state.encoding_registry.contains(id) {
+                    continue;
+                }
+                direct_recv_values.push((id.clone(), ty.clone()));
+            }
+
+            for (id, value) in private {
+                if state.encoding_registry.contains(id) {
+                    continue;
+                }
+                ot_recv_values.push((id.clone(), value.clone()));
+            }
+
+            ot_recv_values.sort_by_cached_key(|(id, _)| id.clone());
+            direct_recv_values.sort_by_cached_key(|(id, _)| id.clone());
 
             (ot_recv_values, direct_recv_values)
         };
@@ -179,7 +181,7 @@ impl Evaluator {
     /// - `id` - The id of this operation
     /// - `values` - The values to receive via oblivious transfer.
     /// - `ot` - The oblivious transfer receiver
-    async fn ot_receive_active_encodings<OT: OTReceiveEncoding>(
+    pub async fn ot_receive_active_encodings<OT: OTReceiveEncoding>(
         &self,
         id: &str,
         values: &[(ValueId, Value)],
@@ -233,7 +235,7 @@ impl Evaluator {
     /// # Arguments
     /// - `values` - The values and types expected to be received
     /// - `stream` - The stream of messages from the generator
-    async fn direct_receive_active_encodings<
+    pub async fn direct_receive_active_encodings<
         S: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
     >(
         &self,

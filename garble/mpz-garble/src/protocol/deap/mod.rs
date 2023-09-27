@@ -8,13 +8,16 @@ pub mod mock;
 mod vm;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ops::DerefMut,
     sync::{Arc, Mutex},
 };
 
 use futures::{Sink, SinkExt, Stream, StreamExt, TryFutureExt};
-use mpz_circuits::{types::Value, Circuit};
+use mpz_circuits::{
+    types::{Value, ValueType},
+    Circuit,
+};
 use mpz_core::{
     commit::{Decommitment, HashCommit},
     hash::{Hash, SecureHash},
@@ -25,12 +28,13 @@ use rand::thread_rng;
 use utils_aio::expect_msg_or_err;
 
 use crate::{
-    config::{Role, ValueConfig, ValueIdConfig, Visibility},
+    config::{Role, ValueConfig, Visibility},
     evaluator::{Evaluator, EvaluatorConfigBuilder},
     generator::{Generator, GeneratorConfigBuilder},
     internal_circuits::{build_otp_circuit, build_otp_shared_circuit},
     ot::{OTReceiveEncoding, OTSendEncoding, OTVerifyEncoding},
     registry::ValueRegistry,
+    MemoryError,
 };
 
 pub use error::{DEAPError, PeerEncodingsError};
@@ -46,47 +50,6 @@ pub struct DEAP {
     ev: Evaluator,
     state: Mutex<State>,
     finalized: bool,
-}
-
-#[derive(Debug, Default)]
-struct State {
-    /// A registry of all values
-    value_registry: ValueRegistry,
-    /// An internal buffer for value configurations which get
-    /// drained and set up prior to execution.
-    input_buffer: HashMap<ValueId, ValueIdConfig>,
-
-    /// Equality check decommitments withheld by the leader
-    /// prior to finalization
-    ///
-    /// Operation ID => Equality check decommitment
-    eq_decommitments: HashMap<String, Decommitment<EqualityCheck>>,
-    /// Equality check commitments from the leader
-    ///
-    /// Operation ID => (Expected eq. check value, hash commitment from leader)
-    eq_commitments: HashMap<String, (EqualityCheck, Hash)>,
-    /// Proof decommitments withheld by the leader
-    /// prior to finalization
-    ///
-    /// Operation ID => GC output hash decommitment
-    proof_decommitments: HashMap<String, Decommitment<Hash>>,
-    /// Proof commitments from the leader
-    ///
-    /// Operation ID => (Expected GC output hash, hash commitment from leader)
-    proof_commitments: HashMap<String, (Hash, Hash)>,
-}
-
-struct FinalizedState {
-    /// Equality check decommitments withheld by the leader
-    /// prior to finalization
-    eq_decommitments: Vec<(String, Decommitment<EqualityCheck>)>,
-    /// Equality check commitments from the leader
-    eq_commitments: Vec<(String, (EqualityCheck, Hash))>,
-    /// Proof decommitments withheld by the leader
-    /// prior to finalization
-    proof_decommitments: Vec<(String, Decommitment<Hash>)>,
-    /// Proof commitments from the leader
-    proof_commitments: Vec<(String, (Hash, Hash))>,
 }
 
 impl DEAP {
@@ -157,23 +120,26 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let input_configs = self.state().remove_input_configs(inputs);
-
         let id_0 = format!("{}/0", id);
         let id_1 = format!("{}/1", id);
-
         let (gen_id, ev_id) = match self.role {
             Role::Leader => (id_0, id_1),
             Role::Follower => (id_1, id_0),
         };
 
-        // Setup inputs concurrently.
+        // Setup inactive inputs concurrently.
+        let BufferedValues {
+            public,
+            private,
+            blind,
+        } = self.state().drain_buffered(inputs)?;
+
         futures::try_join!(
             self.gen
-                .setup_inputs(&gen_id, &input_configs, sink, ot_send)
+                .setup_inputs(&gen_id, &public, &private, &blind, sink, ot_send)
                 .map_err(DEAPError::from),
             self.ev
-                .setup_inputs(&ev_id, &input_configs, stream, ot_recv)
+                .setup_inputs(&ev_id, &public, &private, &blind, stream, ot_recv)
                 .map_err(DEAPError::from)
         )?;
 
@@ -232,12 +198,16 @@ impl DEAP {
             ))?;
         }
 
-        let input_configs = self.state().remove_input_configs(inputs);
-
         // The prover only acts as the evaluator for ZKPs instead of
         // dual-execution.
+        let BufferedValues {
+            public,
+            private,
+            blind,
+        } = self.state().drain_buffered(inputs)?;
+
         self.ev
-            .setup_inputs(id, &input_configs, stream, ot_recv)
+            .setup_inputs(id, &public, &private, &blind, stream, ot_recv)
             .map_err(DEAPError::from)
             .await?;
 
@@ -303,12 +273,16 @@ impl DEAP {
             ))?;
         }
 
-        let input_configs = self.state().remove_input_configs(inputs);
-
         // The verifier only acts as the generator for ZKPs instead of
         // dual-execution.
+        let BufferedValues {
+            public,
+            private,
+            blind,
+        } = self.state().drain_buffered(inputs)?;
+
         self.gen
-            .setup_inputs(id, &input_configs, sink, ot_send)
+            .setup_inputs(id, &public, &private, &blind, sink, ot_send)
             .map_err(DEAPError::from)
             .await?;
 
@@ -468,7 +442,7 @@ impl DEAP {
                     state
                         .value_registry
                         .get_value_type_with_ref(value)
-                        .ok_or_else(|| DEAPError::ValueDoesNotExist(value.clone()))
+                        .ok_or_else(|| MemoryError::InvalidReference(value.clone()))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -480,16 +454,33 @@ impl DEAP {
             for ((otp_ref, otp_ty), otp_value) in
                 otp_refs.iter().zip(otp_tys.iter()).zip(otp_values.iter())
             {
-                state.add_input_config(
-                    otp_ref,
-                    ValueConfig::new(
-                        otp_ref.clone(),
-                        otp_ty.clone(),
-                        Some(otp_value.clone()),
-                        Visibility::Private,
-                    )
-                    .expect("config is valid"),
-                );
+                match otp_ref {
+                    ValueRef::Value { id } => {
+                        state
+                            .value_registry
+                            .add_value_id(id.clone(), otp_ty.clone())?;
+                        state.buffer.insert(
+                            id.clone(),
+                            BufferedValue::Private {
+                                value: otp_value.clone(),
+                            },
+                        );
+                    }
+                    ValueRef::Array(ids) => {
+                        let Value::Array(elems) = otp_value.clone() else {
+                            panic!();
+                        };
+
+                        for (id, elem_value) in ids.iter().zip(elems) {
+                            state
+                                .value_registry
+                                .add_value_id(id.clone(), elem_value.value_type())?;
+                            state
+                                .buffer
+                                .insert(id.clone(), BufferedValue::Private { value: elem_value });
+                        }
+                    }
+                }
             }
 
             (otp_tys, otp_values)
@@ -557,16 +548,40 @@ impl DEAP {
                     state
                         .value_registry
                         .get_value_type_with_ref(value)
-                        .ok_or_else(|| DEAPError::ValueDoesNotExist(value.clone()))
+                        .ok_or_else(|| MemoryError::InvalidReference(value.clone()))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
             for (otp_ref, otp_ty) in otp_refs.iter().zip(otp_tys.iter()) {
-                state.add_input_config(
-                    otp_ref,
-                    ValueConfig::new(otp_ref.clone(), otp_ty.clone(), None, Visibility::Private)
-                        .expect("config is valid"),
-                );
+                match otp_ref {
+                    ValueRef::Value { id } => {
+                        state
+                            .value_registry
+                            .add_value_id(id.clone(), otp_ty.clone())?;
+                        state
+                            .buffer
+                            .insert(id.clone(), BufferedValue::Blind { ty: otp_ty.clone() });
+                    }
+                    ValueRef::Array(ids) => {
+                        let ValueType::Array(elem_ty, _) = otp_ty.clone() else {
+                            panic!();
+                        };
+
+                        let elem_ty = *elem_ty;
+
+                        for id in ids {
+                            state
+                                .value_registry
+                                .add_value_id(id.clone(), elem_ty.clone())?;
+                            state.buffer.insert(
+                                id.clone(),
+                                BufferedValue::Blind {
+                                    ty: elem_ty.clone(),
+                                },
+                            );
+                        }
+                    }
+                }
             }
 
             otp_tys
@@ -615,121 +630,123 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let (otp_0_refs, (otp_1_refs, masked_refs)): (Vec<_>, (Vec<_>, Vec<_>)) = values
-            .iter()
-            .map(|value| {
-                (
-                    value.append_id("otp_0"),
-                    (value.append_id("otp_1"), value.append_id("masked")),
-                )
-            })
-            .unzip();
+        todo!()
 
-        let (otp_tys, otp_values) = {
-            let mut state = self.state();
+        // let (otp_0_refs, (otp_1_refs, masked_refs)): (Vec<_>, (Vec<_>, Vec<_>)) = values
+        //     .iter()
+        //     .map(|value| {
+        //         (
+        //             value.append_id("otp_0"),
+        //             (value.append_id("otp_1"), value.append_id("masked")),
+        //         )
+        //     })
+        //     .unzip();
 
-            let otp_tys = values
-                .iter()
-                .map(|value| {
-                    state
-                        .value_registry
-                        .get_value_type_with_ref(value)
-                        .ok_or_else(|| DEAPError::ValueDoesNotExist(value.clone()))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+        // let (otp_tys, otp_values) = {
+        //     let mut state = self.state();
 
-            let otp_values = otp_tys
-                .iter()
-                .map(|ty| Value::random(&mut thread_rng(), ty))
-                .collect::<Vec<_>>();
+        //     let otp_tys = values
+        //         .iter()
+        //         .map(|value| {
+        //             state
+        //                 .value_registry
+        //                 .get_value_type_with_ref(value)
+        //                 .ok_or_else(|| MemoryError::InvalidReference(value.clone()))
+        //         })
+        //         .collect::<Result<Vec<_>, _>>()?;
 
-            for (((otp_0_ref, opt_1_ref), otp_ty), otp_value) in otp_0_refs
-                .iter()
-                .zip(&otp_1_refs)
-                .zip(&otp_tys)
-                .zip(&otp_values)
-            {
-                let (otp_0_config, otp_1_config) = match self.role {
-                    Role::Leader => (
-                        ValueConfig::new(
-                            otp_0_ref.clone(),
-                            otp_ty.clone(),
-                            Some(otp_value.clone()),
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                        ValueConfig::new(
-                            opt_1_ref.clone(),
-                            otp_ty.clone(),
-                            None,
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                    ),
-                    Role::Follower => (
-                        ValueConfig::new(
-                            otp_0_ref.clone(),
-                            otp_ty.clone(),
-                            None,
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                        ValueConfig::new(
-                            opt_1_ref.clone(),
-                            otp_ty.clone(),
-                            Some(otp_value.clone()),
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                    ),
-                };
-                state.add_input_config(otp_0_ref, otp_0_config);
-                state.add_input_config(opt_1_ref, otp_1_config);
-            }
+        //     let otp_values = otp_tys
+        //         .iter()
+        //         .map(|ty| Value::random(&mut thread_rng(), ty))
+        //         .collect::<Vec<_>>();
 
-            (otp_tys, otp_values)
-        };
+        //     for (((otp_0_ref, opt_1_ref), otp_ty), otp_value) in otp_0_refs
+        //         .iter()
+        //         .zip(&otp_1_refs)
+        //         .zip(&otp_tys)
+        //         .zip(&otp_values)
+        //     {
+        //         let (otp_0_config, otp_1_config) = match self.role {
+        //             Role::Leader => (
+        //                 ValueConfig::new(
+        //                     otp_0_ref.clone(),
+        //                     otp_ty.clone(),
+        //                     Some(otp_value.clone()),
+        //                     Visibility::Private,
+        //                 )
+        //                 .expect("config is valid"),
+        //                 ValueConfig::new(
+        //                     opt_1_ref.clone(),
+        //                     otp_ty.clone(),
+        //                     None,
+        //                     Visibility::Private,
+        //                 )
+        //                 .expect("config is valid"),
+        //             ),
+        //             Role::Follower => (
+        //                 ValueConfig::new(
+        //                     otp_0_ref.clone(),
+        //                     otp_ty.clone(),
+        //                     None,
+        //                     Visibility::Private,
+        //                 )
+        //                 .expect("config is valid"),
+        //                 ValueConfig::new(
+        //                     opt_1_ref.clone(),
+        //                     otp_ty.clone(),
+        //                     Some(otp_value.clone()),
+        //                     Visibility::Private,
+        //                 )
+        //                 .expect("config is valid"),
+        //             ),
+        //         };
+        //         state.add_input_config(otp_0_ref, otp_0_config);
+        //         state.add_input_config(opt_1_ref, otp_1_config);
+        //     }
 
-        // Apply OTPs to values
-        let circ = build_otp_shared_circuit(&otp_tys);
+        //     (otp_tys, otp_values)
+        // };
 
-        let inputs = values
-            .iter()
-            .zip(&otp_0_refs)
-            .zip(&otp_1_refs)
-            .flat_map(|((value, otp_0), otp_1)| [value, otp_0, otp_1])
-            .cloned()
-            .collect::<Vec<_>>();
+        // // Apply OTPs to values
+        // let circ = build_otp_shared_circuit(&otp_tys);
 
-        self.execute(
-            id,
-            circ,
-            &inputs,
-            &masked_refs,
-            sink,
-            stream,
-            ot_send,
-            ot_recv,
-        )
-        .await?;
+        // let inputs = values
+        //     .iter()
+        //     .zip(&otp_0_refs)
+        //     .zip(&otp_1_refs)
+        //     .flat_map(|((value, otp_0), otp_1)| [value, otp_0, otp_1])
+        //     .cloned()
+        //     .collect::<Vec<_>>();
 
-        // Decode masked values
-        let masked_values = self.decode(id, &masked_refs, sink, stream).await?;
+        // self.execute(
+        //     id,
+        //     circ,
+        //     &inputs,
+        //     &masked_refs,
+        //     sink,
+        //     stream,
+        //     ot_send,
+        //     ot_recv,
+        // )
+        // .await?;
 
-        match self.role {
-            Role::Leader => {
-                // Leader removes his OTP
-                Ok(masked_values
-                    .into_iter()
-                    .zip(otp_values)
-                    .map(|(masked, otp)| (masked ^ otp).expect("values are the same type"))
-                    .collect::<Vec<_>>())
-            }
-            Role::Follower => {
-                // Follower uses his OTP as his share
-                Ok(otp_values)
-            }
-        }
+        // // Decode masked values
+        // let masked_values = self.decode(id, &masked_refs, sink, stream).await?;
+
+        // match self.role {
+        //     Role::Leader => {
+        //         // Leader removes his OTP
+        //         Ok(masked_values
+        //             .into_iter()
+        //             .zip(otp_values)
+        //             .map(|(masked, otp)| (masked ^ otp).expect("values are the same type"))
+        //             .collect::<Vec<_>>())
+        //     }
+        //     Role::Follower => {
+        //         // Follower uses his OTP as his share
+        //         Ok(otp_values)
+        //     }
+        // }
     }
 
     /// Finalize the DEAP instance.
@@ -860,22 +877,89 @@ impl DEAP {
     }
 }
 
+#[derive(Debug, Default)]
+struct State {
+    /// A registry of all values
+    value_registry: ValueRegistry,
+    /// Visibility config for input values
+    visibility: HashMap<ValueId, Visibility>,
+    /// Buffer of values
+    buffer: HashMap<ValueId, BufferedValue>,
+    /// Active values
+    active_values: HashSet<ValueId>,
+
+    /// Equality check decommitments withheld by the leader
+    /// prior to finalization
+    ///
+    /// Operation ID => Equality check decommitment
+    eq_decommitments: HashMap<String, Decommitment<EqualityCheck>>,
+    /// Equality check commitments from the leader
+    ///
+    /// Operation ID => (Expected eq. check value, hash commitment from leader)
+    eq_commitments: HashMap<String, (EqualityCheck, Hash)>,
+    /// Proof decommitments withheld by the leader
+    /// prior to finalization
+    ///
+    /// Operation ID => GC output hash decommitment
+    proof_decommitments: HashMap<String, Decommitment<Hash>>,
+    /// Proof commitments from the leader
+    ///
+    /// Operation ID => (Expected GC output hash, hash commitment from leader)
+    proof_commitments: HashMap<String, (Hash, Hash)>,
+}
+
+#[derive(Debug)]
+enum BufferedValue {
+    Public { value: Value },
+    Private { value: Value },
+    Blind { ty: ValueType },
+}
+
+struct BufferedValues {
+    public: Vec<(ValueId, Value)>,
+    private: Vec<(ValueId, Value)>,
+    blind: Vec<(ValueId, ValueType)>,
+}
+
 impl State {
-    /// Adds input configs to the buffer.
-    fn add_input_config(&mut self, value: &ValueRef, config: ValueConfig) {
-        value
-            .iter()
-            .zip(config.flatten())
-            .for_each(|(id, config)| _ = self.input_buffer.insert(id.clone(), config));
+    fn drain_buffered(&mut self, values: &[ValueRef]) -> Result<BufferedValues, DEAPError> {
+        let mut public = Vec::new();
+        let mut private = Vec::new();
+        let mut blind = Vec::new();
+
+        for input in values {
+            for id in input.iter() {
+                if !self.active_values.insert(id.clone()) {
+                    continue;
+                }
+
+                let value = self
+                    .buffer
+                    .remove(id)
+                    .ok_or_else(|| MemoryError::Undefined(id.clone()))?;
+
+                match value {
+                    BufferedValue::Public { value } => public.push((id.clone(), value)),
+                    BufferedValue::Private { value } => private.push((id.clone(), value)),
+                    BufferedValue::Blind { ty } => blind.push((id.clone(), ty)),
+                }
+            }
+        }
+
+        Ok(BufferedValues {
+            public,
+            private,
+            blind,
+        })
     }
 
-    /// Returns input configs from the buffer.
-    fn remove_input_configs(&mut self, values: &[ValueRef]) -> Vec<ValueIdConfig> {
-        values
-            .iter()
-            .flat_map(|value| value.iter())
-            .filter_map(|id| self.input_buffer.remove(id))
-            .collect::<Vec<_>>()
+    fn set_visibility(&mut self, value_ref: &ValueRef, visibility: Visibility) {
+        match value_ref {
+            ValueRef::Value { id } => _ = self.visibility.insert(id.clone(), visibility),
+            ValueRef::Array(ids) => ids
+                .iter()
+                .for_each(|id| _ = self.visibility.insert(id.clone(), visibility)),
+        }
     }
 
     /// Drain the states to be finalized.
@@ -907,6 +991,19 @@ impl State {
             proof_commitments,
         }
     }
+}
+
+struct FinalizedState {
+    /// Equality check decommitments withheld by the leader
+    /// prior to finalization
+    eq_decommitments: Vec<(String, Decommitment<EqualityCheck>)>,
+    /// Equality check commitments from the leader
+    eq_commitments: Vec<(String, (EqualityCheck, Hash))>,
+    /// Proof decommitments withheld by the leader
+    /// prior to finalization
+    proof_decommitments: Vec<(String, Decommitment<Hash>)>,
+    /// Proof commitments from the leader
+    proof_commitments: Vec<(String, (Hash, Hash))>,
 }
 
 #[cfg(test)]

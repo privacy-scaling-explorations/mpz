@@ -209,7 +209,7 @@ impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
         id: &str,
         vis: Visibility,
     ) -> Result<ValueRef, MemoryError> {
-        unimplemented!()
+        self.deap().new_input::<T>(id, vis)
     }
 
     fn new_input_array<T: StaticValueType>(
@@ -221,11 +221,11 @@ impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
     where
         Vec<T>: Into<Value>,
     {
-        unimplemented!()
+        self.deap().new_input_array::<T>(id, vis, len)
     }
 
     fn new_output<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
-        unimplemented!()
+        self.deap().new_output::<T>(id)
     }
 
     fn new_output_array<T: StaticValueType>(
@@ -236,7 +236,7 @@ impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
     where
         Vec<T>: Into<Value>,
     {
-        unimplemented!()
+        self.deap().new_output_array::<T>(id, len)
     }
 
     fn assign<T: StaticValueType>(
@@ -244,7 +244,7 @@ impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
         value_ref: &ValueRef,
         value: T,
     ) -> Result<(), MemoryError> {
-        unimplemented!()
+        self.deap().assign::<T>(value_ref, value)
     }
 
     fn get_value(&self, id: &str) -> Option<ValueRef> {

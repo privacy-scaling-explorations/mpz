@@ -63,6 +63,14 @@ pub enum VmError {
 pub enum MemoryError {
     #[error("duplicate value id: {0:?}")]
     DuplicateValueId(ValueId),
+    #[error("value is not defined: {0:?}")]
+    Undefined(ValueId),
+    #[error("invalid reference: {0:?}")]
+    InvalidReference(ValueRef),
+    #[error("value is already assigned: {0:?}")]
+    AlreadyAssigned(ValueId),
+    #[error("value is not assigned: {0:?}")]
+    Unassigned(ValueId),
     #[error("duplicate value: {0:?}")]
     DuplicateValue(ValueRef),
     #[error(transparent)]

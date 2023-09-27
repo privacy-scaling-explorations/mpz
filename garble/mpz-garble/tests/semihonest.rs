@@ -1,11 +1,12 @@
-use mpz_circuits::{circuits::AES128, types::StaticValueType};
+use mpz_circuits::{
+    circuits::AES128,
+    types::{StaticValueType, Value},
+};
 use mpz_garble_core::msg::GarbleMessage;
 use mpz_ot::mock::mock_ot_shared_pair;
 use utils_aio::duplex::MemoryDuplex;
 
-use mpz_garble::{
-    config::ValueConfig, Evaluator, Generator, GeneratorConfigBuilder, ValueRegistry,
-};
+use mpz_garble::{Evaluator, Generator, GeneratorConfigBuilder, ValueRegistry};
 
 #[tokio::test]
 async fn test_semi_honest() {
@@ -34,17 +35,19 @@ async fn test_semi_honest() {
         .unwrap();
 
     let gen_fut = async {
-        let value_configs = [
-            ValueConfig::new_private::<[u8; 16]>(key_ref.clone(), Some(key))
-                .unwrap()
-                .flatten(),
-            ValueConfig::new_private::<[u8; 16]>(msg_ref.clone(), None)
-                .unwrap()
-                .flatten(),
-        ]
-        .concat();
+        let key = key_ref
+            .iter()
+            .cloned()
+            .zip(key)
+            .map(|(k, v)| (k, Value::from(v)))
+            .collect::<Vec<_>>();
+        let msg = msg_ref
+            .iter()
+            .cloned()
+            .map(|k| (k, u8::value_type()))
+            .collect::<Vec<_>>();
 
-        gen.setup_inputs("test", &value_configs, &mut gen_channel, &ot_send)
+        gen.setup_inputs("test", &[], &key, &msg, &mut gen_channel, &ot_send)
             .await
             .unwrap();
 
@@ -60,17 +63,19 @@ async fn test_semi_honest() {
     };
 
     let ev_fut = async {
-        let value_configs = [
-            ValueConfig::new_private::<[u8; 16]>(key_ref.clone(), None)
-                .unwrap()
-                .flatten(),
-            ValueConfig::new_private::<[u8; 16]>(msg_ref.clone(), Some(msg))
-                .unwrap()
-                .flatten(),
-        ]
-        .concat();
+        let key = key_ref
+            .iter()
+            .cloned()
+            .map(|k| (k, u8::value_type()))
+            .collect::<Vec<_>>();
+        let msg = msg_ref
+            .iter()
+            .cloned()
+            .zip(msg)
+            .map(|(k, v)| (k, Value::from(v)))
+            .collect::<Vec<_>>();
 
-        ev.setup_inputs("test", &value_configs, &mut ev_channel, &ot_recv)
+        ev.setup_inputs("test", &[], &msg, &key, &mut ev_channel, &ot_recv)
             .await
             .unwrap();
 

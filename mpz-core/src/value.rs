@@ -84,10 +84,35 @@ impl ValueRef {
     }
 
     /// Returns an iterator of the value IDs.
-    pub fn iter(&self) -> Box<dyn Iterator<Item = &ValueId> + '_> {
-        match self {
-            ValueRef::Value { id, .. } => Box::new(std::iter::once(id)),
-            ValueRef::Array(values) => Box::new(values.iter()),
+    pub fn iter(&self) -> RefIter<'_> {
+        RefIter {
+            iter: match self {
+                ValueRef::Value { id } => IdIter::Value(std::iter::once(id)),
+                ValueRef::Array(ids) => IdIter::Array(ids.iter()),
+            },
+        }
+    }
+}
+
+/// An iterator over the value IDs of a reference.
+#[derive(Debug)]
+pub struct RefIter<'a> {
+    iter: IdIter<'a>,
+}
+
+#[derive(Debug)]
+enum IdIter<'a> {
+    Value(std::iter::Once<&'a ValueId>),
+    Array(std::slice::Iter<'a, ValueId>),
+}
+
+impl<'a> Iterator for RefIter<'a> {
+    type Item = &'a ValueId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.iter {
+            IdIter::Value(iter) => iter.next(),
+            IdIter::Array(iter) => iter.next(),
         }
     }
 }

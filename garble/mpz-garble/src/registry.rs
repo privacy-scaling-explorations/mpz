@@ -55,7 +55,7 @@ impl ValueRegistry {
         Ok(value_ref)
     }
 
-    fn add_value_id(&mut self, id: ValueId, ty: ValueType) -> Result<(), MemoryError> {
+    pub(crate) fn add_value_id(&mut self, id: ValueId, ty: ValueType) -> Result<(), MemoryError> {
         // Ensure that the value is not a collection.
         if matches!(ty, ValueType::Array(_, _)) {
             return Err(MemoryError::InvalidType(id, ty));

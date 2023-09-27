@@ -1,7 +1,7 @@
 use mpz_core::value::ValueRef;
 use mpz_garble_core::{msg::GarbleMessage, ValueError};
 
-use crate::{DecodeError, ExecutionError, ProveError, VerifyError};
+use crate::{DecodeError, ExecutionError, MemoryError, ProveError, VerifyError};
 
 /// Errors that can occur during the DEAP protocol.
 #[derive(Debug, thiserror::Error)]
@@ -19,8 +19,8 @@ pub enum DEAPError {
     EvaluatorError(#[from] crate::evaluator::EvaluatorError),
     #[error(transparent)]
     ValueError(#[from] ValueError),
-    #[error("value does not exist: {0:?}")]
-    ValueDoesNotExist(ValueRef),
+    #[error(transparent)]
+    MemoryError(#[from] MemoryError),
     #[error("missing encoding for value: {0:?}")]
     MissingEncoding(ValueRef),
     #[error(transparent)]

@@ -24,7 +24,7 @@ use mpz_garble_core::{
 };
 use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 
-use crate::{config::ValueIdConfig, ot::OTSendEncoding, registry::EncodingRegistry};
+use crate::{config::ValueConfig, ot::OTSendEncoding, registry::EncodingRegistry};
 
 pub use config::{GeneratorConfig, GeneratorConfigBuilder};
 pub use error::GeneratorError;
@@ -115,30 +115,17 @@ impl Generator {
     >(
         &self,
         id: &str,
-        input_configs: &[ValueIdConfig],
+        public: &[(ValueId, Value)],
+        private: &[(ValueId, Value)],
+        blind: &[(ValueId, ValueType)],
         sink: &mut S,
         ot: &OT,
     ) -> Result<(), GeneratorError> {
-        let mut ot_send_values = Vec::new();
-        let mut direct_send_values = Vec::new();
-        for config in input_configs.iter().cloned() {
-            match config {
-                ValueIdConfig::Public { id, value, .. } => {
-                    direct_send_values.push((id, value));
-                }
-                ValueIdConfig::Private { id, value, ty } => {
-                    if let Some(value) = value {
-                        direct_send_values.push((id, value));
-                    } else {
-                        ot_send_values.push((id, ty));
-                    }
-                }
-            }
-        }
+        let direct_send = [public, private].concat();
 
         futures::try_join!(
-            self.ot_send_active_encodings(id, &ot_send_values, ot),
-            self.direct_send_active_encodings(&direct_send_values, sink)
+            self.ot_send_active_encodings(id, &blind, ot),
+            self.direct_send_active_encodings(&direct_send, sink)
         )?;
 
         Ok(())
@@ -168,13 +155,17 @@ impl Generator {
                 .iter()
                 .filter(|(id, _)| state.active.insert(id.clone()))
                 .collect::<Vec<_>>();
-            values.sort_by_key(|(id, _)| id.clone());
+            values.sort_by_cached_key(|(id, _)| id.clone());
 
             values
                 .iter()
                 .map(|(id, ty)| state.encode_by_id(id, ty))
                 .collect::<Result<Vec<_>, GeneratorError>>()?
         };
+
+        if full_encodings.is_empty() {
+            return Ok(());
+        }
 
         ot.send(id, full_encodings).await?;
 
@@ -205,7 +196,7 @@ impl Generator {
                 .iter()
                 .filter(|(id, _)| state.active.insert(id.clone()))
                 .collect::<Vec<_>>();
-            values.sort_by_key(|(id, _)| id.clone());
+            values.sort_by_cached_key(|(id, _)| id.clone());
 
             values
                 .iter()
@@ -215,6 +206,10 @@ impl Generator {
                 })
                 .collect::<Result<Vec<_>, GeneratorError>>()?
         };
+
+        if active_encodings.is_empty() {
+            return Ok(());
+        }
 
         sink.send(GarbleMessage::ActiveValues(active_encodings))
             .await?;
