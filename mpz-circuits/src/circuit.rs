@@ -50,7 +50,7 @@ impl Circuit {
     }
 
     /// Returns a reference to the gates of the circuit.
-    pub fn gates(&self) -> GatesIterator<'_> {
+    pub fn gates(&self) -> CircuitIterator<'_> {
         self.into_iter()
     }
 
@@ -221,7 +221,7 @@ impl<'a> IntoIterator for &'a SubCircuit {
 pub(crate) struct SubCircuitIterator<'a> {
     feed_map: &'a HashMap<usize, usize>,
     feed_offset: usize,
-    gates_iter: Box<GatesIterator<'a>>,
+    gates_iter: Box<CircuitIterator<'a>>,
 }
 
 impl<'a> Iterator for SubCircuitIterator<'a> {
@@ -282,7 +282,8 @@ impl<'a> Iterator for SubCircuitIterator<'a> {
 }
 
 /// An iterator over the gates of a circuit
-pub struct GatesIterator<'a> {
+pub struct CircuitIterator<'a> {
+    circuit: &'a Circuit,
     gates: Iter<'a, Gate>,
     sub_circuits: Iter<'a, SubCircuit>,
     current_sub_circuit: Option<SubCircuitIterator<'a>>,
@@ -290,7 +291,14 @@ pub struct GatesIterator<'a> {
     current_break_point: Option<usize>,
 }
 
-impl<'a> Iterator for GatesIterator<'a> {
+impl<'a> CircuitIterator<'a> {
+    /// Returns a reference to the underlying circuit.
+    pub fn circuit(&self) -> &'a Circuit {
+        self.circuit
+    }
+}
+
+impl<'a> Iterator for CircuitIterator<'a> {
     type Item = Gate;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -317,13 +325,14 @@ impl<'a> Iterator for GatesIterator<'a> {
 
 impl<'a> IntoIterator for &'a Circuit {
     type Item = Gate;
-    type IntoIter = GatesIterator<'a>;
+    type IntoIter = CircuitIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         let mut break_points = self.break_points.clone();
         let current_break_point = break_points.pop_front();
 
-        GatesIterator {
+        CircuitIterator {
+            circuit: self,
             gates: self.gates.iter(),
             sub_circuits: self.sub_circuits.iter(),
             current_sub_circuit: None,
