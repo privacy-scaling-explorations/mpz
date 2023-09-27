@@ -37,6 +37,22 @@ jobs:
         #   RUSTDOCFLAGS: -D warnings
         run: cargo doc --no-deps --workspace --lib --document-private-items --examples
 
+  miri:
+    if: ( ! github.event.pull_request.draft )
+    name: "Miri"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Miri
+        run: |
+          rustup toolchain install nightly --component miri
+          rustup override set nightly
+          cargo miri setup
+      
+      - name: Test with Miri
+        run: cargo miri test
+
   rustfmt_and_clippy:
     name: Rustfmt and Clippy
     runs-on: ubuntu-latest
