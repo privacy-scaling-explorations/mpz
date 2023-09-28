@@ -56,14 +56,27 @@ cfg_if! {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Clmul {
     inner: Inner,
     is_intr: bool,
 }
 
+#[derive(Clone, Copy)]
 union Inner {
     intrinsics: intrinsics::Clmul,
     soft: soft::Clmul,
+}
+
+impl core::fmt::Debug for Clmul {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        unsafe {
+            match self.is_intr {
+                true => self.inner.intrinsics.fmt(f),
+                false => self.inner.soft.fmt(f),
+            }
+        }
+    }
 }
 
 /*
