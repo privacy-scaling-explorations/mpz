@@ -112,6 +112,8 @@ impl<'a> Evaluator<'a> {
 
         let mut active_labels: Vec<Option<Label>> =
             vec![None; circuit_iterator.circuit().feed_count()];
+        active_labels[0] = Some(Label::ONE);
+        active_labels[1] = Some(Label::ONE);
 
         for (encoded, input) in inputs.iter().zip(circuit_iterator.circuit().inputs()) {
             if encoded.value_type() != input.value_type() {
@@ -164,6 +166,7 @@ impl<'a> Evaluator<'a> {
                     y: node_y,
                     z: node_z,
                 } => {
+                    dbg!(node_x.id(), labels[node_x.id()]);
                     let x = labels[node_x.id()].expect("feed should be initialized");
                     let y = labels[node_y.id()].expect("feed should be initialized");
                     labels[node_z.id()] = Some(x ^ y);

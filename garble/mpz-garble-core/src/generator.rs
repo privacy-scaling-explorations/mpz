@@ -130,6 +130,9 @@ impl<'a> Generator<'a> {
 
         let mut low_labels: Vec<Option<Label>> =
             vec![None; circuit_iterator.circuit().feed_count()];
+        low_labels[0] = Some(Label::ONE ^ Label::new(delta.into_inner()));
+        low_labels[1] = Some(Label::ONE);
+
         for (encoded, input) in inputs.iter().zip(circuit_iterator.circuit().inputs()) {
             if encoded.value_type() != input.value_type() {
                 return Err(TypeError::UnexpectedType {
