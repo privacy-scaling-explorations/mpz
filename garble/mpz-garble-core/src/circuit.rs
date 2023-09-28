@@ -32,3 +32,7 @@ impl Index<usize> for EncryptedGate {
         &self.0[index]
     }
 }
+
+#[derive(Debug)]
+/// A complete collection of encrypted gates for a garbled circuit
+pub struct GarbledCircuit(pub Vec<EncryptedGate>);

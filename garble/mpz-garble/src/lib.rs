@@ -262,7 +262,7 @@ pub trait Load {
         &mut self,
         circ: Arc<Circuit>,
         inputs: &[ValueRef],
-        output: &[ValueRef],
+        outputs: &[ValueRef],
     ) -> Result<(), LoadError>;
 }
 

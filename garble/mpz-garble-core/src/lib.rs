@@ -59,7 +59,7 @@ mod evaluator;
 mod generator;
 pub mod msg;
 
-pub use circuit::EncryptedGate;
+pub use circuit::{EncryptedGate, GarbledCircuit};
 pub use encoding::{
     state as encoding_state, ChaChaEncoder, Decoding, Delta, Encode, EncodedValue, Encoder,
     EncodingCommitment, EqualityCheck, Label, ValueError,
