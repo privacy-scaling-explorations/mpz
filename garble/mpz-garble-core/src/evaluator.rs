@@ -166,7 +166,6 @@ impl<'a> Evaluator<'a> {
                     y: node_y,
                     z: node_z,
                 } => {
-                    dbg!(node_x.id(), labels[node_x.id()]);
                     let x = labels[node_x.id()].expect("feed should be initialized");
                     let y = labels[node_y.id()].expect("feed should be initialized");
                     labels[node_z.id()] = Some(x ^ y);
