@@ -19,16 +19,17 @@
 //! let active_key = encoded_key.select(*key).unwrap();
 //! let active_plaintext = encoded_plaintext.select(*plaintext).unwrap();
 //!
+//! let aes_ref = &**AES128;
 //! let mut gen =
 //!     Generator::new(
-//!         AES128.clone(),
+//!         aes_ref.into_iter(),
 //!         encoder.delta(),
 //!         &[encoded_key, encoded_plaintext]
 //!     ).unwrap();
 //!
 //! let mut ev =
 //!     Evaluator::new(
-//!         AES128.clone(),
+//!         aes_ref.into_iter(),
 //!         &[active_key, active_plaintext]
 //!     ).unwrap();
 //!
