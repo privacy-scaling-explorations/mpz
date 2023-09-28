@@ -60,8 +60,6 @@ pub struct Evaluator<'a> {
     circuit_iterator: CircuitIterator<'a>,
     /// Active label state
     active_labels: Vec<Option<Label>>,
-    /// Current position in the circuit
-    pos: usize,
     /// Current gate id
     gid: usize,
     /// Whether the evaluator is finished
@@ -132,7 +130,6 @@ impl<'a> Evaluator<'a> {
             cipher: &(*FIXED_KEY_AES),
             circuit_iterator,
             active_labels,
-            pos: 0,
             gid: 1,
             complete: false,
             hasher,
@@ -152,8 +149,8 @@ impl<'a> Evaluator<'a> {
         let labels = &mut self.active_labels;
 
         // Process gates until we run out of encrypted gates
-        while self.pos < self.circuit_iterator.circuit().feed_count() {
-            match self.circuit_iterator.next().unwrap() {
+        while let Some(gate) = self.circuit_iterator.by_ref().next() {
+            match gate {
                 Gate::Inv {
                     x: node_x,
                     z: node_z,
@@ -191,9 +188,7 @@ impl<'a> Evaluator<'a> {
                     }
                 }
             }
-            self.pos += 1;
         }
-
         self.complete = true;
     }
 
