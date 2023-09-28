@@ -58,6 +58,7 @@ cfg_if! {
 
 pub struct Clmul {
     inner: Inner,
+    is_intr: bool,
 }
 
 union Inner {
@@ -100,16 +101,19 @@ impl Clmul {
             if #[cfg(feature = "force-soft")] {
                 Self {
                     inner: Inner { soft: soft::Clmul::new(h) },
+                    is_intr: false,
                 }
             } else if #[cfg(any(all(target_arch = "aarch64", feature = "armv8"), any(target_arch = "x86_64", target_arch = "x86")))]{
                 if mul_intrinsics::get() {
                     Self {
                         inner: Inner { intrinsics: intrinsics::Clmul::new(h) },
+                        is_intr: true,
                     }
                 } else {
                     // supported arch was found but intrinsics are not available
                     Self {
                         inner: Inner { soft: soft::Clmul::new(h) },
+                        is_intr: false,
                     }
                 }
             } else {
@@ -117,6 +121,7 @@ impl Clmul {
                 //  supported arch found. Falling back to soft backend.
                 Self {
                     inner: Inner { soft: soft::Clmul::new(h) },
+                    is_intr: false,
                 }
             }
         }
@@ -125,26 +130,36 @@ impl Clmul {
     /// Performs carryless multiplication
     pub fn clmul(self, x: Self) -> (Self, Self) {
         unsafe {
-            match (self.inner, x.inner) {
-                (Inner { intrinsics: s_intr }, Inner { intrinsics: x_intr }) => {
+            match (self.is_intr, x.is_intr) {
+                (true, true) => {
+                    let s_intr = self.inner.intrinsics;
+                    let x_intr = x.inner.intrinsics;
+
                     let (r0, r1) = s_intr.clmul(x_intr);
                     (
                         Self {
                             inner: Inner { intrinsics: r0 },
+                            is_intr: true,
                         },
                         Self {
                             inner: Inner { intrinsics: r1 },
+                            is_intr: true,
                         },
                     )
                 }
-                (Inner { soft: s_soft }, Inner { soft: x_soft }) => {
+                (false, false) => {
+                    let s_soft = self.inner.soft;
+                    let x_soft = x.inner.soft;
+
                     let (r0, r1) = s_soft.clmul(x_soft);
                     (
                         Self {
                             inner: Inner { soft: r0 },
+                            is_intr: false,
                         },
                         Self {
                             inner: Inner { soft: r1 },
+                            is_intr: false,
                         },
                     )
                 }
@@ -159,13 +174,19 @@ impl Clmul {
     /// The high bits will be placed in `self`, the low bits - in `x`.
     pub fn clmul_reuse(&mut self, x: &mut Self) {
         unsafe {
-            match (self.inner, x.inner) {
-                (Inner { intrinsics: s_intr }, Inner { intrinsics: x_intr }) => {
+            match (self.is_intr, x.is_intr) {
+                (true, true) => {
+                    let s_intr = self.inner.intrinsics;
+                    let x_intr = x.inner.intrinsics;
+
                     let (r0, r1) = s_intr.clmul(x_intr);
                     self.inner.intrinsics = r0;
                     x.inner.intrinsics = r1;
                 }
-                (Inner { soft: s_soft }, Inner { soft: x_soft }) => {
+                (false, false) => {
+                    let s_soft = self.inner.soft;
+                    let x_soft = x.inner.soft;
+
                     let (r0, r1) = s_soft.clmul(x_soft);
                     self.inner.soft = r0;
                     x.inner.soft = r1;
@@ -178,36 +199,36 @@ impl Clmul {
     /// Reduces the polynomial represented in bits modulo the GCM polynomial x^128 + x^7 + x^2 + x + 1.
     /// x and y are resp. upper and lower bits of the polynomial.
     pub fn reduce_gcm(x: Self, y: Self) -> Self {
-        match x.intrinsics {
-            Some(x_intr) => match y.intrinsics {
-                Some(y_intr) => {
+        unsafe {
+            match (x.is_intr, y.is_intr) {
+                (true, true) => {
+                    let x_intr = x.inner.intrinsics;
+                    let y_intr = y.inner.intrinsics;
+
                     cfg_if! {
                         if #[cfg(any(all(target_arch = "aarch64", feature = "armv8"), any(target_arch = "x86_64", target_arch = "x86")))]{
                             let r = intrinsics::Clmul::reduce_gcm(x_intr, y_intr);
-                        }else{
+                        } else {
                             let r = soft::Clmul::reduce_gcm(x_intr, y_intr);
                         }
                     }
                     Self {
-                        intrinsics: Some(r),
-                        soft: None,
+                        inner: Inner { intrinsics: r },
+                        is_intr: true,
                     }
                 }
-                None => unreachable!(),
-            },
-            None => match x.soft {
-                Some(x_soft) => match y.soft {
-                    Some(y_soft) => {
-                        let r = soft::Clmul::reduce_gcm(x_soft, y_soft);
-                        Self {
-                            intrinsics: None,
-                            soft: Some(r),
-                        }
+                (false, false) => {
+                    let x_soft = x.inner.soft;
+                    let y_soft = y.inner.soft;
+
+                    let r = soft::Clmul::reduce_gcm(x_soft, y_soft);
+                    Self {
+                        inner: Inner { soft: r },
+                        is_intr: false,
                     }
-                    None => unreachable!(),
-                },
-                None => unreachable!(),
-            },
+                }
+                _ => unreachable!(),
+            }
         }
     }
 }
@@ -215,12 +236,12 @@ impl Clmul {
 impl From<Clmul> for [u8; 16] {
     #[inline]
     fn from(m: Clmul) -> [u8; 16] {
-        match m.intrinsics {
-            Some(intr) => intr.into(),
-            None => match m.soft {
-                Some(soft) => soft.into(),
-                None => unreachable!(),
-            },
+        unsafe {
+            if m.is_intr {
+                m.inner.intrinsics.into()
+            } else {
+                m.inner.soft.into()
+            }
         }
     }
 }
@@ -230,24 +251,26 @@ impl BitXor for Clmul {
 
     #[inline]
     fn bitxor(self, other: Self) -> Self::Output {
-        match self.intrinsics {
-            Some(a) => match other.intrinsics {
-                Some(b) => Self {
-                    intrinsics: Some(a ^ b),
-                    soft: None,
-                },
-                None => unreachable!(),
-            },
-            None => match self.soft {
-                Some(a) => match other.soft {
-                    Some(b) => Self {
-                        intrinsics: None,
-                        soft: Some(a ^ b),
-                    },
-                    None => unreachable!(),
-                },
-                None => unreachable!(),
-            },
+        unsafe {
+            match (self.is_intr, other.is_intr) {
+                (true, true) => {
+                    let a = self.inner.intrinsics;
+                    let b = other.inner.intrinsics;
+                    Self {
+                        inner: Inner { intrinsics: a ^ b },
+                        is_intr: true,
+                    }
+                }
+                (false, false) => {
+                    let a = self.inner.soft;
+                    let b = other.inner.soft;
+                    Self {
+                        inner: Inner { soft: a ^ b },
+                        is_intr: false,
+                    }
+                }
+                _ => unreachable!(),
+            }
         }
     }
 }
@@ -255,40 +278,32 @@ impl BitXor for Clmul {
 impl BitXorAssign for Clmul {
     #[inline]
     fn bitxor_assign(&mut self, other: Self) {
-        match self.intrinsics {
-            Some(a) => match other.intrinsics {
-                Some(b) => {
-                    self.intrinsics = Some(a ^ b);
+        unsafe {
+            match (self.is_intr, other.is_intr) {
+                (true, true) => {
+                    let a = self.inner.intrinsics;
+                    let b = other.inner.intrinsics;
+                    self.inner.intrinsics = a ^ b;
                 }
-                None => unreachable!(),
-            },
-            None => match self.soft {
-                Some(a) => match other.soft {
-                    Some(b) => {
-                        self.soft = Some(a ^ b);
-                    }
-                    None => unreachable!(),
-                },
-                None => unreachable!(),
-            },
+                (false, false) => {
+                    let a = self.inner.soft;
+                    let b = other.inner.soft;
+                    self.inner.soft = a ^ b;
+                }
+                _ => unreachable!(),
+            }
         }
     }
 }
 
 impl PartialEq for Clmul {
     fn eq(&self, other: &Self) -> bool {
-        match self.intrinsics {
-            Some(a) => match other.intrinsics {
-                Some(b) => a == b,
-                None => unreachable!(),
-            },
-            None => match self.soft {
-                Some(a) => match other.soft {
-                    Some(b) => a == b,
-                    None => unreachable!(),
-                },
-                None => unreachable!(),
-            },
+        unsafe {
+            match (self.is_intr, other.is_intr) {
+                (true, true) => self.inner.intrinsics == other.inner.intrinsics,
+                (false, false) => self.inner.soft == other.inner.soft,
+                _ => unreachable!(),
+            }
         }
     }
 }
