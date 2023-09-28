@@ -183,6 +183,9 @@ impl<'a> Evaluator<'a> {
                         labels[node_z.id()] = Some(z);
                         self.gid += 2;
                     } else {
+                        // TODO: This is a problem, because we discard the gate in this branch
+                        // because .next() has already incremented
+
                         // We ran out of encrypted gates, so we return until we get more
                         return;
                     }
