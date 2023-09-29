@@ -74,6 +74,7 @@ lazy_static! {
 }
 
 #[derive(Clone, Copy)]
+/// Carryless multiplication
 pub struct Clmul {
     inner: Inner,
 }
@@ -95,35 +96,6 @@ impl core::fmt::Debug for Clmul {
         }
     }
 }
-
-/*
-cfg_if! {
-    if #[cfg(any(all(target_arch = "aarch64", feature = "armv8"), any(target_arch = "x86_64", target_arch = "x86")))]{
-        #[derive(Clone, Copy, Debug)]
-        /// Carryless multiplication
-        pub struct Clmul {
-            intrinsics: Option<intrinsics::Clmul>,
-            soft: Option<soft::Clmul>,
-        }
-    } else {
-        #[derive(Clone, Copy, Debug)]
-        /// Carryless multiplication
-        pub struct Clmul {
-            // intrinsics will never be used on a non-supported arch but Rust
-            // won't allow to declare it with a None type, so we need to
-            // provide some type
-            intrinsics: Option<soft::Clmul>,
-            soft: Option<soft::Clmul>,
-        }
-    }
-}
-*/
-
-// #[derive(Clone, Copy)]
-// pub struct Clmul {
-//     intrinsics: Option<intrinsics::Clmul>,
-//     soft: Option<soft::Clmul>,
-// }
 
 impl Clmul {
     pub fn new(h: &[u8; 16]) -> Self {
