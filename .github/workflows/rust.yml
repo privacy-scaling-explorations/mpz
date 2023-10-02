@@ -50,8 +50,11 @@ jobs:
           rustup override set nightly
           cargo miri setup
       
-      - name: Test with Miri
-        run: cargo miri test
+      - name: Test with Miri - clmul
+        run: cargo miri test --package clmul
+      
+      - name: Test with Miri - matrix-transpose
+        run: cargo miri test --package matrix-transpose
 
   rustfmt_and_clippy:
     name: Rustfmt and Clippy
