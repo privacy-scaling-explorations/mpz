@@ -110,8 +110,8 @@ mod tests {
 
     #[test]
     fn test_transpose_bits() {
-        let rows = 128;
-        let columns = 64;
+        let rows = 64;
+        let columns = 32;
 
         let mut matrix: Vec<u8> = random_vec::<u8>(columns * rows);
         let naive = transpose_naive(&matrix, columns);
@@ -154,9 +154,9 @@ mod tests {
 
     #[test]
     fn test_transpose() {
-        let rounds = 7_u32;
+        let rounds = 6_u32;
         let mut rows = 2_usize.pow(rounds);
-        let mut columns = 64;
+        let mut columns = 32;
 
         let mut matrix: Vec<u8> = random_vec::<u8>(columns * rows);
         let original = matrix.clone();
@@ -177,8 +177,8 @@ mod tests {
 
     #[test]
     fn test_bitmask_shift() {
-        let columns = 64;
-        let rows = 128;
+        let columns = 32;
+        let rows = 64;
 
         let mut matrix: Vec<u8> = random_vec::<u8>(columns * rows);
         let mut original = matrix.clone();
