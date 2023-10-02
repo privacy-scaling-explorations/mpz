@@ -69,10 +69,17 @@ union Inner {
     soft: soft::Clmul,
 }
 
+impl mul_intrinsics::InitToken {
+    #[inline(always)]
+    fn get_intr(&self) -> bool {
+        !cfg!(feature = "force-soft") && self.get()
+    }
+}
+
 impl core::fmt::Debug for Clmul {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         unsafe {
-            if self.token.get() {
+            if self.token.get_intr() {
                 self.inner.intrinsics.fmt(f)
             } else {
                 self.inner.soft.fmt(f)
@@ -103,9 +110,10 @@ impl Clmul {
     }
 
     /// Performs carryless multiplication
+    #[inline]
     pub fn clmul(self, x: Self) -> (Self, Self) {
         unsafe {
-            let (in0, in1) = if self.token.get() {
+            let (in0, in1) = if self.token.get_intr() {
                 let s_intr = self.inner.intrinsics;
                 let x_intr = x.inner.intrinsics;
 
@@ -136,9 +144,10 @@ impl Clmul {
     /// operands to return the result. This gives a ~6x speed up compared
     /// to clmul() where we create new objects containing the result.
     /// The high bits will be placed in `self`, the low bits - in `x`.
+    #[inline]
     pub fn clmul_reuse(&mut self, x: &mut Self) {
         unsafe {
-            if self.token.get() {
+            if self.token.get_intr() {
                 let s_intr = self.inner.intrinsics;
                 let x_intr = x.inner.intrinsics;
 
@@ -158,9 +167,10 @@ impl Clmul {
 
     /// Reduces the polynomial represented in bits modulo the GCM polynomial x^128 + x^7 + x^2 + x + 1.
     /// x and y are resp. upper and lower bits of the polynomial.
+    #[inline]
     pub fn reduce_gcm(x: Self, y: Self) -> Self {
         unsafe {
-            if x.token.get() {
+            if x.token.get_intr() {
                 let x_intr = x.inner.intrinsics;
                 let y_intr = y.inner.intrinsics;
 
@@ -187,7 +197,7 @@ impl From<Clmul> for [u8; 16] {
     #[inline]
     fn from(m: Clmul) -> [u8; 16] {
         unsafe {
-            if m.token.get() {
+            if m.token.get_intr() {
                 m.inner.intrinsics.into()
             } else {
                 m.inner.soft.into()
@@ -202,7 +212,7 @@ impl BitXor for Clmul {
     #[inline]
     fn bitxor(self, other: Self) -> Self::Output {
         unsafe {
-            let inner = if self.token.get() {
+            let inner = if self.token.get_intr() {
                 let a = self.inner.intrinsics;
                 let b = other.inner.intrinsics;
                 Inner { intrinsics: a ^ b }
@@ -224,7 +234,7 @@ impl BitXorAssign for Clmul {
     #[inline]
     fn bitxor_assign(&mut self, other: Self) {
         unsafe {
-            if self.token.get() {
+            if self.token.get_intr() {
                 let a = self.inner.intrinsics;
                 let b = other.inner.intrinsics;
                 self.inner.intrinsics = a ^ b;
@@ -238,9 +248,10 @@ impl BitXorAssign for Clmul {
 }
 
 impl PartialEq for Clmul {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         unsafe {
-            if self.token.get() {
+            if self.token.get_intr() {
                 self.inner.intrinsics == other.inner.intrinsics
             } else {
                 self.inner.soft == other.inner.soft
