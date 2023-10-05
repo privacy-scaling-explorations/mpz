@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mpz_core::{lpn::Lpn, prg::Prg, Block};
+use mpz_core::{lpn::LpnEncoder, prg::Prg, Block};
 use std::time::Duration;
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -7,7 +7,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let seed = Block::ZERO;
         let k = 5_060;
         let n = 166_400;
-        let lpn = Lpn::<10>::new(seed, k);
+        let lpn = LpnEncoder::<10>::new(seed, k);
         let mut x = vec![Block::ZERO; k as usize];
         let mut y = vec![Block::ZERO; n];
         let mut prg = Prg::new();
@@ -22,7 +22,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let seed = Block::ZERO;
         let k = 158_000;
         let n = 10_168_320;
-        let lpn = Lpn::<10>::new(seed, k);
+        let lpn = LpnEncoder::<10>::new(seed, k);
         let mut x = vec![Block::ZERO; k as usize];
         let mut y = vec![Block::ZERO; n];
         let mut prg = Prg::new();
@@ -37,7 +37,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let seed = Block::ZERO;
         let k = 588_160;
         let n = 10_616_092;
-        let lpn = Lpn::<10>::new(seed, k);
+        let lpn = LpnEncoder::<10>::new(seed, k);
         let mut x = vec![Block::ZERO; k as usize];
         let mut y = vec![Block::ZERO; n];
         let mut prg = Prg::new();

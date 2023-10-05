@@ -23,7 +23,7 @@ impl GgmTree {
     /// # Arguments
     ///
     /// * `seed` - a seed.
-    /// * `tree` - the destination of write the GGM (binary tree) `tree`, with size `2^{depth}`.
+    /// * `tree` - the destination to write the GGM (binary tree) `tree`, with size `2^{depth}`.
     /// * `k0` - XORs of all the left-node values in each level, with size `depth`.
     /// * `k1`- XORs of all the right-node values in each level, with size `depth`.
     // This implementation is adapted from EMP Toolkit.
@@ -44,6 +44,8 @@ impl GgmTree {
         for h in 2..self.depth {
             k0[h] = Block::ZERO;
             k1[h] = Block::ZERO;
+
+            // How many nodes there are in this layer
             let sz = 1 << h;
             for i in (0..=sz - 4).rev().step_by(4) {
                 self.tkprp.expand_4to8(&mut buf, &tree[i..]);
@@ -71,6 +73,10 @@ impl GgmTree {
     /// * `alpha` - a slice of bits with length `depth`.
     /// * `tree` - the destination to write the GGM tree.
     pub fn reconstruct(&self, tree: &mut [Block], k: &[Block], alpha: &[bool]) {
+        assert_eq!(tree.len(), 1 << (self.depth));
+        assert_eq!(k.len(), self.depth);
+        assert_eq!(alpha.len(), self.depth);
+
         let mut pos = 0;
         for i in 1..=self.depth {
             pos *= 2;
@@ -94,7 +100,9 @@ impl GgmTree {
         k: Block,
         tree: &mut [Block],
     ) {
+        // How many nodes there are in this layer
         let sz = 1 << depth;
+
         let mut sum = Block::ZERO;
         let start = if left_or_right { 1 } else { 0 };
 

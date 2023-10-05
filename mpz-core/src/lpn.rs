@@ -16,7 +16,7 @@ use rayon::prelude::*;
 /// `e` - is a `F_{2^128}` vector with length `n`.
 ///
 /// Note that in the standard LPN problem, `x` is a binary vector, `e` is a sparse binary vector. The way we difined here is a more generic way in term of computing `y`.
-pub struct Lpn<const D: usize> {
+pub struct LpnEncoder<const D: usize> {
     /// The seed to generate the random sparse matrix A.
     seed: Block,
 
@@ -27,7 +27,7 @@ pub struct Lpn<const D: usize> {
     mask: u32,
 }
 
-impl<const D: usize> Lpn<D> {
+impl<const D: usize> LpnEncoder<D> {
     /// Create a new LPN instance.
     pub fn new(seed: Block, k: u32) -> Self {
         let mut mask = 1;
@@ -112,11 +112,11 @@ impl<const D: usize> Lpn<D> {
 }
 
 mod tests {
-    use crate::lpn::Lpn;
+    use crate::lpn::LpnEncoder;
     use crate::prp::Prp;
     use crate::Block;
 
-    impl<const D: usize> Lpn<D> {
+    impl<const D: usize> LpnEncoder<D> {
         #[allow(dead_code)]
         fn compute_four_rows_non_indep(&self, y: &mut [Block], x: &[Block], pos: usize, prp: &Prp) {
             let mut cnt = 0u64;
@@ -158,13 +158,13 @@ mod tests {
 
     #[test]
     fn lpn_test() {
-        use crate::lpn::Lpn;
+        use crate::lpn::LpnEncoder;
         use crate::prg::Prg;
         use crate::Block;
 
         let k = 20;
         let n = 200;
-        let lpn = Lpn::<10>::new(Block::ZERO, k);
+        let lpn = LpnEncoder::<10>::new(Block::ZERO, k);
         let mut x = vec![Block::ONES; k as usize];
         let mut y = vec![Block::ONES; n];
         let mut prg = Prg::new();
