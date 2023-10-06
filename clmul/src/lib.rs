@@ -17,12 +17,22 @@
 //! compact implementation which uses a clever but simple technique to avoid
 //! carry-spilling.
 //!
+//! Usage of the soft-backend can be forced by setting the `clmul_force_soft` RUSTFLAG.
+//!
+//! ```text
+//! $ RUSTFLAGS="--cfg clmul_force_soft" cargo bench
+//! ```
+//!
 //! ## ARMv8 intrinsics (`PMULL`, nightly-only)
 //! On `aarch64` targets including `aarch64-apple-darwin` (Apple M1) and Linux
 //! targets such as `aarch64-unknown-linux-gnu` and `aarch64-unknown-linux-musl`,
 //! support for using the `PMULL` instructions in ARMv8's Cryptography Extensions
 //! is available when using the nightly compiler, and can be enabled using the
 //! `clmul_armv8` RUSTFLAG.
+//!
+//! ```text
+//! $ RUSTFLAGS="--cfg clmul_armv8" cargo bench
+//! ```
 //!
 //! On Linux and macOS, when the `clmul_armv8` RUSTFLAG is enabled support for AES
 //! intrinsics is autodetected at runtime.
