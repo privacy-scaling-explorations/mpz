@@ -97,31 +97,6 @@ impl Clmul {
         }
     }
 
-    /// Performs carryless multiplication. Same as clmul() but reusing the
-    /// operands to return the result. This gives a ~6x speed up compared
-    /// to clmul() where we create new objects containing the result.
-    /// The high bits will be placed in `self`, the low bits - in `x`.
-    #[inline]
-    pub fn clmul_reuse(&mut self, x: &mut Self) {
-        unsafe {
-            if self.token.get_intr() {
-                let s_intr = self.inner.intrinsics;
-                let x_intr = x.inner.intrinsics;
-
-                let (r0, r1) = s_intr.clmul(x_intr);
-                self.inner.intrinsics = r0;
-                x.inner.intrinsics = r1;
-            } else {
-                let s_soft = self.inner.soft;
-                let x_soft = x.inner.soft;
-
-                let (r0, r1) = s_soft.clmul(x_soft);
-                self.inner.soft = r0;
-                x.inner.soft = r1;
-            }
-        }
-    }
-
     /// Reduces the polynomial represented in bits modulo the GCM polynomial x^128 + x^7 + x^2 + x + 1.
     /// x and y are resp. upper and lower bits of the polynomial.
     #[inline]

@@ -8,17 +8,13 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut rng = ChaCha12Rng::seed_from_u64(0);
     let a: [u8; 16] = rng.gen();
     let b: [u8; 16] = rng.gen();
-    let mut a = Clmul::new(&a);
-    let mut b = Clmul::new(&b);
+    let a = Clmul::new(&a);
+    let b = Clmul::new(&b);
 
     c.bench_function("clmul", move |bench| {
         bench.iter(|| {
             black_box(a.clmul(b));
         });
-    });
-
-    c.bench_function("clmul_reuse", move |bench| {
-        bench.iter(|| a.clmul_reuse(&mut b));
     });
 
     c.bench_function("reduce", move |bench| {
