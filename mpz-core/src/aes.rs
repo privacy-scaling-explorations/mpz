@@ -152,12 +152,11 @@ impl AesEncryptor {
         blk
     }
 
-    /// Encrypt many blocks.
+    /// Encrypt many blocks in-place.
     #[inline(always)]
-    pub fn encrypt_many_blocks<const N: usize>(&self, mut blks: [Block; N]) -> [Block; N] {
+    pub fn encrypt_many_blocks<const N: usize>(&self, blks: &mut [Block; N]) {
         self.0
             .encrypt_blocks(Block::as_generic_array_mut_slice(blks.as_mut_slice()));
-        blks
     }
 
     /// Encrypt slice of blocks in-place.
