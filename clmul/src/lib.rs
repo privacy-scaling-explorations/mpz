@@ -60,9 +60,6 @@ pub use backend::Clmul;
 #[cfg(test)]
 #[path = ""]
 mod tests {
-    use rand::Rng;
-    use rand_chacha::{rand_core::SeedableRng, ChaCha12Rng};
-
     #[path = "backend/soft32.rs"]
     mod soft32;
 
@@ -73,6 +70,9 @@ mod tests {
     #[cfg(not(clmul_force_soft))]
     // test backends against each other
     fn clmul_test() {
+        use rand::Rng;
+        use rand_chacha::{rand_core::SeedableRng, ChaCha12Rng};
+
         // test soft backends
         use soft32::Clmul as s32;
         use soft64::Clmul as s64;
