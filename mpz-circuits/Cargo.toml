@@ -30,3 +30,9 @@ itybity.workspace = true
 
 [dev-dependencies]
 aes.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "sha256"
+harness = false
+

@@ -289,12 +289,12 @@ where
             Block::random(&mut thread_rng())
         };
 
-        self.state = State::Initialized(sender);
-
         // Set up base OT if not already done
         self.base
             .setup(&mut into_base_sink(sink), &mut into_base_stream(stream))
             .await?;
+
+        self.state = State::Initialized(sender);
 
         self._setup_with_delta(sink, stream, delta)
             .await
