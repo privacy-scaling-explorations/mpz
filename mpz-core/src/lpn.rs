@@ -97,7 +97,7 @@ impl<const D: usize> LpnEncoder<D> {
             if #[cfg(feature = "rayon")]{
                 let iter = y.par_chunks_exact_mut(4).enumerate();
             }else{
-                let iter = y.par_chunks_exact_mut(4).enumerate();
+                let iter = y.chunks_exact_mut(4).enumerate();
             }
         }
 
@@ -111,6 +111,7 @@ impl<const D: usize> LpnEncoder<D> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::lpn::LpnEncoder;
     use crate::prp::Prp;
