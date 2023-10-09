@@ -15,13 +15,14 @@ use crate::{
 
 const VERSION: &'static str = "2.0.0";
 
-use std::path::PathBuf;
+use std::{path::PathBuf, collections::HashMap};
 use ansi_term::Colour;
 
+use circom_constraint_generation::FlagsExecution;
 use circom_parser;
 use circom_compiler::compiler_interface;
 use circom_compiler::compiler_interface::{Config, VCP};
-use circom_program_structure::error_code::ReportCode;
+use circom_program_structure::{error_code::ReportCode, ast::{Expression, Statement, SignalType, VariableType}};
 use circom_program_structure::error_definition::Report;
 use circom_program_structure::file_definition::FileLibrary;
 use circom_constraint_writers::debug_writer::DebugWriter;
@@ -813,6 +814,382 @@ pub enum ParseError {
     BuilderError(#[from] crate::BuilderError),
 }
 
+pub struct ArithmeticNode {
+    pub gate_id: u32,
+    pub gate_type: u32,
+    pub input_lhs: u32,
+    pub input_rhs: u32,
+    pub output: u32
+}
+
+pub struct ArithmeticCircuit {
+    pub gate_count: u32,
+    pub inputs_garb: Vec<u32>,
+    pub inputs_eval: Vec<u32>,
+    pub inters: Vec<u32>,
+    pub outputs: Vec<u32>,
+    pub gates: HashMap<u32, ArithmeticNode>,
+}
+
+impl ArithmeticCircuit {
+    pub fn new() -> ArithmeticCircuit {
+        ArithmeticCircuit { gate_count: 0, inputs_garb: Vec::new(), inputs_eval: Vec::new(), inters: Vec::new(), outputs: Vec::new(), gates: HashMap::new() }
+    }
+}
+
+//WIP HERE
+
+// fn execute_infix_op(
+//     meta: &Meta,
+//     infix: ExpressionInfixOpcode,
+//     l_value: &AExpr,
+//     r_value: &AExpr,
+//     runtime: &mut RuntimeInformation,
+// ) -> Result<AExpr, ()> {
+//     use ExpressionInfixOpcode::*;
+//     let field = runtime.constants.get_p();
+//     let possible_result = match infix {
+//         Mul => Result::Ok(AExpr::mul(l_value, r_value, field)),
+//         //Div => AExpr::div(l_value, r_value, field),
+//         Add => Result::Ok(AExpr::add(l_value, r_value, field)),
+//         Sub => Result::Ok(AExpr::sub(l_value, r_value, field)),
+//         // Pow => Result::Ok(AExpr::pow(l_value, r_value, field)),
+//         // IntDiv => AExpr::idiv(l_value, r_value, field),
+//         // Mod => AExpr::mod_op(l_value, r_value, field),
+//         // ShiftL => AExpr::shift_l(l_value, r_value, field),
+//         // ShiftR => AExpr::shift_r(l_value, r_value, field),
+//         // LesserEq => Result::Ok(AExpr::lesser_eq(l_value, r_value, field)),
+//         // GreaterEq => Result::Ok(AExpr::greater_eq(l_value, r_value, field)),
+//         // Lesser => Result::Ok(AExpr::lesser(l_value, r_value, field)),
+//         // Greater => Result::Ok(AExpr::greater(l_value, r_value, field)),
+//         // Eq => Result::Ok(AExpr::eq(l_value, r_value, field)),
+//         // NotEq => Result::Ok(AExpr::not_eq(l_value, r_value, field)),
+//         // BoolOr => Result::Ok(AExpr::bool_or(l_value, r_value, field)),
+//         // BoolAnd => Result::Ok(AExpr::bool_and(l_value, r_value, field)),
+//         // BitOr => Result::Ok(AExpr::bit_or(l_value, r_value, field)),
+//         // BitAnd => Result::Ok(AExpr::bit_and(l_value, r_value, field)),
+//         // BitXor => Result::Ok(AExpr::bit_xor(l_value, r_value, field)),
+//     };
+//     treat_result_with_arithmetic_error(
+//         possible_result,
+//         meta,
+//         &mut runtime.runtime_errors,
+//         &runtime.call_trace,
+//     )
+// }
+
+// fn execute_expression (
+//     expr: &Expression,
+//     program_archive: &ProgramArchive,
+//     runtime: &mut RuntimeInformation,
+//     flags: FlagsExecution
+// ) -> Result<FoldedValue, ()> {
+//     use Expression::*;
+//     let mut can_be_simplified = true;
+//     let res = match expr {
+//         Number(_, value) => {
+//             let a_value = AExpr::Number { value: value.clone() };
+//             let ae_slice = AExpressionSlice::new(&a_value);
+//             FoldedValue { arithmetic_slice: Option::Some(ae_slice), ..FoldedValue::default() }
+//         },
+//         InfixOp { meta, lhe, infix_op, rhe, .. } => {
+//             let l_fold = execute_expression(lhe, program_archive, runtime, flags)?;
+//             let r_fold = execute_expression(rhe, program_archive, runtime, flags)?;
+//             let l_value = safe_unwrap_to_single_arithmetic_expression(l_fold, line!());
+//             let r_value = safe_unwrap_to_single_arithmetic_expression(r_fold, line!());
+//             let r_value = execute_infix_op(meta, *infix_op, &l_value, &r_value, runtime)?;
+//             let r_slice = AExpressionSlice::new(&r_value);
+//             FoldedValue { arithmetic_slice: Option::Some(r_slice), ..FoldedValue::default() }
+//         },
+//     }
+// }
+
+fn traverse_signal_declaration(
+    ac: &mut ArithmeticCircuit,
+    signal_name: &str,
+    signal_type: SignalType
+) {
+    use SignalType::*;
+    
+    match signal_type {
+        Input => {
+            ac.gate_count += 1;
+            if signal_name.contains("garb_") {
+                ac.inputs_garb.push(ac.gate_count)
+            } else if signal_name.contains("eval_") {
+                ac.inputs_eval.push(ac.gate_count);
+            }
+        }
+        Output => {
+            ac.gate_count += 1;
+            ac.outputs.push(ac.gate_count);
+        }
+        Intermediate => {
+            ac.gate_count += 1;
+            ac.inters.push(ac.gate_count);
+        }
+    }
+
+}
+
+fn traverse_statement (
+    ac: &mut ArithmeticCircuit,
+    stmt: &Statement,
+    program_archive: &ProgramArchive
+) {
+
+    use Statement::*;
+    let id = stmt.get_meta().elem_id;
+
+    // Analysis::reached(&mut runtime.analysis, id);
+
+    // let mut can_be_simplified = true;
+
+    match stmt {
+        InitializationBlock { initializations, .. } => {
+        }
+        Declaration { meta, xtype, name, dimensions, .. } => {
+            match xtype {
+                // VariableType::AnonymousComponent => {
+                //     execute_anonymous_component_declaration(
+                //         name,
+                //         meta.clone(),
+                //         &dimensions,
+                //         &mut runtime.environment,
+                //         &mut runtime.anonymous_components,
+                //     );
+                // }
+                _ => {
+                    // let mut arithmetic_values = Vec::new();
+                    // for dimension in dimensions.iter() {
+                    //     let f_dimensions = 
+                    //         execute_expression(dimension, program_archive, runtime, flags)?;
+                    //     arithmetic_values
+                    //         .push(safe_unwrap_to_single_arithmetic_expression(f_dimensions, line!()));
+                    // }
+                    // treat_result_with_memory_error_void(
+                    //     valid_array_declaration(&arithmetic_values),
+                    //     meta,
+                    //     &mut runtime.runtime_errors,
+                    //     &runtime.call_trace,
+                    // )?;
+                    // let usable_dimensions =
+                    //     if let Option::Some(dimensions) = cast_indexing(&arithmetic_values) {
+                    //         dimensions
+                    //     } else {
+                    //         let err = Result::Err(ExecutionError::ArraySizeTooBig);
+                    //         treat_result_with_execution_error(
+                    //             err,
+                    //             meta,
+                    //             &mut runtime.runtime_errors,
+                    //             &runtime.call_trace,
+                    //         )?
+                    //     };
+                    match xtype {
+                        VariableType::Signal(signal_type, tag_list) => traverse_signal_declaration (
+                            ac,
+                            name,
+                            *signal_type
+                        ),
+                        _ =>{
+                            unreachable!()
+                        }
+                    }
+
+                }
+            }
+            // Option::None
+        }
+        // IfThenElse { cond, if_case, else_case, .. } => {
+        //     let else_case = else_case.as_ref().map(|e| e.as_ref());
+        //     let (possible_return, can_simplify, _) = execute_conditional_statement(
+        //         cond,
+        //         if_case,
+        //         else_case,
+        //         program_archive,
+        //         runtime,
+        //         actual_node,
+        //         flags
+        //     )?;
+        //     can_be_simplified = can_simplify;
+        //     possible_return
+        // }
+        // While { cond, stmt, .. } => loop {
+        //     let (returned, can_simplify, condition_result) = execute_conditional_statement(
+        //         cond,
+        //         stmt,
+        //         Option::None,
+        //         program_archive,
+        //         runtime,
+        //         actual_node,
+        //         flags
+        //     )?;
+        //     can_be_simplified &= can_simplify;
+        //     if returned.is_some() {
+        //         break returned;
+        //     } else if condition_result.is_none() {
+        //         let (returned, _, _) = execute_conditional_statement(
+        //             cond,
+        //             stmt,
+        //             None,
+        //             program_archive,
+        //             runtime,
+        //             actual_node,
+        //             flags
+        //         )?;
+        //         break returned;
+        //     } else if !condition_result.unwrap() {
+        //         break returned;
+        //     }
+        // },
+        ConstraintEquality { meta, lhe, rhe, .. } => {
+            // debug_assert!(actual_node.is_some());
+            // let f_left = execute_expression(lhe, program_archive, runtime, flags)?;
+            // let f_right = execute_expression(rhe, program_archive, runtime, flags)?;
+            // let arith_left = safe_unwrap_to_arithmetic_slice(f_left, line!());
+            // let arith_right = safe_unwrap_to_arithmetic_slice(f_right, line!());
+
+            // let correct_dims_result = AExpressionSlice::check_correct_dims(&arith_left, &Vec::new(), &arith_right, true);
+            // treat_result_with_memory_error_void(
+            //     correct_dims_result,
+            //     meta,
+            //     &mut runtime.runtime_errors,
+            //     &runtime.call_trace,
+            // )?;
+            // for i in 0..AExpressionSlice::get_number_of_cells(&arith_left){
+            //     let value_left = treat_result_with_memory_error(
+            //         AExpressionSlice::access_value_by_index(&arith_left, i),
+            //         meta,
+            //         &mut runtime.runtime_errors,
+            //         &runtime.call_trace,
+            //     )?;
+            //     let value_right = treat_result_with_memory_error(
+            //         AExpressionSlice::access_value_by_index(&arith_right, i),
+            //         meta,
+            //         &mut runtime.runtime_errors,
+            //         &runtime.call_trace,
+            //     )?;
+            //     let possible_non_quadratic =
+            //         AExpr::sub(
+            //             &value_left, 
+            //             &value_right, 
+            //             &runtime.constants.get_p()
+            //         );
+            //     if possible_non_quadratic.is_nonquadratic() {
+            //         treat_result_with_execution_error(
+            //             Result::Err(ExecutionError::NonQuadraticConstraint),
+            //             meta,
+            //             &mut runtime.runtime_errors,
+            //             &runtime.call_trace,
+            //         )?;
+            //     }
+            //     let quadratic_expression = possible_non_quadratic;
+            //     let constraint_expression = AExpr::transform_expression_to_constraint_form(
+            //         quadratic_expression,
+            //         runtime.constants.get_p(),
+            //     )
+            //     .unwrap();
+            //     if let Option::Some(node) = actual_node {
+            //         node.add_constraint(constraint_expression);
+            //     }    
+            // }
+            // Option::None
+        }
+        Return { value, .. } => {
+            
+        }
+        Assert { arg, meta, .. } => {
+            
+        }
+        Substitution { meta, var, access, op, rhe, .. } => {
+            //Here we are
+        }
+        Block { stmts, .. } => {
+        }
+        LogCall { args, .. } => {
+        }
+        UnderscoreSubstitution{ meta, rhe, op} =>{
+            
+        }
+        _ =>{
+            unimplemented!()
+        }
+    }
+}
+
+fn traverse_sequence_of_statements (
+    ac: &mut ArithmeticCircuit,
+    stmts: &[Statement],
+    program_archive: &ProgramArchive,
+    is_complete_template: bool
+) {
+    for stmt in stmts.iter() {
+        traverse_statement(ac, stmt, program_archive);
+    }
+    if is_complete_template{
+        //execute_delayed_declarations(program_archive, runtime, actual_node, flags)?;
+    }
+}
+
+pub fn traverse_program (
+    program_archive: &ProgramArchive,
+) -> ArithmeticCircuit {    
+
+    let mut ac = ArithmeticCircuit::new();
+
+    let main_file_id = program_archive.get_file_id_main();
+
+    // let mut runtime_information = RuntimeInformation::new(*main_file_id, program_archive.id_max, prime);
+
+    use Expression::Call;
+
+    // runtime_information.public_inputs = program_archive.get_public_inputs_main_component().clone();
+
+    // Main expresssion
+    // program_archive.get_main_expression()
+
+    // Public inputs
+    // program_archive.get_public_inputs_main_component().clone();
+
+    if let Call{ id, args, .. } = program_archive.get_main_expression() {
+
+        let template_body = program_archive.get_template_data(id).get_body_as_vec();
+
+        traverse_sequence_of_statements(&mut ac, template_body, program_archive, true);
+        
+        // let folded_value_result = 
+        //     if let Call { id, args, .. } = &program_archive.get_main_expression() {
+        //         let mut arg_values = Vec::new();
+        //         for arg_expression in args.iter() {
+        //             let f_arg = execute_expression(arg_expression, program_archive, &mut runtime_information, flags);
+        //             arg_values.push(safe_unwrap_to_arithmetic_slice(f_arg.unwrap(), line!()));
+        //             // improve
+        //         }
+        //         execute_template_call_complete(
+        //             id,
+        //             arg_values,
+        //             BTreeMap::new(),
+        //             program_archive,
+        //             &mut runtime_information,
+        //             flags,
+        //         )
+        //     } else {
+        //         unreachable!("The main expression should be a call."); 
+        //     };
+        
+        
+        // match folded_value_result {
+        //     Result::Err(_) => Result::Err(runtime_information.runtime_errors),
+        //     Result::Ok(folded_value) => {
+        //         debug_assert!(FoldedValue::valid_node_pointer(&folded_value));
+        //         Result::Ok((runtime_information.exec_program, runtime_information.runtime_errors))
+        //     }
+        // }
+    };
+
+    ac
+}
+
 impl Circuit {
     pub fn parse_circom(
         filename: &str,
@@ -824,41 +1201,44 @@ impl Circuit {
         let mut program_archive = parse_project(&user_input)?;
         analyse_project(&mut program_archive)?;
 
-        let config = ExecutionConfig {
-            no_rounds: user_input.no_rounds(),
-            flag_p: user_input.parallel_simplification_flag(),
-            flag_s: user_input.reduced_simplification_flag(),
-            flag_f: user_input.unsimplified_flag(),
-            flag_old_heuristics: user_input.flag_old_heuristics(),
-            flag_verbose: user_input.flag_verbose(),
-            inspect_constraints_flag: user_input.inspect_constraints_flag(),
-            r1cs_flag: user_input.r1cs_flag(),
-            json_constraint_flag: user_input.json_constraints_flag(),
-            json_substitution_flag: user_input.json_substitutions_flag(),
-            sym_flag: user_input.sym_flag(),
-            sym: user_input.sym_file().to_string(),
-            r1cs: user_input.r1cs_file().to_string(),
-            json_constraints: user_input.json_constraints_file().to_string(),
-            prime: user_input.prime(),
-        };
-        let circuit = execute_project(program_archive, config)?;
-        let compilation_config = CompilerConfig {
-            vcp: circuit,
-            debug_output: user_input.print_ir_flag(),
-            c_flag: user_input.c_flag(),
-            wasm_flag: user_input.wasm_flag(),
-            wat_flag: user_input.wat_flag(),
-            js_folder: user_input.js_folder().to_string(),
-            wasm_name: user_input.wasm_name().to_string(),
-            c_folder: user_input.c_folder().to_string(),
-            c_run_name: user_input.c_run_name().to_string(),
-            c_file: user_input.c_file().to_string(),
-            dat_file: user_input.dat_file().to_string(),
-            wat_file: user_input.wat_file().to_string(),
-            wasm_file: user_input.wasm_file().to_string(),
-            produce_input_log: user_input.main_inputs_flag(),
-        };
-        compile(compilation_config)?;
+        // let config = ExecutionConfig {
+        //     no_rounds: user_input.no_rounds(),
+        //     flag_p: user_input.parallel_simplification_flag(),
+        //     flag_s: user_input.reduced_simplification_flag(),
+        //     flag_f: user_input.unsimplified_flag(),
+        //     flag_old_heuristics: user_input.flag_old_heuristics(),
+        //     flag_verbose: user_input.flag_verbose(),
+        //     inspect_constraints_flag: user_input.inspect_constraints_flag(),
+        //     r1cs_flag: user_input.r1cs_flag(),
+        //     json_constraint_flag: user_input.json_constraints_flag(),
+        //     json_substitution_flag: user_input.json_substitutions_flag(),
+        //     sym_flag: user_input.sym_flag(),
+        //     sym: user_input.sym_file().to_string(),
+        //     r1cs: user_input.r1cs_file().to_string(),
+        //     json_constraints: user_input.json_constraints_file().to_string(),
+        //     prime: user_input.prime(),
+        // };
+
+        traverse_program(&program_archive);
+        
+        // let circuit = execute_project(program_archive, config)?;
+        // let compilation_config = CompilerConfig {
+        //     vcp: circuit,
+        //     debug_output: user_input.print_ir_flag(),
+        //     c_flag: user_input.c_flag(),
+        //     wasm_flag: user_input.wasm_flag(),
+        //     wat_flag: user_input.wat_flag(),
+        //     js_folder: user_input.js_folder().to_string(),
+        //     wasm_name: user_input.wasm_name().to_string(),
+        //     c_folder: user_input.c_folder().to_string(),
+        //     c_run_name: user_input.c_run_name().to_string(),
+        //     c_file: user_input.c_file().to_string(),
+        //     dat_file: user_input.dat_file().to_string(),
+        //     wat_file: user_input.wat_file().to_string(),
+        //     wasm_file: user_input.wasm_file().to_string(),
+        //     produce_input_log: user_input.main_inputs_flag(),
+        // };
+        // compile(compilation_config)?;
 
         // Sample code for binary circuit
 
