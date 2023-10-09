@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 cfg-if.workspace = true
-bytemuck = {workspace = true, features = ["derive"]}
+bytemuck = { workspace = true, features = ["derive"] }
 
 [target.'cfg(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86"))'.dependencies]
 cpufeatures.workspace = true
@@ -16,10 +16,6 @@ rand_chacha.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 criterion.workspace = true
-
-[features]
-armv8 = [] # Enable nightly-only ARMv8 intrinsics support
-force-soft = [] # Disable support for hardware intrinsics
 
 [[bench]]
 name = "clmul"

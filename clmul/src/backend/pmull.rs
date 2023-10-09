@@ -15,7 +15,7 @@ use core::{arch::aarch64::*, mem, ops::BitXor};
 
 pub type Clmul = ClmulArm;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ClmulArm(pub uint8x16_t);
 
 impl From<ClmulArm> for [u8; 16] {
