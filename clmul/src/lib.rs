@@ -17,16 +17,25 @@
 //! compact implementation which uses a clever but simple technique to avoid
 //! carry-spilling.
 //!
+//! Usage of the soft-backend can be forced by setting the `clmul_force_soft` RUSTFLAG.
+//!
+//! ```text
+//! $ RUSTFLAGS="--cfg clmul_force_soft" cargo bench
+//! ```
+//!
 //! ## ARMv8 intrinsics (`PMULL`, nightly-only)
 //! On `aarch64` targets including `aarch64-apple-darwin` (Apple M1) and Linux
 //! targets such as `aarch64-unknown-linux-gnu` and `aarch64-unknown-linux-musl`,
 //! support for using the `PMULL` instructions in ARMv8's Cryptography Extensions
 //! is available when using the nightly compiler, and can be enabled using the
-//! `armv8` crate feature.
+//! `clmul_armv8` RUSTFLAG.
 //!
-//! On Linux and macOS, when the `armv8` feature is enabled support for AES
-//! intrinsics is autodetected at runtime. On other platforms the `crypto`
-//! target feature must be enabled via RUSTFLAGS.
+//! ```text
+//! $ RUSTFLAGS="--cfg clmul_armv8" cargo bench
+//! ```
+//!
+//! On Linux and macOS, when the `clmul_armv8` RUSTFLAG is enabled support for AES
+//! intrinsics is autodetected at runtime.
 //!
 //! ## `x86`/`x86_64` intrinsics (`CMLMUL`)
 //! By default this crate uses runtime detection on `i686`/`x86_64` targets
@@ -43,7 +52,7 @@
 //! ```
 
 #![cfg_attr(not(test), no_std)]
-#![cfg_attr(all(feature = "armv8", target_arch = "aarch64"), feature(stdsimd))]
+#![cfg_attr(all(clmul_armv8, target_arch = "aarch64"), feature(stdsimd))]
 
 mod backend;
 pub use backend::Clmul;
@@ -51,9 +60,6 @@ pub use backend::Clmul;
 #[cfg(test)]
 #[path = ""]
 mod tests {
-    use rand::Rng;
-    use rand_chacha::{rand_core::SeedableRng, ChaCha12Rng};
-
     #[path = "backend/soft32.rs"]
     mod soft32;
 
@@ -61,8 +67,12 @@ mod tests {
     mod soft64;
 
     #[test]
+    #[cfg(not(clmul_force_soft))]
     // test backends against each other
     fn clmul_test() {
+        use rand::Rng;
+        use rand_chacha::{rand_core::SeedableRng, ChaCha12Rng};
+
         // test soft backends
         use soft32::Clmul as s32;
         use soft64::Clmul as s64;
@@ -80,8 +90,6 @@ mod tests {
         assert_eq!(r64_0, r32_0);
         assert_eq!(r64_1, r32_1);
 
-        // this will test the hard backend (if "force-soft" was set then it will
-        // test the soft backend again)
         use super::Clmul;
 
         let (c, d) = Clmul::new(&a).clmul(Clmul::new(&b));
@@ -154,8 +162,7 @@ mod tests {
     }
 
     #[test]
-    // test CPU intrinsics backend (if "force-soft" was set then it will
-    // test the soft backend again)
+    #[cfg(not(clmul_force_soft))]
     fn clmul_xor_eq_hard() {
         use super::Clmul;
 

@@ -51,7 +51,7 @@ impl FixedKeyAes {
     /// * `tweaks` - The tweaks to use for each block in `blocks`.
     /// * `blocks` - The blocks to hash in-place.
     #[inline]
-    pub fn tccr_many_inplace<const N: usize>(&self, tweaks: &[Block; N], blocks: &mut [Block; N]) {
+    pub fn tccr_many<const N: usize>(&self, tweaks: &[Block; N], blocks: &mut [Block; N]) {
         // Store π(x) in `blocks`
         self.aes
             .encrypt_blocks(Block::as_generic_array_mut_slice(blocks));
@@ -90,7 +90,7 @@ impl FixedKeyAes {
     ///
     /// * `blocks` - The blocks to hash in-place.
     #[inline]
-    pub fn cr_many_inplace<const N: usize>(&self, blocks: &mut [Block; N]) {
+    pub fn cr_many<const N: usize>(&self, blocks: &mut [Block; N]) {
         let mut buf = *blocks;
 
         self.aes
@@ -124,9 +124,9 @@ impl FixedKeyAes {
     ///
     /// * `blocks` - The blocks to hash in-place.
     #[inline]
-    pub fn ccr_many_inplace<const N: usize>(&self, blocks: &mut [Block; N]) {
+    pub fn ccr_many<const N: usize>(&self, blocks: &mut [Block; N]) {
         blocks.iter_mut().for_each(|b| *b = Block::sigma(*b));
-        self.cr_many_inplace(blocks);
+        self.cr_many(blocks);
     }
 }
 
@@ -153,17 +153,16 @@ impl AesEncryptor {
         blk
     }
 
-    /// Encrypt many blocks.
+    /// Encrypt many blocks in-place.
     #[inline(always)]
-    pub fn encrypt_many_blocks<const N: usize>(&self, mut blks: [Block; N]) -> [Block; N] {
+    pub fn encrypt_many_blocks<const N: usize>(&self, blks: &mut [Block; N]) {
         self.0
             .encrypt_blocks(Block::as_generic_array_mut_slice(blks.as_mut_slice()));
-        blks
     }
 
-    /// Encrypt many blocks in-place.
+    /// Encrypt slice of blocks in-place.
     #[inline]
-    pub fn encrypt_many_blocks_inplace(&self, blks: &mut [Block]) {
+    pub fn encrypt_blocks(&self, blks: &mut [Block]) {
         self.0
             .encrypt_blocks(Block::as_generic_array_mut_slice(blks));
     }
@@ -207,7 +206,7 @@ impl AesEncryptor {
         keys.iter()
             .zip(blks.chunks_exact_mut(NM))
             .for_each(|(key, blks)| {
-                key.encrypt_many_blocks_inplace(blks);
+                key.encrypt_blocks(blks);
             });
     }
 }

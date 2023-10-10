@@ -21,7 +21,7 @@ impl BlockRngCore for PrgCore {
     // Compute [AES(state)..AES(state+8)]
     #[inline(always)]
     fn generate(&mut self, results: &mut Self::Results) {
-        let states = [0; AesEncryptor::AES_BLOCK_COUNT].map(
+        let mut states = [0; AesEncryptor::AES_BLOCK_COUNT].map(
             #[inline(always)]
             |_| {
                 let x = self.state;
@@ -29,7 +29,8 @@ impl BlockRngCore for PrgCore {
                 Block::from(bytemuck::cast::<_, [u8; 16]>([x, 0u64]))
             },
         );
-        *results = bytemuck::cast(self.aes.encrypt_many_blocks(states))
+        self.aes.encrypt_many_blocks(&mut states);
+        *results = bytemuck::cast(states);
     }
 }
 

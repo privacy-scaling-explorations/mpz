@@ -18,10 +18,10 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("aes::encrypt_many_blocks::<8>", move |bench| {
         let key = rand::random::<Block>();
         let aes = AesEncryptor::new(key);
-        let blks = rand::random::<[Block; 8]>();
+        let mut blks = rand::random::<[Block; 8]>();
 
         bench.iter(|| {
-            let z = aes.encrypt_many_blocks(black_box(blks));
+            let z = aes.encrypt_many_blocks(black_box(&mut blks));
             black_box(z);
         });
     });
