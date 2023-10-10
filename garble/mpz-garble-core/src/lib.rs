@@ -7,6 +7,7 @@
 //! ```
 //! use mpz_circuits::circuits::AES128;
 //! use mpz_garble_core::{Generator, Evaluator, ChaChaEncoder, Encoder};
+//! use std::sync::Arc;
 //!
 //!
 //! let encoder = ChaChaEncoder::new([0u8; 32]);
@@ -19,17 +20,16 @@
 //! let active_key = encoded_key.select(*key).unwrap();
 //! let active_plaintext = encoded_plaintext.select(*plaintext).unwrap();
 //!
-//! let aes_ref = &**AES128;
 //! let mut gen =
 //!     Generator::new(
-//!         aes_ref.into_iter(),
+//!         Arc::clone(&AES128).into_gates_iterator(),
 //!         encoder.delta(),
 //!         &[encoded_key, encoded_plaintext]
 //!     ).unwrap();
 //!
 //! let mut ev =
 //!     Evaluator::new(
-//!         aes_ref.into_iter(),
+//!         Arc::clone(&AES128).into_gates_iterator(),
 //!         &[active_key, active_plaintext]
 //!     ).unwrap();
 //!
@@ -70,6 +70,8 @@ pub use generator::{Generator, GeneratorError};
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use aes::{
         cipher::{BlockEncrypt, KeyInit},
         Aes128,
@@ -130,10 +132,15 @@ mod tests {
             full_inputs[1].clone().select(msg).unwrap(),
         ];
 
-        let aes_ref = &**AES128;
-        let mut gen =
-            Generator::new_with_hasher(aes_ref.into_iter(), encoder.delta(), &full_inputs).unwrap();
-        let mut ev = Evaluator::new_with_hasher(aes_ref.into_iter(), &active_inputs).unwrap();
+        let mut gen = Generator::new_with_hasher(
+            Arc::clone(&AES128).into_gates_iterator(),
+            encoder.delta(),
+            &full_inputs,
+        )
+        .unwrap();
+        let mut ev =
+            Evaluator::new_with_hasher(Arc::clone(&AES128).into_gates_iterator(), &active_inputs)
+                .unwrap();
 
         while !(gen.is_complete() && ev.is_complete()) {
             let mut batch = Vec::with_capacity(BATCH_SIZE);

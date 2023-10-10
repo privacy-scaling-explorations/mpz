@@ -53,11 +53,11 @@ pub(crate) fn and_gate(
 }
 
 /// Core evaluator type for evaluating a garbled circuit.
-pub struct Evaluator<'a> {
+pub struct Evaluator {
     /// Cipher to use to encrypt the gates
     cipher: &'static FixedKeyAes,
     /// An iterator over the gates of a circuit
-    circuit_iterator: CircuitIterator<'a>,
+    circuit_iterator: CircuitIterator,
     /// Active label state
     active_labels: Vec<Option<Label>>,
     /// Current gate id
@@ -68,7 +68,7 @@ pub struct Evaluator<'a> {
     hasher: Option<Hasher>,
 }
 
-impl<'a> Evaluator<'a> {
+impl Evaluator {
     /// Creates a new evaluator for the given circuit.
     ///
     /// # Arguments
@@ -76,7 +76,7 @@ impl<'a> Evaluator<'a> {
     /// * `circ` - The circuit to evaluate.
     /// * `inputs` - The inputs to the circuit.
     pub fn new(
-        circuit_iterator: CircuitIterator<'a>,
+        circuit_iterator: CircuitIterator,
         inputs: &[EncodedValue<state::Active>],
     ) -> Result<Self, EvaluatorError> {
         Self::new_with(circuit_iterator, inputs, None)
@@ -90,14 +90,14 @@ impl<'a> Evaluator<'a> {
     /// * `circ` - The circuit to evaluate.
     /// * `inputs` - The inputs to the circuit.
     pub fn new_with_hasher(
-        circuit_iterator: CircuitIterator<'a>,
+        circuit_iterator: CircuitIterator,
         inputs: &[EncodedValue<state::Active>],
     ) -> Result<Self, EvaluatorError> {
         Self::new_with(circuit_iterator, inputs, Some(Hasher::new()))
     }
 
     fn new_with(
-        circuit_iterator: CircuitIterator<'a>,
+        circuit_iterator: CircuitIterator,
         inputs: &[EncodedValue<state::Active>],
         hasher: Option<Hasher>,
     ) -> Result<Self, EvaluatorError> {
@@ -145,7 +145,7 @@ impl<'a> Evaluator<'a> {
 
     /// Evaluates the next batch of encrypted gates.
     #[inline]
-    pub fn evaluate<'b>(&mut self, mut encrypted_gates: impl Iterator<Item = &'b EncryptedGate>) {
+    pub fn evaluate<'a>(&mut self, mut encrypted_gates: impl Iterator<Item = &'a EncryptedGate>) {
         let labels = &mut self.active_labels;
 
         // Process gates until we run out of encrypted gates

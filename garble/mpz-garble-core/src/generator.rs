@@ -66,11 +66,11 @@ pub(crate) fn and_gate(
 /// A generator is to be used as an iterator of encrypted gates. Each
 /// iteration will return the next encrypted gate in the circuit until the
 /// entire garbled circuit has been yielded.
-pub struct Generator<'a> {
+pub struct Generator {
     /// Cipher to use to encrypt the gates
     cipher: &'static FixedKeyAes,
     /// An iterator over the gates of a circuit
-    circuit_iterator: CircuitIterator<'a>,
+    circuit_iterator: CircuitIterator,
     /// Delta value to use while generating the circuit
     delta: Delta,
     /// The 0 bit labels for the garbled circuit
@@ -83,7 +83,7 @@ pub struct Generator<'a> {
     hasher: Option<Hasher>,
 }
 
-impl<'a> Generator<'a> {
+impl Generator {
     /// Creates a new generator for the given circuit.
     ///
     /// # Arguments
@@ -92,7 +92,7 @@ impl<'a> Generator<'a> {
     /// * `delta` - The delta value to use.
     /// * `inputs` - The inputs to the circuit.
     pub fn new(
-        circuit_iterator: CircuitIterator<'a>,
+        circuit_iterator: CircuitIterator,
         delta: Delta,
         inputs: &[EncodedValue<state::Full>],
     ) -> Result<Self, GeneratorError> {
@@ -108,7 +108,7 @@ impl<'a> Generator<'a> {
     /// * `delta` - The delta value to use.
     /// * `inputs` - The inputs to the circuit.
     pub fn new_with_hasher(
-        circuit_iterator: CircuitIterator<'a>,
+        circuit_iterator: CircuitIterator,
         delta: Delta,
         inputs: &[EncodedValue<state::Full>],
     ) -> Result<Self, GeneratorError> {
@@ -116,7 +116,7 @@ impl<'a> Generator<'a> {
     }
 
     fn new_with(
-        circuit_iterator: CircuitIterator<'a>,
+        circuit_iterator: CircuitIterator,
         delta: Delta,
         inputs: &[EncodedValue<state::Full>],
         hasher: Option<Hasher>,
@@ -194,7 +194,7 @@ impl<'a> Generator<'a> {
     }
 }
 
-impl<'a> Iterator for Generator<'a> {
+impl Iterator for Generator {
     type Item = EncryptedGate;
 
     #[inline]
@@ -246,6 +246,8 @@ impl<'a> Iterator for Generator<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::{ChaChaEncoder, Encoder};
     use mpz_circuits::circuits::AES128;
 
@@ -260,9 +262,12 @@ mod tests {
             .map(|input| encoder.encode_by_type(0, &input.value_type()))
             .collect();
 
-        let aes_ref = &**AES128;
-        let mut gen =
-            Generator::new_with_hasher(aes_ref.into_iter(), encoder.delta(), &inputs).unwrap();
+        let mut gen = Generator::new_with_hasher(
+            Arc::clone(&AES128).into_gates_iterator(),
+            encoder.delta(),
+            &inputs,
+        )
+        .unwrap();
 
         let enc_gates: Vec<EncryptedGate> = gen.by_ref().collect();
 
