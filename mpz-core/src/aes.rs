@@ -131,7 +131,6 @@ impl FixedKeyAes {
 }
 
 /// A wrapper of aes, only for encryption.
-// Use `RUSTFLAGS="-Ctarget-cpu=native --cfg=aes_armv8"` for optimal performance.
 #[derive(Clone)]
 pub struct AesEncryptor(Aes128Enc);
 
@@ -167,24 +166,6 @@ impl AesEncryptor {
             .encrypt_blocks(Block::as_generic_array_mut_slice(blks));
     }
 
-    /// Encrypt block slice.
-    pub fn encrypt_block_slice(&self, blks: &mut [Block]) {
-        let len = blks.len();
-        let mut buf = [Block::ZERO; AesEncryptor::AES_BLOCK_COUNT];
-        for i in 0..len / AesEncryptor::AES_BLOCK_COUNT {
-            buf.copy_from_slice(
-                &blks[i * AesEncryptor::AES_BLOCK_COUNT..(i + 1) * AesEncryptor::AES_BLOCK_COUNT],
-            );
-            blks[i * AesEncryptor::AES_BLOCK_COUNT..(i + 1) * AesEncryptor::AES_BLOCK_COUNT]
-                .copy_from_slice(&self.encrypt_many_blocks(buf));
-        }
-
-        let remain = len % AesEncryptor::AES_BLOCK_COUNT;
-        for block in blks[len - remain..].iter_mut() {
-            *block = self.encrypt_block(*block);
-        }
-    }
-
     /// Encrypt many blocks with many keys.
     ///
     /// Each batch of NM blocks is encrypted by a corresponding AES key.
@@ -213,37 +194,10 @@ impl AesEncryptor {
 
 #[test]
 fn aes_test() {
-    let aes = AesEncryptor::new(Block::ZERO);
+    let aes = AesEncryptor::new(Block::default());
     let aes1 = AesEncryptor::new(Block::ONES);
 
-    let c = aes.encrypt_block(Block::ZERO);
-    let res = Block::from(0x2e2b34ca59fa4c883b2c8aefd44be966_u128.to_le_bytes());
-    assert_eq!(c, res);
-
-    macro_rules! encrypt_test {
-        ($n:expr) => {{
-            let blks = [Block::ZERO; $n];
-
-            let d = aes.encrypt_many_blocks(blks);
-            assert_eq!(d, [res; $n]);
-
-            let mut f = [Block::ZERO; $n];
-            aes.encrypt_block_slice(&mut f);
-            assert_eq!(f, [res; $n]);
-        }};
-    }
-
-    encrypt_test!(1);
-    encrypt_test!(2);
-    encrypt_test!(3);
-    encrypt_test!(4);
-    encrypt_test!(5);
-    encrypt_test!(6);
-    encrypt_test!(7);
-    encrypt_test!(8);
-    encrypt_test!(9);
-
-    let mut blks = [Block::ZERO; 4];
+    let mut blks = [Block::default(); 4];
     blks[1] = Block::ONES;
     blks[3] = Block::ONES;
     AesEncryptor::para_encrypt::<2, 2>(&[aes, aes1], &mut blks);

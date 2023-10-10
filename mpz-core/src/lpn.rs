@@ -42,13 +42,13 @@ impl<const D: usize> LpnEncoder<D> {
     #[inline]
     fn compute_four_rows_indep(&self, y: &mut [Block], x: &[Block], pos: usize, prp: &Prp) {
         let mut cnt = 0u64;
-        let index: [Block; D] = std::array::from_fn(|_| {
+        let mut index: [Block; D] = std::array::from_fn(|_| {
             let i = cnt;
             cnt += 1;
             Block::from(bytemuck::cast::<_, [u8; 16]>([pos as u64, i]))
         });
 
-        let mut index = prp.permute_many_blocks(index);
+        prp.permute_many_blocks(&mut index);
         let index = bytemuck::cast_slice_mut::<_, u32>(&mut index);
 
         for (i, y) in y.iter_mut().enumerate().take(4) {
@@ -121,13 +121,13 @@ mod tests {
         #[allow(dead_code)]
         fn compute_four_rows_non_indep(&self, y: &mut [Block], x: &[Block], pos: usize, prp: &Prp) {
             let mut cnt = 0u64;
-            let index = [0; D].map(|_| {
+            let mut index = [0; D].map(|_| {
                 let i: u64 = cnt;
                 cnt += 1;
                 Block::from(bytemuck::cast::<_, [u8; 16]>([pos as u64, i]))
             });
 
-            let mut index: [Block; D] = prp.permute_many_blocks(index);
+            prp.permute_many_blocks(&mut index);
             let index: &mut [u32] = bytemuck::cast_slice_mut::<_, u32>(&mut index);
 
             for (i, y) in y[pos..].iter_mut().enumerate().take(4) {

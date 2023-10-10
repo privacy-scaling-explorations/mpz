@@ -20,13 +20,13 @@ impl Prp {
 
     /// Permute many blocks.
     #[inline(always)]
-    pub fn permute_many_blocks<const N: usize>(&self, blks: [Block; N]) -> [Block; N] {
+    pub fn permute_many_blocks<const N: usize>(&self, blks: &mut [Block; N]) {
         self.0.encrypt_many_blocks(blks)
     }
 
     /// Permute block slice.
     #[inline(always)]
     pub fn permute_block_inplace(&self, blks: &mut [Block]) {
-        self.0.encrypt_block_slice(blks);
+        self.0.encrypt_blocks(blks);
     }
 }
