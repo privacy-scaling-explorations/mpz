@@ -81,11 +81,10 @@ pub fn nbyte_add_mod_trace<'a, const N: usize>(
 
 #[cfg(test)]
 mod tests {
-    use mpz_circuits_macros::evaluate;
-
-    use crate::CircuitBuilder;
-
     use super::*;
+    use crate::CircuitBuilder;
+    use mpz_circuits_macros::evaluate;
+    use std::sync::Arc;
 
     #[test]
     fn test_nbyte_add_mod() {
@@ -99,10 +98,11 @@ mod tests {
 
         builder.add_output(sum);
 
-        let circ = builder.build().unwrap();
+        let circ = builder.build_arc().unwrap();
 
         for a in 0u8..modulus[1] {
             for b in 0u8..modulus[1] {
+                let circ = Arc::clone(&circ);
                 let expected_sum = ((a as u16 + b as u16) % modulus[1] as u16) as u8;
 
                 let sum: [u8; 2] = evaluate!(circ, fn([0u8, a], [0u8, b]) -> [u8; 2]).unwrap();

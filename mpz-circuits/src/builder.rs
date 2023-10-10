@@ -184,6 +184,11 @@ impl CircuitBuilder {
     }
 
     /// Builds the circuit
+    pub fn build_arc(self) -> Result<Arc<Circuit>, BuilderError> {
+        self.build().map(Arc::new)
+    }
+
+    /// Builds the circuit
     pub fn build(self) -> Result<Circuit, BuilderError> {
         self.state.into_inner().build()
     }
@@ -419,7 +424,7 @@ impl BuilderState {
         self.circuit_break_points
             .push_back(self.gates.len() - self.circuit_break_points.iter().sum::<usize>());
 
-        Ok(Circuit {
+        let circuit = Circuit {
             inputs: self.inputs,
             outputs: self.outputs,
             gates: self.gates,
@@ -429,7 +434,9 @@ impl BuilderState {
             sub_circuits: self.sub_circuits,
             break_points: self.circuit_break_points,
             gates_count,
-        })
+        };
+
+        Ok(circuit)
     }
 }
 
@@ -441,7 +448,7 @@ mod test {
 
     use super::*;
 
-    fn build_adder() -> Circuit {
+    fn build_adder() -> Arc<Circuit> {
         let builder = CircuitBuilder::new();
 
         let a = builder.add_input::<u8>();
@@ -451,7 +458,7 @@ mod test {
 
         builder.add_output(c);
 
-        builder.build().unwrap()
+        builder.build_arc().unwrap()
     }
 
     #[test]
@@ -484,7 +491,7 @@ mod test {
 
         builder.add_output(d);
 
-        let circ = builder.build().unwrap();
+        let circ = builder.build_arc().unwrap();
 
         let mut output = circ.evaluate(&[1u8.into(), 1u8.into()]).unwrap();
 

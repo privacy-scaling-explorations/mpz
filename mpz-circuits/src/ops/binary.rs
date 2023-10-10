@@ -230,11 +230,10 @@ impl<'a> BitXor<Tracer<'a, Bit>> for Tracer<'a, Bit> {
 
 #[cfg(test)]
 mod tests {
-    use mpz_circuits_macros::evaluate;
-
     use super::*;
-
     use crate::{types::U8, CircuitBuilder};
+    use mpz_circuits_macros::evaluate;
+    use std::sync::Arc;
 
     #[test]
     fn test_wrapping_add() {
@@ -251,10 +250,11 @@ mod tests {
 
         builder.add_output(sum);
 
-        let circ = builder.build().unwrap();
+        let circ = builder.build_arc().unwrap();
 
         for a in 0u8..=255 {
             for b in 0u8..=255 {
+                let circ = Arc::clone(&circ);
                 let expected_sum = a.wrapping_add(b);
 
                 let sum: u8 = evaluate!(circ, fn(a, b) -> u8).unwrap();
@@ -280,10 +280,11 @@ mod tests {
         builder.add_output(rem);
         builder.add_output(borrow);
 
-        let circ = builder.build().unwrap();
+        let circ = builder.build_arc().unwrap();
 
         for a in 0u8..=255 {
             for b in 0u8..=255 {
+                let circ = Arc::clone(&circ);
                 let expected_rem = a.wrapping_sub(b);
                 let expected_underflow = a < b;
 
@@ -316,12 +317,12 @@ mod tests {
 
         builder.add_output(out);
 
-        let circ = builder.build().unwrap();
+        let circ = builder.build_arc().unwrap();
 
         let a = 42u8;
         let b = 69u8;
 
-        let out: u8 = evaluate!(circ, fn(a, b, false) -> u8).unwrap();
+        let out: u8 = evaluate!(Arc::clone(&circ), fn(a, b, false) -> u8).unwrap();
         assert_eq!(out, a);
 
         let out: u8 = evaluate!(circ, fn(a, b, true) -> u8).unwrap();

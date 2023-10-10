@@ -46,7 +46,7 @@ pub use once_cell;
 ///
 ///     builder.add_output(c);
 ///
-///     let circ = builder.build().unwrap();
+///     let circ = builder.build_arc().unwrap();
 ///
 ///     let a = [42u8; 16];
 ///     let b = [69u8; 16];
@@ -99,7 +99,7 @@ pub use once_cell;
 ///
 ///    builder.add_output(c);
 ///
-///    let circ = builder.build().unwrap();
+///    let circ = builder.build_arc().unwrap();
 ///
 ///    let a = [42u8; 16];
 ///    let b = [69u8; 16];
@@ -146,7 +146,7 @@ pub use mpz_circuits_macros::trace;
 /// #    let b = builder.add_input::<u8>();
 /// #    let c = a.wrapping_add(b);
 /// #    builder.add_output(c);
-/// #    builder.build().unwrap()
+/// #    builder.build_arc().unwrap()
 /// # };
 /// use mpz_circuits::evaluate;
 ///
@@ -169,7 +169,7 @@ pub use mpz_circuits_macros::evaluate;
 /// #    let b = builder.add_input::<u8>();
 /// #    let c = a.wrapping_add(b);
 /// #    builder.add_output(c);
-/// #    builder.build().unwrap()
+/// #    builder.build_arc().unwrap()
 /// # };
 /// use mpz_circuits::test_circ;
 ///

@@ -767,7 +767,7 @@ mod tests {
         let a = builder.add_input::<u128>();
         let a_bytes = to_be_bytes_trace(builder.state(), a);
         builder.add_output(a_bytes);
-        let circ = builder.build().unwrap();
+        let circ = builder.build_arc().unwrap();
 
         test_circ!(circ, to_be_bytes, fn(69u128) -> [u8; 16]);
 
@@ -775,7 +775,7 @@ mod tests {
         let a = builder.add_input::<u128>();
         let a_bytes = to_le_bytes_trace(builder.state(), a);
         builder.add_output(a_bytes);
-        let circ = builder.build().unwrap();
+        let circ = builder.build_arc().unwrap();
 
         test_circ!(circ, to_le_bytes, fn(69u128) -> [u8; 16]);
     }

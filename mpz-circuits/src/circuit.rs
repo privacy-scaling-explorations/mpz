@@ -1,4 +1,5 @@
 use itybity::IntoBits;
+use yoke::{Yoke, Yokeable};
 
 use crate::{
     components::Gate,
@@ -7,7 +8,6 @@ use crate::{
 };
 use std::{
     collections::{HashMap, VecDeque},
-    slice::Iter,
     sync::Arc,
 };
 
@@ -47,11 +47,6 @@ impl Circuit {
     /// Returns a reference to the outputs of the circuit.
     pub fn outputs(&self) -> &[BinaryRepr] {
         &self.outputs
-    }
-
-    /// Returns a reference to the gates of the circuit.
-    pub fn gates(&self) -> CircuitIterator<'_> {
-        self.into_iter()
     }
 
     /// Returns the number of feeds in the circuit.
@@ -131,7 +126,7 @@ impl Circuit {
     /// # Returns
     ///
     /// The outputs of the circuit.
-    pub fn evaluate(&self, values: &[Value]) -> Result<Vec<Value>, CircuitError> {
+    pub fn evaluate(self: Arc<Self>, values: &[Value]) -> Result<Vec<Value>, CircuitError> {
         if values.len() != self.inputs.len() {
             return Err(CircuitError::InvalidInputCount(
                 self.inputs.len(),
@@ -156,7 +151,7 @@ impl Circuit {
             }
         }
 
-        for gate in self.gates() {
+        for gate in Arc::clone(&self).into_gates_iterator() {
             match gate {
                 Gate::Xor { x, y, z } => {
                     let x = feeds[x.id].expect("Feed should be set");
@@ -195,6 +190,48 @@ impl Circuit {
 
         Ok(outputs)
     }
+
+    /// Returns an iterator over the gates of the circuit.
+    pub fn into_gates_iterator(self: Arc<Self>) -> CircuitIterator {
+        let mut break_points = self.break_points.clone();
+        let current_break_point = break_points.pop_front();
+
+        let gates = Yoke::<GateSlice<'static>, Arc<Self>>::attach_to_cart(
+            Arc::clone(&self),
+            |circuit: &Circuit| GateSlice {
+                inner: &circuit.gates,
+            },
+        );
+
+        let sub_circuits = Yoke::<SubCircuitSlice<'static>, Arc<Self>>::attach_to_cart(
+            Arc::clone(&self),
+            |circuit: &Circuit| SubCircuitSlice {
+                inner: &circuit.sub_circuits,
+            },
+        );
+
+        CircuitIterator {
+            next_gate: None,
+            circuit: Arc::clone(&self),
+            gates,
+            current_gate_pos: 0,
+            current_sub_circuit_pos: 0,
+            sub_circuits,
+            current_sub_circuit: None,
+            break_points,
+            current_break_point,
+        }
+    }
+}
+
+#[derive(Yokeable)]
+struct GateSlice<'a> {
+    inner: &'a [Gate],
+}
+
+#[derive(Yokeable)]
+struct SubCircuitSlice<'a> {
+    inner: &'a [SubCircuit],
 }
 
 #[derive(Debug, Clone)]
@@ -205,26 +242,28 @@ pub(crate) struct SubCircuit {
     pub(crate) circuit: Arc<Circuit>,
 }
 
-impl<'a> IntoIterator for &'a SubCircuit {
+impl IntoIterator for &SubCircuit {
     type Item = Gate;
-    type IntoIter = SubCircuitIterator<'a>;
+    type IntoIter = SubCircuitIterator;
 
     fn into_iter(self) -> Self::IntoIter {
+        let circuit = Arc::clone(&self.circuit);
+
         SubCircuitIterator {
-            feed_map: &self.feed_map,
+            feed_map: self.feed_map.clone(),
             feed_offset: self.feed_offset,
-            gates_iter: Box::new(self.circuit.gates()),
+            gates_iter: Box::new(circuit.into_gates_iterator()),
         }
     }
 }
 
-pub(crate) struct SubCircuitIterator<'a> {
-    feed_map: &'a HashMap<usize, usize>,
+pub(crate) struct SubCircuitIterator {
+    feed_map: HashMap<usize, usize>,
     feed_offset: usize,
-    gates_iter: Box<CircuitIterator<'a>>,
+    gates_iter: Box<CircuitIterator>,
 }
 
-impl<'a> Iterator for SubCircuitIterator<'a> {
+impl Iterator for SubCircuitIterator {
     type Item = Gate;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -282,20 +321,22 @@ impl<'a> Iterator for SubCircuitIterator<'a> {
 }
 
 /// An iterator over the gates of a circuit
-pub struct CircuitIterator<'a> {
+pub struct CircuitIterator {
     next_gate: Option<Gate>,
-    circuit: &'a Circuit,
-    gates: Iter<'a, Gate>,
-    sub_circuits: Iter<'a, SubCircuit>,
-    current_sub_circuit: Option<SubCircuitIterator<'a>>,
+    circuit: Arc<Circuit>,
+    gates: Yoke<GateSlice<'static>, Arc<Circuit>>,
+    current_gate_pos: usize,
+    current_sub_circuit_pos: usize,
+    sub_circuits: Yoke<SubCircuitSlice<'static>, Arc<Circuit>>,
+    current_sub_circuit: Option<SubCircuitIterator>,
     break_points: VecDeque<usize>,
     current_break_point: Option<usize>,
 }
 
-impl<'a> CircuitIterator<'a> {
+impl CircuitIterator {
     /// Returns a reference to the underlying circuit.
-    pub fn circuit(&self) -> &'a Circuit {
-        self.circuit
+    pub fn circuit(&self) -> &Circuit {
+        self.circuit.as_ref()
     }
 
     /// Returns a reference to the next gate without advancing the iterator.
@@ -307,7 +348,7 @@ impl<'a> CircuitIterator<'a> {
     }
 }
 
-impl<'a> Iterator for CircuitIterator<'a> {
+impl Iterator for CircuitIterator {
     type Item = Gate;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -318,11 +359,22 @@ impl<'a> Iterator for CircuitIterator<'a> {
         if let Some(current_break_point) = self.current_break_point {
             if current_break_point == 0 {
                 self.current_break_point = None;
-                self.current_sub_circuit = self.sub_circuits.next().map(|c| c.into_iter());
+
+                let current_sub_circuit_pos = self.current_sub_circuit_pos;
+                self.current_sub_circuit_pos += 1;
+                self.current_sub_circuit = self
+                    .sub_circuits
+                    .get()
+                    .inner
+                    .get(current_sub_circuit_pos)
+                    .map(|c| c.into_iter());
                 return self.next();
             }
             self.current_break_point = Some(current_break_point - 1);
-            return self.gates.next().copied();
+
+            let current_gate_pos = self.current_gate_pos;
+            self.current_gate_pos += 1;
+            return self.gates.get().inner.get(current_gate_pos).copied();
         }
 
         if let Some(ref mut current_sub_circuit) = self.current_sub_circuit {
@@ -336,26 +388,6 @@ impl<'a> Iterator for CircuitIterator<'a> {
     }
 }
 
-impl<'a> IntoIterator for &'a Circuit {
-    type Item = Gate;
-    type IntoIter = CircuitIterator<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        let mut break_points = self.break_points.clone();
-        let current_break_point = break_points.pop_front();
-
-        CircuitIterator {
-            next_gate: None,
-            circuit: self,
-            gates: self.gates.iter(),
-            sub_circuits: self.sub_circuits.iter(),
-            current_sub_circuit: None,
-            break_points,
-            current_break_point,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use mpz_circuits_macros::evaluate;
@@ -364,7 +396,7 @@ mod tests {
 
     use super::*;
 
-    fn build_adder() -> Circuit {
+    fn build_adder() -> Arc<Circuit> {
         let builder = CircuitBuilder::new();
 
         let a = builder.add_input::<u8>();
@@ -374,7 +406,7 @@ mod tests {
 
         builder.add_output(c);
 
-        builder.build().unwrap()
+        builder.build_arc().unwrap()
     }
 
     #[test]

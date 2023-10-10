@@ -265,7 +265,7 @@ mod tests {
         }
 
         test_circ!(
-            AES128,
+            Arc::clone(&*AES128),
             aes_128,
             fn([0u8; 16], [69u8; 16]) -> [u8; 16]
         );
@@ -275,7 +275,7 @@ mod tests {
     #[cfg(feature = "sha2")]
     fn test_sha256_compress() {
         test_circ!(
-            SHA256_COMPRESS,
+            Arc::clone(&*SHA256_COMPRESS),
             sha256_compress,
             fn(SHA2_INITIAL_STATE, [69u8; 64]) -> [u32; 8]
         );
@@ -289,6 +289,7 @@ mod tests {
             let circ = build_sha256(0, len);
             let reference = |state, msg| sha256(state, 0, msg);
 
+            let circ = Arc::new(circ);
             test_circ!(circ, reference, fn(SHA2_INITIAL_STATE, msg.as_slice()) -> [u8; 32]);
         }
     }

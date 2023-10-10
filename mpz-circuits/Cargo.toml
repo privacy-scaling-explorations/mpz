@@ -27,6 +27,7 @@ regex = { workspace = true, optional = true }
 once_cell.workspace = true
 thiserror.workspace = true
 itybity.workspace = true
+yoke.workspace = true
 
 [dev-dependencies]
 aes.workspace = true

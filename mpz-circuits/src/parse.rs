@@ -155,6 +155,7 @@ impl UncheckedGate {
 #[cfg(test)]
 mod tests {
     use mpz_circuits_macros::evaluate;
+    use std::sync::Arc;
 
     use super::*;
 
@@ -167,6 +168,7 @@ mod tests {
         )
         .unwrap();
 
+        let circ = Arc::new(circ);
         let output: u64 = evaluate!(circ, fn(1u64, 2u64) -> u64).unwrap();
 
         assert_eq!(output, 3);
@@ -197,6 +199,7 @@ mod tests {
         let key = [0u8; 16];
         let msg = [69u8; 16];
 
+        let circ = Arc::new(circ);
         let ciphertext = evaluate!(circ, fn(key, msg) -> [u8; 16]).unwrap();
 
         let aes = Aes128::new_from_slice(&key).unwrap();
@@ -234,6 +237,7 @@ mod tests {
 
         let msg = [69u8; 64];
 
+        let circ = Arc::new(circ);
         let output = evaluate!(circ, fn(SHA2_INITIAL_STATE, msg) -> [u32; 8]).unwrap();
 
         let mut expected = SHA2_INITIAL_STATE;
