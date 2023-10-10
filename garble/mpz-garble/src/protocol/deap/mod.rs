@@ -181,10 +181,21 @@ impl DEAP {
         // Drop the encoded outputs, we don't need them here
         _ = futures::try_join!(
             self.gen
-                .generate(circ.clone(), inputs, outputs, sink, false)
+                .generate(
+                    Arc::clone(&circ).into_gates_iterator(),
+                    inputs,
+                    outputs,
+                    sink,
+                    false
+                )
                 .map_err(DEAPError::from),
             self.ev
-                .evaluate(circ.clone(), inputs, outputs, stream)
+                .evaluate(
+                    Arc::clone(&circ).into_gates_iterator(),
+                    inputs,
+                    outputs,
+                    stream
+                )
                 .map_err(DEAPError::from)
         )?;
 
@@ -243,7 +254,12 @@ impl DEAP {
 
         let outputs = self
             .ev
-            .evaluate(circ, inputs, outputs, stream)
+            .evaluate(
+                Arc::clone(&circ).into_gates_iterator(),
+                inputs,
+                outputs,
+                stream,
+            )
             .map_err(DEAPError::from)
             .await?;
 
@@ -314,7 +330,13 @@ impl DEAP {
 
         let (encoded_outputs, _) = self
             .gen
-            .generate(circ.clone(), inputs, outputs, sink, false)
+            .generate(
+                Arc::clone(&circ).into_gates_iterator(),
+                inputs,
+                outputs,
+                sink,
+                false,
+            )
             .map_err(DEAPError::from)
             .await?;
 

@@ -339,6 +339,11 @@ impl CircuitIterator {
         self.circuit.as_ref()
     }
 
+    /// Returns an Arc to the underlying circuit.
+    pub fn circuit_arc(&self) -> Arc<Circuit> {
+        Arc::clone(&self.circuit)
+    }
+
     /// Returns a reference to the next gate without advancing the iterator.
     pub fn peek(&mut self) -> Option<&Gate> {
         if self.next_gate.is_none() {

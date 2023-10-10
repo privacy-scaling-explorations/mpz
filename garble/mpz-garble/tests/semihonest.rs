@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use mpz_circuits::{circuits::AES128, types::StaticValueType};
 use mpz_garble_core::msg::GarbleMessage;
 use mpz_ot::mock::mock_ot_shared_pair;
@@ -49,7 +51,7 @@ async fn test_semi_honest() {
             .unwrap();
 
         gen.generate(
-            AES128.clone(),
+            Arc::clone(&AES128).into_gates_iterator(),
             &[key_ref.clone(), msg_ref.clone()],
             &[ciphertext_ref.clone()],
             &mut gen_channel,
@@ -76,7 +78,7 @@ async fn test_semi_honest() {
 
         _ = ev
             .evaluate(
-                AES128.clone(),
+                Arc::clone(&AES128).into_gates_iterator(),
                 &[key_ref.clone(), msg_ref.clone()],
                 &[ciphertext_ref.clone()],
                 &mut ev_channel,

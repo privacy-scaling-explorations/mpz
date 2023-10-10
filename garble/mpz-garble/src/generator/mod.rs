@@ -12,7 +12,7 @@ use std::{
 use futures::{Sink, SinkExt};
 use mpz_circuits::{
     types::{Value, ValueType},
-    Circuit,
+    Circuit, CircuitIterator,
 };
 use mpz_core::{
     hash::Hash,
@@ -235,7 +235,7 @@ impl Generator {
     /// * `hash` - Whether to hash the circuit
     pub async fn generate<S: Sink<GarbleMessage, Error = std::io::Error> + Unpin>(
         &self,
-        circ: Arc<Circuit>,
+        circuit_iterator: CircuitIterator,
         inputs: &[ValueRef],
         outputs: &[ValueRef],
         sink: &mut S,
@@ -258,9 +258,9 @@ impl Generator {
         };
 
         let mut gen = if hash {
-            GeneratorCore::new_with_hasher(circ.clone(), delta, &inputs)?
+            GeneratorCore::new_with_hasher(circuit_iterator, delta, &inputs)?
         } else {
-            GeneratorCore::new(circ.clone(), delta, &inputs)?
+            GeneratorCore::new(circuit_iterator, delta, &inputs)?
         };
 
         let mut batch: Vec<_>;

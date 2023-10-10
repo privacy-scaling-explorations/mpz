@@ -12,7 +12,7 @@ use std::{
 use futures::{stream::FuturesUnordered, SinkExt, Stream, StreamExt};
 use mpz_circuits::{
     types::{TypeError, Value, ValueType},
-    Circuit,
+    Circuit, CircuitIterator,
 };
 use mpz_core::{
     hash::Hash,
@@ -287,7 +287,7 @@ impl Evaluator {
     /// * `stream` - The stream of encrypted gates
     pub async fn evaluate<S: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin>(
         &self,
-        circ: Arc<Circuit>,
+        circuit_iterator: CircuitIterator,
         inputs: &[ValueRef],
         outputs: &[ValueRef],
         stream: &mut S,
@@ -305,10 +305,11 @@ impl Evaluator {
                 .collect::<Result<Vec<_>, _>>()?
         };
 
+        let circuit = circuit_iterator.circuit_arc();
         let mut ev = if self.config.log_circuits {
-            EvaluatorCore::new_with_hasher(circ.clone(), &encoded_inputs)?
+            EvaluatorCore::new_with_hasher(circuit_iterator, &encoded_inputs)?
         } else {
-            EvaluatorCore::new(circ.clone(), &encoded_inputs)?
+            EvaluatorCore::new(circuit_iterator, &encoded_inputs)?
         };
 
         while !ev.is_complete() {
@@ -359,7 +360,7 @@ impl Evaluator {
             state.circuit_logs.push(EvaluatorLog::new(
                 inputs.to_vec(),
                 outputs.to_vec(),
-                circ,
+                circuit,
                 hash,
             ));
         }
@@ -478,7 +479,7 @@ impl Evaluator {
                     // Compute the garbled circuit digest
                     let (_, digest) = gen
                         .generate(
-                            log.circ.clone(),
+                            Arc::clone(&log.circ).into_gates_iterator(),
                             &log.inputs,
                             &log.outputs,
                             &mut futures::sink::drain().sink_map_err(|_| {
