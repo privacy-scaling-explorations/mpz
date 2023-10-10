@@ -3,16 +3,12 @@
 mod config;
 mod error;
 
-use std::{
-    collections::HashSet,
-    ops::DerefMut,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashSet, ops::DerefMut, sync::Mutex};
 
 use futures::{Sink, SinkExt};
 use mpz_circuits::{
     types::{Value, ValueType},
-    Circuit, CircuitIterator,
+    CircuitIterator,
 };
 use mpz_core::{
     hash::Hash,

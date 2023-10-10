@@ -4,6 +4,7 @@
 extern crate self as mpz_circuits;
 
 mod builder;
+#[allow(clippy::forget_non_drop)]
 mod circuit;
 pub mod circuits;
 pub(crate) mod components;
