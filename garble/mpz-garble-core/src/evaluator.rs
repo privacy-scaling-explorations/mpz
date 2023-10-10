@@ -147,10 +147,9 @@ impl<'a> Evaluator<'a> {
     #[inline]
     pub fn evaluate<'b>(&mut self, mut encrypted_gates: impl Iterator<Item = &'b EncryptedGate>) {
         let labels = &mut self.active_labels;
-        let mut circuit_iterator = self.circuit_iterator.by_ref().peekable();
 
         // Process gates until we run out of encrypted gates
-        while let Some(gate) = circuit_iterator.peek() {
+        while let Some(gate) = self.circuit_iterator.peek() {
             match gate {
                 Gate::Inv {
                     x: node_x,
@@ -189,7 +188,7 @@ impl<'a> Evaluator<'a> {
                     }
                 }
             }
-            circuit_iterator.next();
+            self.circuit_iterator.next();
         }
         self.complete = true;
     }

@@ -200,7 +200,7 @@ impl<'a> Iterator for Generator<'a> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         let low_labels = &mut self.low_labels;
-        while let Some(gate) = self.circuit_iterator.by_ref().next() {
+        while let Some(gate) = self.circuit_iterator.next() {
             self.pos += 1;
             match gate {
                 Gate::Inv {

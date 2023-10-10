@@ -54,7 +54,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 Generator::new_with_hasher(sha256.into_iter(), encoder.delta(), &inputs).unwrap();
 
             let mut enc_gates = Vec::with_capacity(sha256.and_count());
-            for gate in gen.by_ref() {
+            for gate in gen {
                 enc_gates.push(gate);
             }
 

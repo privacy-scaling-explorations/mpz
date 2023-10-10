@@ -283,6 +283,7 @@ impl<'a> Iterator for SubCircuitIterator<'a> {
 
 /// An iterator over the gates of a circuit
 pub struct CircuitIterator<'a> {
+    next_gate: Option<Gate>,
     circuit: &'a Circuit,
     gates: Iter<'a, Gate>,
     sub_circuits: Iter<'a, SubCircuit>,
@@ -296,12 +297,24 @@ impl<'a> CircuitIterator<'a> {
     pub fn circuit(&self) -> &'a Circuit {
         self.circuit
     }
+
+    /// Returns a reference to the next gate without advancing the iterator.
+    pub fn peek(&mut self) -> Option<&Gate> {
+        if self.next_gate.is_none() {
+            self.next_gate = self.next();
+        }
+        self.next_gate.as_ref()
+    }
 }
 
 impl<'a> Iterator for CircuitIterator<'a> {
     type Item = Gate;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.next_gate.is_some() {
+            return self.next_gate.take();
+        }
+
         if let Some(current_break_point) = self.current_break_point {
             if current_break_point == 0 {
                 self.current_break_point = None;
@@ -332,6 +345,7 @@ impl<'a> IntoIterator for &'a Circuit {
         let current_break_point = break_points.pop_front();
 
         CircuitIterator {
+            next_gate: None,
             circuit: self,
             gates: self.gates.iter(),
             sub_circuits: self.sub_circuits.iter(),
