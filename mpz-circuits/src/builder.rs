@@ -8,7 +8,7 @@ use crate::{
 };
 use std::{
     cell::RefCell,
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     mem::discriminant,
     sync::Arc,
 };
@@ -77,7 +77,7 @@ impl CircuitBuilder {
         let mut state = self.state.borrow_mut();
 
         let value = state.add_value::<T>();
-        state.inputs.push(value.clone().into());
+        state.add_input_internal(value.clone().into());
 
         Tracer::new(&self.state, value)
     }
@@ -95,7 +95,7 @@ impl CircuitBuilder {
         let mut state = self.state.borrow_mut();
 
         let value = state.add_value_by_type(typ);
-        state.inputs.push(value.clone());
+        state.add_input_internal(value.clone());
 
         value
     }
@@ -114,7 +114,7 @@ impl CircuitBuilder {
         let mut state = self.state.borrow_mut();
 
         let values: [T::Repr; N] = std::array::from_fn(|_| state.add_value::<T>());
-        state.inputs.push(values.clone().into());
+        state.add_input_internal(values.clone().into());
 
         values.map(|v| Tracer::new(&self.state, v))
     }
@@ -138,7 +138,7 @@ impl CircuitBuilder {
         let mut state = self.state.borrow_mut();
 
         let values: Vec<T::Repr> = (0..len).map(|_| state.add_value::<T>()).collect();
-        state.inputs.push(values.clone().into());
+        state.add_input_internal(values.clone().into());
 
         values
             .into_iter()
@@ -199,8 +199,10 @@ impl CircuitBuilder {
 pub struct BuilderState {
     feed_id: usize,
     inputs: Vec<BinaryRepr>,
+    input_feeds: HashSet<usize>,
     outputs: Vec<BinaryRepr>,
     gates: Vec<Gate>,
+    input_gate_index: Vec<usize>,
     and_count: usize,
     xor_count: usize,
     sub_circuits: Vec<SubCircuit>,
@@ -213,8 +215,10 @@ impl Default for BuilderState {
             // ids 0 and 1 are reserved for constant zero and one
             feed_id: 2,
             inputs: vec![],
+            input_feeds: HashSet::new(),
             outputs: vec![],
             gates: vec![],
+            input_gate_index: vec![],
             and_count: 0,
             xor_count: 0,
             sub_circuits: vec![],
@@ -288,6 +292,9 @@ impl BuilderState {
     /// The output of the gate.
     pub(crate) fn add_xor_gate(&mut self, x: Node<Feed>, y: Node<Feed>) -> Node<Feed> {
         let out = self.add_feed();
+        self.add_to_index(x);
+        self.add_to_index(y);
+
         self.gates.push(Gate::Xor {
             x: x.into(),
             y: y.into(),
@@ -309,6 +316,9 @@ impl BuilderState {
     /// The output of the gate.
     pub(crate) fn add_and_gate(&mut self, x: Node<Feed>, y: Node<Feed>) -> Node<Feed> {
         let out = self.add_feed();
+        self.add_to_index(x);
+        self.add_to_index(y);
+
         self.gates.push(Gate::And {
             x: x.into(),
             y: y.into(),
@@ -329,11 +339,19 @@ impl BuilderState {
     /// The output of the gate.
     pub(crate) fn add_inv_gate(&mut self, x: Node<Feed>) -> Node<Feed> {
         let out = self.add_feed();
+        self.add_to_index(x);
+
         self.gates.push(Gate::Inv {
             x: x.into(),
             z: out,
         });
         out
+    }
+
+    fn add_to_index(&mut self, node: Node<Feed>) {
+        if self.input_feeds.contains(&node.id()) {
+            self.input_gate_index.push(self.gates.len());
+        }
     }
 
     /// Appends an existing circuit
@@ -437,6 +455,13 @@ impl BuilderState {
         };
 
         Ok(circuit)
+    }
+
+    fn add_input_internal(&mut self, value: BinaryRepr) {
+        value.iter().for_each(|node| {
+            self.input_feeds.insert(node.id());
+        });
+        self.inputs.push(value.clone());
     }
 }
 
