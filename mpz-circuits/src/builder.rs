@@ -296,7 +296,7 @@ impl BuilderState {
             z: out,
         };
 
-        if self.input_feeds.contains(&x.id()) {
+        if self.input_feeds.contains(&x.id()) || self.input_feeds.contains(&y.id()) {
             self.gates.push(CircuitGate::InputGate(gate));
         } else {
             self.gates.push(CircuitGate::Gate(gate));
@@ -324,7 +324,7 @@ impl BuilderState {
             z: out,
         };
 
-        if self.input_feeds.contains(&x.id()) {
+        if self.input_feeds.contains(&x.id()) || self.input_feeds.contains(&y.id()) {
             self.gates.push(CircuitGate::InputGate(gate));
         } else {
             self.gates.push(CircuitGate::Gate(gate));
