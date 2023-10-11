@@ -1,6 +1,6 @@
 //! An implementation of the Dual-execution with Asymmetric Privacy (DEAP) protocol.
 //!
-//! For more information, see the [DEAP specification](https://docs.tlsnotary.org/protocol/2pc/deap.html).
+//! For more information, see the [DEAP specification](https://docs.tlsnotary.org/mpc/deap.html).
 
 mod error;
 mod memory;
