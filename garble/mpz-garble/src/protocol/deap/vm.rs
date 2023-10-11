@@ -247,6 +247,17 @@ impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
         self.deap().assign::<T>(value_ref, value)
     }
 
+    fn assign_array<T: StaticValueType>(
+        &self,
+        value_ref: &ValueRef,
+        value: Vec<T>,
+    ) -> Result<(), MemoryError>
+    where
+        Vec<T>: Into<Value>,
+    {
+        self.deap().assign_array::<T>(value_ref, value)
+    }
+
     fn get_value(&self, id: &str) -> Option<ValueRef> {
         self.deap().get_value(id)
     }

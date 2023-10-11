@@ -67,6 +67,8 @@ pub enum MemoryError {
     Undefined(ValueId),
     #[error("invalid reference: {0:?}")]
     InvalidReference(ValueRef),
+    #[error("invalid value for {0:?}: {1:?}")]
+    InvalidValue(ValueRef, Value),
     #[error("value is already assigned: {0:?}")]
     AlreadyAssigned(ValueId),
     #[error("value is not assigned: {0:?}")]
@@ -246,6 +248,15 @@ pub trait Memory {
     /// Assigns a value
     fn assign<T: StaticValueType>(&self, value_ref: &ValueRef, value: T)
         -> Result<(), MemoryError>;
+
+    /// Assigns an array value
+    fn assign_array<T: StaticValueType>(
+        &self,
+        value_ref: &ValueRef,
+        value: Vec<T>,
+    ) -> Result<(), MemoryError>
+    where
+        Vec<T>: Into<Value>;
 
     /// Returns a value if it exists.
     fn get_value(&self, id: &str) -> Option<ValueRef>;
