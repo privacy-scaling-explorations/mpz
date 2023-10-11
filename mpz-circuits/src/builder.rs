@@ -201,8 +201,8 @@ pub struct BuilderState {
     inputs: Vec<BinaryRepr>,
     input_feeds: HashSet<usize>,
     outputs: Vec<BinaryRepr>,
+    input_gates: Vec<Gate>,
     gates: Vec<Gate>,
-    input_gate_index: Vec<usize>,
     and_count: usize,
     xor_count: usize,
     sub_circuits: Vec<SubCircuit>,
@@ -217,8 +217,8 @@ impl Default for BuilderState {
             inputs: vec![],
             input_feeds: HashSet::new(),
             outputs: vec![],
+            input_gates: vec![],
             gates: vec![],
-            input_gate_index: vec![],
             and_count: 0,
             xor_count: 0,
             sub_circuits: vec![],
@@ -292,14 +292,18 @@ impl BuilderState {
     /// The output of the gate.
     pub(crate) fn add_xor_gate(&mut self, x: Node<Feed>, y: Node<Feed>) -> Node<Feed> {
         let out = self.add_feed();
-        self.add_to_index(x);
-        self.add_to_index(y);
-
-        self.gates.push(Gate::Xor {
+        let gate = Gate::Xor {
             x: x.into(),
             y: y.into(),
             z: out,
-        });
+        };
+
+        if self.input_feeds.contains(&x.id()) {
+            self.input_gates.push(gate);
+        } else {
+            self.gates.push(gate);
+        }
+
         self.xor_count += 1;
         out
     }
@@ -316,14 +320,18 @@ impl BuilderState {
     /// The output of the gate.
     pub(crate) fn add_and_gate(&mut self, x: Node<Feed>, y: Node<Feed>) -> Node<Feed> {
         let out = self.add_feed();
-        self.add_to_index(x);
-        self.add_to_index(y);
-
-        self.gates.push(Gate::And {
+        let gate = Gate::And {
             x: x.into(),
             y: y.into(),
             z: out,
-        });
+        };
+
+        if self.input_feeds.contains(&x.id()) {
+            self.input_gates.push(gate);
+        } else {
+            self.gates.push(gate);
+        }
+
         self.and_count += 1;
         out
     }
@@ -339,19 +347,17 @@ impl BuilderState {
     /// The output of the gate.
     pub(crate) fn add_inv_gate(&mut self, x: Node<Feed>) -> Node<Feed> {
         let out = self.add_feed();
-        self.add_to_index(x);
-
-        self.gates.push(Gate::Inv {
+        let gate = Gate::Inv {
             x: x.into(),
             z: out,
-        });
-        out
-    }
-
-    fn add_to_index(&mut self, node: Node<Feed>) {
-        if self.input_feeds.contains(&node.id()) {
-            self.input_gate_index.push(self.gates.len());
+        };
+        if self.input_feeds.contains(&x.id()) {
+            self.input_gates.push(gate);
+        } else {
+            self.gates.push(gate);
         }
+
+        out
     }
 
     /// Appends an existing circuit
@@ -445,6 +451,7 @@ impl BuilderState {
         let circuit = Circuit {
             inputs: self.inputs,
             outputs: self.outputs,
+            input_gates: self.input_gates,
             gates: self.gates,
             feed_count: self.feed_id,
             and_count: self.and_count,

@@ -29,6 +29,7 @@ pub enum CircuitError {
 pub struct Circuit {
     pub(crate) inputs: Vec<BinaryRepr>,
     pub(crate) outputs: Vec<BinaryRepr>,
+    pub(crate) input_gates: Vec<Gate>,
     pub(crate) gates: Vec<Gate>,
     pub(crate) feed_count: usize,
     pub(crate) and_count: usize,
