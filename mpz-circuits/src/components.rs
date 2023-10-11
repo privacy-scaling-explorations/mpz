@@ -61,6 +61,26 @@ impl Gate {
             Gate::Inv { z, .. } => *z,
         }
     }
+
+    /// Return a gate with new nodes.
+    pub fn copy_with(&self, new_x: usize, new_y: usize, new_z: usize) -> Self {
+        match self {
+            Gate::Xor { .. } => Gate::Xor {
+                x: Node::new(new_x),
+                y: Node::new(new_y),
+                z: Node::new(new_z),
+            },
+            Gate::And { .. } => Gate::And {
+                x: Node::new(new_x),
+                y: Node::new(new_y),
+                z: Node::new(new_z),
+            },
+            Gate::Inv { .. } => Gate::Inv {
+                x: Node::new(new_x),
+                z: Node::new(new_z),
+            },
+        }
+    }
 }
 
 impl Debug for Gate {

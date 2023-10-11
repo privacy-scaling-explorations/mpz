@@ -1,7 +1,7 @@
 use itybity::{BitIterable, IntoBits};
 
 use crate::{
-    circuit::SubCircuit,
+    circuit::{CircuitGate, SubCircuit},
     components::{Feed, Gate, Node},
     types::{BinaryLength, BinaryRepr, ToBinaryRepr, ValueType},
     Circuit, Tracer,
@@ -201,8 +201,7 @@ pub struct BuilderState {
     inputs: Vec<BinaryRepr>,
     input_feeds: HashSet<usize>,
     outputs: Vec<BinaryRepr>,
-    input_gates: Vec<Gate>,
-    gates: Vec<Gate>,
+    gates: Vec<CircuitGate>,
     and_count: usize,
     xor_count: usize,
     sub_circuits: Vec<SubCircuit>,
@@ -217,7 +216,6 @@ impl Default for BuilderState {
             inputs: vec![],
             input_feeds: HashSet::new(),
             outputs: vec![],
-            input_gates: vec![],
             gates: vec![],
             and_count: 0,
             xor_count: 0,
@@ -299,9 +297,9 @@ impl BuilderState {
         };
 
         if self.input_feeds.contains(&x.id()) {
-            self.input_gates.push(gate);
+            self.gates.push(CircuitGate::InputGate(gate));
         } else {
-            self.gates.push(gate);
+            self.gates.push(CircuitGate::Gate(gate));
         }
 
         self.xor_count += 1;
@@ -327,9 +325,9 @@ impl BuilderState {
         };
 
         if self.input_feeds.contains(&x.id()) {
-            self.input_gates.push(gate);
+            self.gates.push(CircuitGate::InputGate(gate));
         } else {
-            self.gates.push(gate);
+            self.gates.push(CircuitGate::Gate(gate));
         }
 
         self.and_count += 1;
@@ -352,9 +350,9 @@ impl BuilderState {
             z: out,
         };
         if self.input_feeds.contains(&x.id()) {
-            self.input_gates.push(gate);
+            self.gates.push(CircuitGate::InputGate(gate));
         } else {
-            self.gates.push(gate);
+            self.gates.push(CircuitGate::Gate(gate));
         }
 
         out
@@ -451,7 +449,6 @@ impl BuilderState {
         let circuit = Circuit {
             inputs: self.inputs,
             outputs: self.outputs,
-            input_gates: self.input_gates,
             gates: self.gates,
             feed_count: self.feed_id,
             and_count: self.and_count,
@@ -517,7 +514,7 @@ mod test {
 
         let c = a.wrapping_add(b);
 
-        let mut appended_outputs = builder.append(circ.into(), &[a.into(), c.into()]).unwrap();
+        let mut appended_outputs = builder.append(circ, &[a.into(), c.into()]).unwrap();
 
         let d = appended_outputs.pop().unwrap();
 

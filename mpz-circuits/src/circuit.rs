@@ -29,14 +29,20 @@ pub enum CircuitError {
 pub struct Circuit {
     pub(crate) inputs: Vec<BinaryRepr>,
     pub(crate) outputs: Vec<BinaryRepr>,
-    pub(crate) input_gates: Vec<Gate>,
-    pub(crate) gates: Vec<Gate>,
+    pub(crate) gates: Vec<CircuitGate>,
     pub(crate) feed_count: usize,
     pub(crate) and_count: usize,
     pub(crate) xor_count: usize,
     pub(crate) sub_circuits: Vec<SubCircuit>,
     pub(crate) break_points: VecDeque<usize>,
     pub(crate) gates_count: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub(crate) enum CircuitGate {
+    Gate(Gate),
+    InputGate(Gate),
 }
 
 impl Circuit {
@@ -194,6 +200,12 @@ impl Circuit {
 
     /// Returns an iterator over the gates of the circuit.
     pub fn into_gates_iterator(self: Arc<Self>) -> CircuitIterator {
+        CircuitIterator {
+            inner: self.into_inner_gates_iterator(),
+        }
+    }
+
+    fn into_inner_gates_iterator(self: Arc<Self>) -> InnerCircuitIterator {
         let mut break_points = self.break_points.clone();
         let current_break_point = break_points.pop_front();
 
@@ -211,7 +223,7 @@ impl Circuit {
             },
         );
 
-        CircuitIterator {
+        InnerCircuitIterator {
             next_gate: None,
             circuit: Arc::clone(&self),
             gates,
@@ -227,7 +239,7 @@ impl Circuit {
 
 #[derive(Yokeable)]
 struct GateSlice<'a> {
-    inner: &'a [Gate],
+    inner: &'a [CircuitGate],
 }
 
 #[derive(Yokeable)]
@@ -244,7 +256,7 @@ pub(crate) struct SubCircuit {
 }
 
 impl IntoIterator for &SubCircuit {
-    type Item = Gate;
+    type Item = CircuitGate;
     type IntoIter = SubCircuitIterator;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -253,7 +265,7 @@ impl IntoIterator for &SubCircuit {
         SubCircuitIterator {
             feed_map: self.feed_map.clone(),
             feed_offset: self.feed_offset,
-            gates_iter: Box::new(circuit.into_gates_iterator()),
+            gates_iter: Box::new(circuit.into_inner_gates_iterator()),
         }
     }
 }
@@ -261,23 +273,16 @@ impl IntoIterator for &SubCircuit {
 pub(crate) struct SubCircuitIterator {
     feed_map: HashMap<usize, usize>,
     feed_offset: usize,
-    gates_iter: Box<CircuitIterator>,
+    gates_iter: Box<InnerCircuitIterator>,
 }
 
 impl Iterator for SubCircuitIterator {
-    type Item = Gate;
+    type Item = CircuitGate;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let gate = self.gates_iter.next()?;
-
         let adapt_gates = |x: Node<Sink>, y: Option<Node<Sink>>, z: Node<Feed>| {
             let mut x = x.id();
             let mut y = y.map(|y| y.id());
-            let mut z = z.id();
-
-            x += self.feed_offset;
-            y = y.map(|y| y + self.feed_offset);
-            z += self.feed_offset;
 
             if let Some(new_x) = self.feed_map.get(&(x - self.feed_offset)) {
                 x = *new_x;
@@ -289,41 +294,77 @@ impl Iterator for SubCircuitIterator {
                 }
             }
 
-            (Node::new(x), y.map(Node::new), Node::new(z))
+            (x, y, z.id())
         };
 
-        let new_gate = match gate {
-            Gate::Xor { x, y, z } => {
-                let new_nodes = adapt_gates(x, Some(y), z);
-                Gate::Xor {
-                    x: new_nodes.0,
-                    y: new_nodes.1.unwrap(),
-                    z: new_nodes.2,
-                }
-            }
-            Gate::And { x, y, z } => {
-                let new_nodes = adapt_gates(x, Some(y), z);
-                Gate::And {
-                    x: new_nodes.0,
-                    y: new_nodes.1.unwrap(),
-                    z: new_nodes.2,
-                }
-            }
-            Gate::Inv { x, z } => {
-                let new_nodes = adapt_gates(x, None, z);
-                Gate::Inv {
-                    x: new_nodes.0,
-                    z: new_nodes.2,
-                }
+        let new_gate = match self.gates_iter.next()? {
+            CircuitGate::Gate(gate) => gate.copy_with(
+                gate.x().id + self.feed_offset,
+                gate.y().unwrap_or(Node::new(0)).id() + self.feed_offset,
+                gate.z().id + self.feed_offset,
+            ),
+            CircuitGate::InputGate(gate) => {
+                let adapted_gates = adapt_gates(
+                    Node::new(gate.x().id + self.feed_offset),
+                    Some(Node::new(
+                        gate.y().unwrap_or(Node::new(0)).id() + self.feed_offset,
+                    )),
+                    Node::new(gate.z().id + self.feed_offset),
+                );
+                gate.copy_with(
+                    adapted_gates.0,
+                    adapted_gates.1.unwrap_or_default(),
+                    adapted_gates.2,
+                )
             }
         };
-        Some(new_gate)
+
+        Some(CircuitGate::Gate(new_gate))
     }
 }
 
 /// An iterator over the gates of a circuit
 pub struct CircuitIterator {
-    next_gate: Option<Gate>,
+    inner: InnerCircuitIterator,
+}
+
+impl CircuitIterator {
+    /// Returns a reference to the underlying circuit.
+    pub fn circuit(&self) -> &Circuit {
+        self.inner.circuit.as_ref()
+    }
+
+    /// Returns an Arc to the underlying circuit.
+    pub fn circuit_arc(&self) -> Arc<Circuit> {
+        Arc::clone(&self.inner.circuit)
+    }
+
+    /// Returns a reference to the next gate without advancing the iterator.
+    pub fn peek(&mut self) -> Option<&Gate> {
+        if self.inner.next_gate.is_none() {
+            self.inner.next_gate = self.next().map(CircuitGate::Gate);
+        }
+        self.inner.next_gate.as_ref().map(|g| match g {
+            CircuitGate::Gate(g) => g,
+            CircuitGate::InputGate(g) => g,
+        })
+    }
+}
+
+impl Iterator for CircuitIterator {
+    type Item = Gate;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let gate = self.inner.next();
+        gate.map(|g| match g {
+            CircuitGate::Gate(g) => g,
+            CircuitGate::InputGate(g) => g,
+        })
+    }
+}
+
+struct InnerCircuitIterator {
+    next_gate: Option<CircuitGate>,
     circuit: Arc<Circuit>,
     gates: Yoke<GateSlice<'static>, Arc<Circuit>>,
     current_gate_pos: usize,
@@ -334,28 +375,8 @@ pub struct CircuitIterator {
     current_break_point: Option<usize>,
 }
 
-impl CircuitIterator {
-    /// Returns a reference to the underlying circuit.
-    pub fn circuit(&self) -> &Circuit {
-        self.circuit.as_ref()
-    }
-
-    /// Returns an Arc to the underlying circuit.
-    pub fn circuit_arc(&self) -> Arc<Circuit> {
-        Arc::clone(&self.circuit)
-    }
-
-    /// Returns a reference to the next gate without advancing the iterator.
-    pub fn peek(&mut self) -> Option<&Gate> {
-        if self.next_gate.is_none() {
-            self.next_gate = self.next();
-        }
-        self.next_gate.as_ref()
-    }
-}
-
-impl Iterator for CircuitIterator {
-    type Item = Gate;
+impl Iterator for InnerCircuitIterator {
+    type Item = CircuitGate;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.next_gate.is_some() {
