@@ -3,7 +3,10 @@ use crate::ferret::{spcot::error::SenderError, CSP};
 use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, Block};
 use rand_core::SeedableRng;
 
-use super::msgs::{CheckSenderFromCOT, CheckFromReceiver, ExtendSenderFromCOT, MaskBits};
+use super::msgs::{
+    CheckFromReceiver, CheckFromSender, CheckSenderFromCOT, ExtendFromSender, ExtendSenderFromCOT,
+    MaskBits,
+};
 
 /// SPCOT sender.
 #[derive(Debug, Default)]
@@ -31,10 +34,7 @@ impl Sender {
             state: state::Extension {
                 delta,
                 vs: Vec::default(),
-                leaves_delta_sum: Block::default(),
-                ms: Vec::default(),
-                hashed_v: Hash::from([0u8; 32]),
-                counter: 0,
+                cot_counter: 0,
                 exec_counter: 0,
                 prg: Prg::from_seed(seed),
             },
@@ -56,7 +56,7 @@ impl Sender<state::Extension> {
         h: usize,
         extend: ExtendSenderFromCOT,
         mask: MaskBits,
-    ) -> Result<(), SenderError> {
+    ) -> Result<ExtendFromSender, SenderError> {
         let ExtendSenderFromCOT { qs } = extend;
         let MaskBits { bs } = mask;
 
@@ -83,7 +83,7 @@ impl Sender<state::Extension> {
         ggm_tree.gen(s, &mut tree, &mut k0, &mut k1);
 
         // Computes M0 and M1.
-        self.state.ms = qs
+        let mut ms: Vec<[Block; 2]> = qs
             .iter()
             .zip(bs.iter())
             .map(|(&q, &b)| {
@@ -95,15 +95,13 @@ impl Sender<state::Extension> {
             })
             .collect();
 
-        self.state.ms.iter_mut().enumerate().for_each(|(i, blks)| {
+        ms.iter_mut().enumerate().for_each(|(i, blks)| {
             let tweak: Block = bytemuck::cast([i, self.state.exec_counter]);
             let tweaks = [tweak, tweak];
             FIXED_KEY_AES.tccr_many(&tweaks, blks);
         });
 
-        self.state
-            .ms
-            .iter_mut()
+        ms.iter_mut()
             .zip(k0.iter().zip(k1.iter()))
             .for_each(|([m0, m1], (k0, k1))| {
                 *m0 ^= *k0;
@@ -114,13 +112,13 @@ impl Sender<state::Extension> {
         self.state.vs = tree;
 
         // Computes the sum of the leaves and delta.
-        self.state.leaves_delta_sum = self
+        let sum = self
             .state
             .vs
             .iter()
             .fold(self.state.delta, |acc, &x| acc ^ x);
 
-        Ok(())
+        Ok(ExtendFromSender { ms, sum })
     }
 
     /// Performs the consistency check for the resulting COTs.
@@ -137,7 +135,7 @@ impl Sender<state::Extension> {
         h: usize,
         checkfc: CheckSenderFromCOT,
         checkfr: CheckFromReceiver,
-    ) -> Result<(), SenderError> {
+    ) -> Result<CheckFromSender, SenderError> {
         let CheckSenderFromCOT { y_star } = checkfc;
         let CheckFromReceiver { chis, x_prime } = checkfr;
 
@@ -180,12 +178,12 @@ impl Sender<state::Extension> {
         // Computes H'(V)
         let mut hasher = blake3::Hasher::new();
         hasher.update(&v.to_bytes());
-        self.state.hashed_v = Hash::from(*hasher.finalize().as_bytes());
+        let hashed_v = Hash::from(*hasher.finalize().as_bytes());
 
         self.state.exec_counter += 1;
-        self.state.counter += self.state.vs.len();
+        self.state.cot_counter += self.state.vs.len();
 
-        Ok(())
+        Ok(CheckFromSender { hashed_v })
     }
 }
 
@@ -220,15 +218,9 @@ pub mod state {
         pub delta: Block,
         /// Sender's output blocks.
         pub vs: Vec<Block>,
-        /// The sum of the leaves of the GGM tree and delta.
-        pub leaves_delta_sum: Block,
-        /// The M vectors will be sent to the receiver.
-        pub ms: Vec<[Block; 2]>,
-        /// The hashed V message will be sent to the receiver.
-        pub hashed_v: Hash,
 
         /// Current COT counter
-        pub counter: usize,
+        pub cot_counter: usize,
         /// Current execution counter
         pub exec_counter: usize,
 

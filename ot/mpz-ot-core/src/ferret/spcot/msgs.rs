@@ -43,8 +43,8 @@ pub struct MaskBits {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 /// The extend messages that sent from the sender.
 pub struct ExtendFromSender {
-    /// The mask `k0` and `k1`.
-    pub ks: Vec<[Block; 2]>,
+    /// The mask `m0` and `m1`.
+    pub ms: Vec<[Block; 2]>,
     /// The sum of the ggm tree leaves and delta.
     pub sum: Block,
 }
