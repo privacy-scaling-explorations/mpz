@@ -17,3 +17,4 @@
 pub mod chou_orlandi;
 pub mod kos;
 pub mod msgs;
+pub mod ferret;
