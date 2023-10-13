@@ -13,6 +13,7 @@ pub enum Message<BaseMsg> {
     MaskBits(MaskBits),
     ExtendFromSender(ExtendFromSender),
     CheckSenderFromCOT(CheckSenderFromCOT),
+    CheckReceiverFromCOT(CheckReceiverFromCOT),
     CheckFromReceiver(CheckFromReceiver),
     CheckFromSender(CheckFromSender),
 }
@@ -50,10 +51,19 @@ pub struct ExtendFromSender {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/// The consistency check message received from the COT functionality.
+/// The consistency check message for the sender, received from the COT functionality.
 pub struct CheckSenderFromCOT {
     /// The `y*` message that sender receives from the COT functionality.
     pub y_star: Vec<Block>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// The consistency check message for the receiver, receiverd from the COT functionality.
+pub struct CheckReceiverFromCOT {
+    /// The `x*` message that receiver receives from the COT functionality.
+    pub x_star: Vec<bool>,
+    /// The `z*` message that receiver receives from the COT functionality.
+    pub z_star: Vec<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

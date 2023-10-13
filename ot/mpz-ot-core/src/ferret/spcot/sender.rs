@@ -22,8 +22,9 @@ impl Sender {
         }
     }
 
-    /// Complete the setup phase of the protocol.
-    /// Step 1, Figure 6.
+    /// Completes the setup phase of the protocol.
+    /// 
+    /// See step 1 in Figure 6.
     ///
     /// # Arguments
     ///
