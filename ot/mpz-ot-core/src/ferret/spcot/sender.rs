@@ -3,7 +3,7 @@ use crate::ferret::{spcot::error::SenderError, CSP};
 use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, Block};
 use rand_core::SeedableRng;
 
-use super::msgs::{CheckFromCOT, CheckFromReceiver, ExtendFromCOT, MaskBits};
+use super::msgs::{CheckSenderFromCOT, CheckFromReceiver, ExtendSenderFromCOT, MaskBits};
 
 /// SPCOT sender.
 #[derive(Debug, Default)]
@@ -54,10 +54,10 @@ impl Sender<state::Extension> {
     pub fn extend(
         &mut self,
         h: usize,
-        extend: ExtendFromCOT,
+        extend: ExtendSenderFromCOT,
         mask: MaskBits,
     ) -> Result<(), SenderError> {
-        let ExtendFromCOT { qs } = extend;
+        let ExtendSenderFromCOT { qs } = extend;
         let MaskBits { bs } = mask;
 
         if qs.len() != h {
@@ -135,10 +135,10 @@ impl Sender<state::Extension> {
     pub fn check(
         &mut self,
         h: usize,
-        checkfc: CheckFromCOT,
+        checkfc: CheckSenderFromCOT,
         checkfr: CheckFromReceiver,
     ) -> Result<(), SenderError> {
-        let CheckFromCOT { y_star } = checkfc;
+        let CheckSenderFromCOT { y_star } = checkfc;
         let CheckFromReceiver { chis, x_prime } = checkfr;
 
         if y_star.len() != CSP {
