@@ -23,7 +23,7 @@ impl Sender {
     }
 
     /// Completes the setup phase of the protocol.
-    /// 
+    ///
     /// See step 1 in Figure 6.
     ///
     /// # Arguments
@@ -69,7 +69,7 @@ impl Sender<state::Extension> {
 
         if bs.len() != h {
             return Err(SenderError::InvalidLength(
-                "the length of b should h".to_string(),
+                "the length of b should be h".to_string(),
             ));
         }
 
@@ -80,14 +80,14 @@ impl Sender<state::Extension> {
         let ggm_tree = GgmTree::new(h);
         let mut k0 = vec![Block::ZERO; h];
         let mut k1 = vec![Block::ZERO; h];
-        let mut tree = vec![Block::ZERO; 1 << h];
-        ggm_tree.gen(s, &mut tree, &mut k0, &mut k1);
+        self.state.vs = vec![Block::ZERO; 1 << h];
+        ggm_tree.gen(s, &mut self.state.vs, &mut k0, &mut k1);
 
         // Computes M0 and M1.
         let mut ms: Vec<[Block; 2]> = qs
-            .iter()
-            .zip(bs.iter())
-            .map(|(&q, &b)| {
+            .into_iter()
+            .zip(bs)
+            .map(|(q, b)| {
                 if b {
                     [q ^ self.state.delta, q]
                 } else {
@@ -108,9 +108,6 @@ impl Sender<state::Extension> {
                 *m0 ^= *k0;
                 *m1 ^= *k1;
             });
-
-        // Sets vs.
-        self.state.vs = tree;
 
         // Computes the sum of the leaves and delta.
         let sum = self

@@ -1,5 +1,6 @@
 //! SPCOT receiver
 use crate::ferret::{spcot::error::ReceiverError, CSP};
+use itybity::ToBits;
 use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, Block};
 use rand_core::SeedableRng;
 
@@ -46,14 +47,93 @@ impl Receiver<state::Extension> {
     pub fn extend_mask_bits(
         &mut self,
         h: usize,
+        alpha: usize,
         extend: ExtendReceiverFromCOT,
     ) -> Result<MaskBits, ReceiverError> {
-        todo!()
+        if alpha > (1 << h) {
+            return Err(ReceiverError::InvalidInput(
+                "the input pos should be no more than 2^h".to_string(),
+            ));
+        }
+
+        let ExtendReceiverFromCOT { rs, ts: _ } = extend;
+
+        if rs.len() != h {
+            return Err(ReceiverError::InvalidLength(
+                "the length of b should be h".to_string(),
+            ));
+        }
+
+        // Step 4 in Figure 6
+        let bs: Vec<bool> = alpha.to_msb0_vec()[0..h]
+            .iter()
+            // Computes alpha_i XOR r_i.
+            .zip(rs.iter())
+            .map(|(alpha, r)| if alpha == r { false } else { true })
+            // Computes alpha_i XOR r_i XOR 1
+            .map(|b| if b { false } else { true })
+            .collect();
+
+        Ok(MaskBits { bs })
     }
 
     ///
-    pub fn extend(&mut self, h: usize, extend: ExtendFromSender) -> Result<(), ReceiverError> {
-        todo!()
+    pub fn extend(
+        &mut self,
+        h: usize,
+        alpha: usize,
+        extendfc: ExtendReceiverFromCOT,
+        extendfr: ExtendFromSender,
+    ) -> Result<(), ReceiverError> {
+        if alpha > (1 << h) {
+            return Err(ReceiverError::InvalidInput(
+                "the input pos should be no more than 2^h".to_string(),
+            ));
+        }
+
+        let ExtendReceiverFromCOT { rs: _, ts } = extendfc;
+        let ExtendFromSender { ms, sum } = extendfr;
+        if ts.len() != h {
+            return Err(ReceiverError::InvalidLength(
+                "the length of t should be h".to_string(),
+            ));
+        }
+
+        if ms.len() != h {
+            return Err(ReceiverError::InvalidLength(
+                "the length of M should be h".to_string(),
+            ));
+        }
+
+        let comp_alpha_vec = alpha.to_msb0_vec()[0..h].to_vec();
+
+        // Setp 5 in Figure 6.
+        let k: Vec<Block> = ms
+            .into_iter()
+            .zip(ts)
+            .zip(comp_alpha_vec.iter())
+            .enumerate()
+            .map(|(i, (([m0, m1], t), b))| {
+                let tweak: Block = bytemuck::cast([i, self.state.exec_counter]);
+                if !b {
+                    // H(t, i|ell) ^ M0
+                    FIXED_KEY_AES.tccr(tweak, t) ^ m0
+                } else {
+                    // H(t, i|ell) ^ M1
+                    FIXED_KEY_AES.tccr(tweak, t) ^ m1
+                }
+            })
+            .collect();
+
+        // Reconstruct GGM tree except `ws[alpha]`.
+        let ggm_tree = GgmTree::new(h);
+        self.state.ws = vec![Block::ZERO; 1 << h];
+        ggm_tree.reconstruct(&mut self.state.ws, &k, &comp_alpha_vec);
+
+        // Set `ws[alpha]`.
+        self.state.ws[alpha] = self.state.ws.iter().fold(sum, |acc, &x| acc ^ x);
+
+        Ok(())
     }
 
     ///
