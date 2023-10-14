@@ -8,29 +8,27 @@ use serde::{Deserialize, Serialize};
 #[allow(missing_docs)]
 pub enum Message<BaseMsg> {
     BaseMsg(BaseMsg),
-    ExtendSenderFromCOT(ExtendSenderFromCOT),
-    ExtendReceiverFromCOT(ExtendReceiverFromCOT),
     MaskBits(MaskBits),
     ExtendFromSender(ExtendFromSender),
-    CheckSenderFromCOT(CheckSenderFromCOT),
-    CheckReceiverFromCOT(CheckReceiverFromCOT),
+    CotMsgForSender(CotMsgForSender),
+    CotMsgForReceiver(CotMsgForReceiver),
     CheckFromReceiver(CheckFromReceiver),
     CheckFromSender(CheckFromSender),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 /// The message that sender receives from the COT functionality.
-pub struct ExtendSenderFromCOT {
-    /// The `q`s that sender receives from the COT functionality.
+pub struct CotMsgForSender {
+    /// The random blocks that sender receives from the COT functionality.
     pub qs: Vec<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 /// The message that receiver receives from the COT functionality.
-pub struct ExtendReceiverFromCOT {
-    /// The `r`s that receiver receives from the COT functionality.
+pub struct CotMsgForReceiver {
+    /// The random bits that receiver receives from the COT functionality.
     pub rs: Vec<bool>,
-    /// The `t`s that receiver receivers from the COT functionality.
+    /// The chosen blocks that receiver receivers from the COT functionality.
     pub ts: Vec<Block>,
 }
 
@@ -48,22 +46,6 @@ pub struct ExtendFromSender {
     pub ms: Vec<[Block; 2]>,
     /// The sum of the ggm tree leaves and delta.
     pub sum: Block,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/// The consistency check message for the sender, received from the COT functionality.
-pub struct CheckSenderFromCOT {
-    /// The `y*` message that sender receives from the COT functionality.
-    pub y_star: Vec<Block>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/// The consistency check message for the receiver, receiverd from the COT functionality.
-pub struct CheckReceiverFromCOT {
-    /// The `x*` message that receiver receives from the COT functionality.
-    pub x_star: Vec<bool>,
-    /// The `z*` message that receiver receives from the COT functionality.
-    pub z_star: Vec<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

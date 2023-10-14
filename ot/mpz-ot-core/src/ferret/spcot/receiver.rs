@@ -5,8 +5,7 @@ use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, Bloc
 use rand_core::SeedableRng;
 
 use super::msgs::{
-    CheckFromReceiver, CheckFromSender, CheckReceiverFromCOT, ExtendFromSender,
-    ExtendReceiverFromCOT, MaskBits,
+    CheckFromReceiver, CheckFromSender, CotMsgForReceiver, ExtendFromSender, MaskBits,
 };
 
 /// SPCOT receiver.
@@ -43,12 +42,20 @@ impl Receiver {
 }
 
 impl Receiver<state::Extension> {
+    /// Performs the mask bit step in extension.
     ///
+    /// See step 4 in Figure 6.
+    ///
+    /// # Arguments
+    ///
+    /// * `h` - The depth of the GGM tree.
+    /// * `alpha` - The chosen position.
+    /// * `extend` - The message from COT ideal functionality for the receiver. Only the random bits are used.
     pub fn extend_mask_bits(
         &mut self,
         h: usize,
         alpha: usize,
-        extend: ExtendReceiverFromCOT,
+        extend: CotMsgForReceiver,
     ) -> Result<MaskBits, ReceiverError> {
         if alpha > (1 << h) {
             return Err(ReceiverError::InvalidInput(
@@ -56,7 +63,7 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let ExtendReceiverFromCOT { rs, ts: _ } = extend;
+        let CotMsgForReceiver { rs, ts: _ } = extend;
 
         if rs.len() != h {
             return Err(ReceiverError::InvalidLength(
@@ -77,13 +84,22 @@ impl Receiver<state::Extension> {
         Ok(MaskBits { bs })
     }
 
+    /// Performs the GGM reconstruction step in extension.
     ///
+    /// See step 5 in Figure 6.
+    ///
+    /// # Arguments
+    ///
+    /// * `h` - The depth of the GGM tree.
+    /// * `alpha` - The chosen position.
+    /// * `extendfc` - The message from COT ideal functionality for the receiver. Only the chosen blocks are used.
+    /// * `extendfr` - The message sent from the sender.
     pub fn extend(
         &mut self,
         h: usize,
         alpha: usize,
-        extendfc: ExtendReceiverFromCOT,
-        extendfr: ExtendFromSender,
+        extendfc: CotMsgForReceiver,
+        extendfs: ExtendFromSender,
     ) -> Result<(), ReceiverError> {
         if alpha > (1 << h) {
             return Err(ReceiverError::InvalidInput(
@@ -91,8 +107,8 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let ExtendReceiverFromCOT { rs: _, ts } = extendfc;
-        let ExtendFromSender { ms, sum } = extendfr;
+        let CotMsgForReceiver { rs: _, ts } = extendfc;
+        let ExtendFromSender { ms, sum } = extendfs;
         if ts.len() != h {
             return Err(ReceiverError::InvalidLength(
                 "the length of t should be h".to_string(),
@@ -105,13 +121,14 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let comp_alpha_vec = alpha.to_msb0_vec()[0..h].to_vec();
+        let mut alpha_bar_vec = alpha.to_msb0_vec();
+        alpha_bar_vec.drain(0..alpha_bar_vec.len() - h);
 
         // Setp 5 in Figure 6.
         let k: Vec<Block> = ms
             .into_iter()
             .zip(ts)
-            .zip(comp_alpha_vec.iter())
+            .zip(alpha_bar_vec.iter())
             .enumerate()
             .map(|(i, (([m0, m1], t), b))| {
                 let tweak: Block = bytemuck::cast([i, self.state.exec_counter]);
@@ -128,7 +145,7 @@ impl Receiver<state::Extension> {
         // Reconstruct GGM tree except `ws[alpha]`.
         let ggm_tree = GgmTree::new(h);
         self.state.ws = vec![Block::ZERO; 1 << h];
-        ggm_tree.reconstruct(&mut self.state.ws, &k, &comp_alpha_vec);
+        ggm_tree.reconstruct(&mut self.state.ws, &k, &alpha_bar_vec);
 
         // Set `ws[alpha]`.
         self.state.ws[alpha] = self.state.ws.iter().fold(sum, |acc, &x| acc ^ x);
@@ -136,16 +153,54 @@ impl Receiver<state::Extension> {
         Ok(())
     }
 
+    /// Performs the decomposition and bit-mask steps in check.
     ///
+    /// See step 7 in Figure 6.
+    ///
+    /// # Arguments
+    ///
+    /// * `h` - The depth of the GGM tree.
+    /// * `alpha` - The chosen position.
+    /// * `check` - The message from COT ideal functionality for the receiver.
     pub fn check_pre(
         &mut self,
-        check: CheckReceiverFromCOT,
+        h: usize,
+        alpha: usize,
+        check: CotMsgForReceiver,
     ) -> Result<CheckFromReceiver, ReceiverError> {
+        if alpha > (1 << h) {
+            return Err(ReceiverError::InvalidInput(
+                "the input pos should be no more than 2^h".to_string(),
+            ));
+        }
+
+        let CotMsgForReceiver { rs: x_star, ts: _ } = check;
+
+        if x_star.len() != CSP {
+            return Err(ReceiverError::InvalidLength(
+                "the length of x* should be 128".to_string(),
+            ));
+        }
+
+        let mut chis = vec![Block::ZERO; 1 << h];
+        self.state.prg.random_blocks(&mut chis);
         todo!()
     }
 
     ///
-    pub fn check(&mut self, check: CheckFromSender) -> Result<(), ReceiverError> {
+    pub fn check(
+        &mut self,
+        checkfc: CotMsgForReceiver,
+        check: CheckFromSender,
+    ) -> Result<(), ReceiverError> {
+        let CheckFromSender { hashed_v } = check;
+        let CotMsgForReceiver { rs: _, ts: z_star } = checkfc;
+        
+        if z_star.len() != CSP {
+            return Err(ReceiverError::InvalidLength(
+                "the length of z* should be 128".to_string(),
+            ));
+        }
         todo!()
     }
 }

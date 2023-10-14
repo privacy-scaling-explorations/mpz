@@ -4,8 +4,7 @@ use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, Bloc
 use rand_core::SeedableRng;
 
 use super::msgs::{
-    CheckFromReceiver, CheckFromSender, CheckSenderFromCOT, ExtendFromSender, ExtendSenderFromCOT,
-    MaskBits,
+    CheckFromReceiver, CheckFromSender, CotMsgForSender, ExtendFromSender, MaskBits,
 };
 
 /// SPCOT sender.
@@ -44,7 +43,7 @@ impl Sender {
 }
 
 impl Sender<state::Extension> {
-    /// Perform the SPCOT extension.
+    /// Performs the SPCOT extension.
     ///
     /// See Step 1-5 in Figure 6.
     ///
@@ -55,10 +54,10 @@ impl Sender<state::Extension> {
     pub fn extend(
         &mut self,
         h: usize,
-        extend: ExtendSenderFromCOT,
+        extend: CotMsgForSender,
         mask: MaskBits,
     ) -> Result<ExtendFromSender, SenderError> {
-        let ExtendSenderFromCOT { qs } = extend;
+        let CotMsgForSender { qs } = extend;
         let MaskBits { bs } = mask;
 
         if qs.len() != h {
@@ -131,10 +130,10 @@ impl Sender<state::Extension> {
     pub fn check(
         &mut self,
         h: usize,
-        checkfc: CheckSenderFromCOT,
+        checkfc: CotMsgForSender,
         checkfr: CheckFromReceiver,
     ) -> Result<CheckFromSender, SenderError> {
-        let CheckSenderFromCOT { y_star } = checkfc;
+        let CotMsgForSender { qs: y_star } = checkfc;
         let CheckFromReceiver { chis, x_prime } = checkfr;
 
         if y_star.len() != CSP {
