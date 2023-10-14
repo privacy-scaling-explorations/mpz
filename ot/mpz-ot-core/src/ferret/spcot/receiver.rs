@@ -236,7 +236,7 @@ impl Receiver<state::Extension> {
         if hashed_v != hashed_w {
             return Err(ReceiverError::ConsistencyCheckFailed);
         }
-        
+
         self.state.exec_counter += 1;
         self.state.cot_counter += self.state.ws.len();
         Ok(())

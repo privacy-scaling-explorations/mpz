@@ -15,6 +15,6 @@
 #![deny(clippy::all)]
 
 pub mod chou_orlandi;
+pub mod ferret;
 pub mod kos;
 pub mod msgs;
-pub mod ferret;

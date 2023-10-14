@@ -5,21 +5,22 @@ pub mod spcot;
 /// Computational security parameter
 pub const CSP: usize = 128;
 
-mod ideal_cot {
+pub mod ideal_cot {
+    //! Ideal functionality of COT.
     use mpz_core::{prg::Prg, Block};
 
     use super::spcot::msgs::{CotMsgForReceiver, CotMsgForSender};
 
-    #[allow(dead_code)]
-    pub(crate) struct IdealCOT {
-        pub(crate) delta: Block,
-        pub(crate) counter: usize,
-        pub(crate) prg: Prg,
+    #[allow(missing_docs)]
+    pub struct IdealCOT {
+        pub delta: Block,
+        pub counter: usize,
+        pub prg: Prg,
     }
 
     impl IdealCOT {
-        #[allow(dead_code)]
-        pub(crate) fn init() -> Self {
+        /// Initiate the functionality
+        pub fn init() -> Self {
             let mut prg = Prg::new();
             let delta = prg.random_block();
             IdealCOT {
@@ -29,8 +30,12 @@ mod ideal_cot {
             }
         }
 
-        #[allow(dead_code)]
-        pub(crate) fn extend(&mut self, counter: usize) -> (CotMsgForSender, CotMsgForReceiver) {
+        /// Performs the extension with random choice bits.
+        ///
+        /// # Argument
+        ///
+        /// * `counter` - The number of COT to extend.
+        pub fn extend(&mut self, counter: usize) -> (CotMsgForSender, CotMsgForReceiver) {
             let mut qs = vec![Block::ZERO; counter];
             let mut rs = vec![false; counter];
 
@@ -47,12 +52,13 @@ mod ideal_cot {
             (CotMsgForSender { qs }, CotMsgForReceiver { rs, ts })
         }
 
-        #[allow(dead_code)]
-        pub(crate) fn check(
-            self,
-            sender_msg: CotMsgForSender,
-            receiver_msg: CotMsgForReceiver,
-        ) -> bool {
+        /// Perform the checks.
+        ///
+        /// # Arguments
+        ///
+        /// `sender_msg` - The message that the ideal COT sends to the sender.
+        /// `receiver_msg` - The message that the ideal COT sends to the receiver.
+        pub fn check(self, sender_msg: CotMsgForSender, receiver_msg: CotMsgForReceiver) -> bool {
             let CotMsgForSender { qs } = sender_msg;
             let CotMsgForReceiver { rs, ts } = receiver_msg;
 
