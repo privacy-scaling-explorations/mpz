@@ -33,6 +33,7 @@ impl Receiver {
         Receiver {
             state: state::Extension {
                 ws: Vec::default(),
+                chis: Vec::default(),
                 cot_counter: 0,
                 exec_counter: 0,
                 prg: Prg::from_seed(seed),
@@ -161,7 +162,7 @@ impl Receiver<state::Extension> {
     ///
     /// * `h` - The depth of the GGM tree.
     /// * `alpha` - The chosen position.
-    /// * `check` - The message from COT ideal functionality for the receiver.
+    /// * `check` - The message from COT ideal functionality for the receiver. Only the random bits are used.
     pub fn check_pre(
         &mut self,
         h: usize,
@@ -182,12 +183,28 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let mut chis = vec![Block::ZERO; 1 << h];
-        self.state.prg.random_blocks(&mut chis);
-        todo!()
+        let chis_seed = self.state.prg.random_block();
+        self.state.chis = vec![Block::ZERO; 1 << h];
+        Prg::from_seed(chis_seed).random_blocks(&mut self.state.chis);
+
+        let x_prime: Vec<bool> = self.state.chis[alpha]
+            .to_lsb0_vec()
+            .into_iter()
+            .zip(x_star)
+            .map(|(x, x_star)| if x == x_star { false } else { true })
+            .collect();
+
+        Ok(CheckFromReceiver { chis_seed, x_prime })
     }
 
+    /// Performs the final consistency check.
     ///
+    /// See step 9 in Figure 6.
+    ///
+    /// # Arguments
+    ///
+    /// * `checkfc` - The message from COT ideal functionality for the receiver. Only the chosen blocks are used.
+    /// * `check` - The hashed value sent from the Sender.
     pub fn check(
         &mut self,
         checkfc: CotMsgForReceiver,
@@ -195,13 +212,34 @@ impl Receiver<state::Extension> {
     ) -> Result<(), ReceiverError> {
         let CheckFromSender { hashed_v } = check;
         let CotMsgForReceiver { rs: _, ts: z_star } = checkfc;
-        
+
         if z_star.len() != CSP {
             return Err(ReceiverError::InvalidLength(
                 "the length of z* should be 128".to_string(),
             ));
         }
-        todo!()
+
+        // Computes the base X^i
+        let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1 << x) as u128)).collect();
+
+        // Computes Z.
+        let mut w = Block::inn_prdt_red(&z_star, &base);
+
+        // Computes W.
+        w ^= Block::inn_prdt_red(&self.state.chis, &base);
+
+        // Computes H'(W)
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&w.to_bytes());
+        let hashed_w = Hash::from(*hasher.finalize().as_bytes());
+
+        if hashed_v != hashed_w {
+            return Err(ReceiverError::ConsistencyCheckFailed);
+        }
+        
+        self.state.exec_counter += 1;
+        self.state.cot_counter += self.state.ws.len();
+        Ok(())
     }
 }
 
@@ -234,6 +272,8 @@ pub mod state {
     pub struct Extension {
         /// Receiver's output blocks.
         pub ws: Vec<Block>,
+        /// Receiver's random challenges chis.
+        pub chis: Vec<Block>,
 
         /// Current COT counter
         pub cot_counter: usize,

@@ -16,4 +16,6 @@ pub enum ReceiverError {
     InvalidInput(String),
     #[error("invalid length: expected {0}")]
     InvalidLength(String),
+    #[error("consistency check failed")]
+    ConsistencyCheckFailed,
 }

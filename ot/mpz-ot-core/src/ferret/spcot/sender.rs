@@ -134,17 +134,11 @@ impl Sender<state::Extension> {
         checkfr: CheckFromReceiver,
     ) -> Result<CheckFromSender, SenderError> {
         let CotMsgForSender { qs: y_star } = checkfc;
-        let CheckFromReceiver { chis, x_prime } = checkfr;
+        let CheckFromReceiver { chis_seed, x_prime } = checkfr;
 
         if y_star.len() != CSP {
             return Err(SenderError::InvalidLength(
                 "the length of y* should be 128".to_string(),
-            ));
-        }
-
-        if chis.len() != 1 << h {
-            return Err(SenderError::InvalidLength(
-                "the length of chi should be 2^h ".to_string(),
             ));
         }
 
@@ -170,6 +164,8 @@ impl Sender<state::Extension> {
         let mut v = Block::inn_prdt_red(&y, &base);
 
         // Computes V
+        let mut chis = vec![Block::ZERO; 1 << h];
+        Prg::from_seed(chis_seed).random_blocks(&mut chis);
         v ^= Block::inn_prdt_red(&chis, &self.state.vs);
 
         // Computes H'(V)

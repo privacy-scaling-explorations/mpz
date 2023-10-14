@@ -51,8 +51,9 @@ pub struct ExtendFromSender {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 /// The consistency check message sent from the receiver.
 pub struct CheckFromReceiver {
-    /// The random `chi`‘s from the receiver.
-    pub chis: Vec<Block>,
+    /// The seed to generate random `chi`‘s from the receiver. 
+    // Can be optimized with Fiat-Shamir.
+    pub chis_seed: Block,
     /// The `x'` from the receiver.
     pub x_prime: Vec<bool>,
 }
