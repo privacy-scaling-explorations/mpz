@@ -38,7 +38,7 @@ mod tests {
 
         let msg_from_sender = sender.extend(h, msg_for_sender, maskbits).unwrap();
 
-        let _ = receiver
+        receiver
             .extend(h, alpha, msg_for_receiver, msg_from_sender)
             .unwrap();
 
@@ -53,7 +53,7 @@ mod tests {
             .check(h, msg_for_sender, check_from_receiver)
             .unwrap();
 
-        let _ = receiver.check(msg_for_receiver, check).unwrap();
+        receiver.check(msg_for_receiver, check).unwrap();
 
         sender.state.vs[alpha] ^= sender.state.delta;
         assert_eq!(sender.state.vs, receiver.state.ws);
