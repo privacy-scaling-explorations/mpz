@@ -80,7 +80,7 @@ impl Receiver<state::Extension> {
             .iter()
             // Computes alpha_i XOR r_i XOR 1.
             .zip(rs.iter())
-            .map(|(alpha, r)| if alpha == r { true } else { false })
+            .map(|(alpha, r)| alpha == r)
             .collect();
 
         Ok(MaskBits { bs })
@@ -126,9 +126,7 @@ impl Receiver<state::Extension> {
         let mut alpha_bar_vec = alpha.to_msb0_vec();
         alpha_bar_vec.drain(0..alpha_bar_vec.len() - h);
 
-        alpha_bar_vec
-            .iter_mut()
-            .for_each(|a| if *a { *a = false } else { *a = true });
+        alpha_bar_vec.iter_mut().for_each(|a| *a = !*a);
 
         // Setp 5 in Figure 6.
         let k: Vec<Block> = ms
@@ -196,7 +194,7 @@ impl Receiver<state::Extension> {
             .to_lsb0_vec()
             .into_iter()
             .zip(x_star)
-            .map(|(x, x_star)| if x == x_star { false } else { true })
+            .map(|(x, x_star)| x != x_star)
             .collect();
 
         Ok(CheckFromReceiver { chis_seed, x_prime })
@@ -225,7 +223,7 @@ impl Receiver<state::Extension> {
         }
 
         // Computes the base X^i
-        let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1 as u128) << x)).collect();
+        let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1_u128) << x)).collect();
 
         // Computes Z.
         let mut w = Block::inn_prdt_red(&z_star, &base);

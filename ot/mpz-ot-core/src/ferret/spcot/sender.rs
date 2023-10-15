@@ -158,7 +158,7 @@ impl Sender<state::Extension> {
             .collect();
 
         // Computes the base X^i
-        let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1 as u128) << x)).collect();
+        let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1_u128) << x)).collect();
 
         // Computes Y
         let mut v = Block::inn_prdt_red(&y, &base);
