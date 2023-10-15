@@ -1,4 +1,4 @@
-//! Implementation of the Single-Point COT (spcot) protocol.
+//! Implementation of the Single-Point COT (spcot) protocol in the [`Ferret`](https://eprint.iacr.org/2020/924.pdf) paper.
 
 pub mod error;
 pub mod msgs;
