@@ -10,7 +10,7 @@ use super::msgs::{
 /// SPCOT sender.
 #[derive(Debug, Default)]
 pub struct Sender<T: state::State = state::Initialized> {
-    state: T,
+    pub(crate) state: T,
 }
 
 impl Sender {
@@ -158,7 +158,7 @@ impl Sender<state::Extension> {
             .collect();
 
         // Computes the base X^i
-        let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1 << x) as u128)).collect();
+        let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1 as u128) << x)).collect();
 
         // Computes Y
         let mut v = Block::inn_prdt_red(&y, &base);

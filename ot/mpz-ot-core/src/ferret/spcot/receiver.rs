@@ -11,7 +11,7 @@ use super::msgs::{
 /// SPCOT receiver.
 #[derive(Debug, Default)]
 pub struct Receiver<T: state::State = state::Initialized> {
-    state: T,
+    pub(crate) state: T,
 }
 
 impl Receiver {
@@ -73,13 +73,14 @@ impl Receiver<state::Extension> {
         }
 
         // Step 4 in Figure 6
-        let bs: Vec<bool> = alpha.to_msb0_vec()[0..h]
+        let mut alpha_vec = alpha.to_msb0_vec();
+        alpha_vec.drain(0..alpha_vec.len() - h);
+
+        let bs: Vec<bool> = alpha_vec
             .iter()
-            // Computes alpha_i XOR r_i.
+            // Computes alpha_i XOR r_i XOR 1.
             .zip(rs.iter())
-            .map(|(alpha, r)| if alpha == r { false } else { true })
-            // Computes alpha_i XOR r_i XOR 1
-            .map(|b| if b { false } else { true })
+            .map(|(alpha, r)| if alpha == r { true } else { false })
             .collect();
 
         Ok(MaskBits { bs })
@@ -125,13 +126,17 @@ impl Receiver<state::Extension> {
         let mut alpha_bar_vec = alpha.to_msb0_vec();
         alpha_bar_vec.drain(0..alpha_bar_vec.len() - h);
 
+        alpha_bar_vec
+            .iter_mut()
+            .for_each(|a| if *a { *a = false } else { *a = true });
+
         // Setp 5 in Figure 6.
         let k: Vec<Block> = ms
             .into_iter()
             .zip(ts)
             .zip(alpha_bar_vec.iter())
             .enumerate()
-            .map(|(i, (([m0, m1], t), b))| {
+            .map(|(i, (([m0, m1], t), &b))| {
                 let tweak: Block = bytemuck::cast([i, self.state.exec_counter]);
                 if !b {
                     // H(t, i|ell) ^ M0
@@ -143,12 +148,12 @@ impl Receiver<state::Extension> {
             })
             .collect();
 
-        // Reconstruct GGM tree except `ws[alpha]`.
+        // Reconstructs GGM tree except `ws[alpha]`.
         let ggm_tree = GgmTree::new(h);
         self.state.ws = vec![Block::ZERO; 1 << h];
         ggm_tree.reconstruct(&mut self.state.ws, &k, &alpha_bar_vec);
 
-        // Set `ws[alpha]`.
+        // Sets `ws[alpha]`.
         self.state.ws[alpha] = self.state.ws.iter().fold(sum, |acc, &x| acc ^ x);
 
         Ok(())
@@ -220,13 +225,13 @@ impl Receiver<state::Extension> {
         }
 
         // Computes the base X^i
-        let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1 << x) as u128)).collect();
+        let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1 as u128) << x)).collect();
 
         // Computes Z.
         let mut w = Block::inn_prdt_red(&z_star, &base);
 
         // Computes W.
-        w ^= Block::inn_prdt_red(&self.state.chis, &base);
+        w ^= Block::inn_prdt_red(&self.state.chis, &self.state.ws);
 
         // Computes H'(W)
         let mut hasher = blake3::Hasher::new();
