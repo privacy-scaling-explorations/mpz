@@ -153,7 +153,8 @@ impl CircuitBuilder {
         state.outputs.push(value.into());
     }
 
-    pub(crate) fn clear_outputs(&self) {
+    /// Remove all outputs from the circuit
+    pub fn clear_outputs(&self) {
         self.state.borrow_mut().outputs.clear();
     }
 
