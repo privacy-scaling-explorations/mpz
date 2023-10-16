@@ -24,7 +24,7 @@ pub enum CircuitError {
 }
 
 /// A binary circuit.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Circuit {
     pub(crate) inputs: Vec<BinaryRepr>,
@@ -36,6 +36,22 @@ pub struct Circuit {
     pub(crate) sub_circuits: Vec<SubCircuit>,
     pub(crate) break_points: VecDeque<usize>,
     pub(crate) gates_count: usize,
+}
+
+impl std::fmt::Debug for Circuit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Circuit")
+            .field("inputs", &self.inputs)
+            .field("outputs", &self.outputs)
+            .field("gates", &"_")
+            .field("feed_count", &self.feed_count)
+            .field("and_count", &self.and_count)
+            .field("xor_count", &self.xor_count)
+            .field("sub_circuits", &self.sub_circuits)
+            .field("break_points", &self.break_points)
+            .field("gates_count", &self.gates_count)
+            .finish()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -145,6 +161,7 @@ impl Circuit {
         feeds[0] = Some(false);
         feeds[1] = Some(true);
 
+        println!("Set input nodes");
         for (input, value) in self.inputs.iter().zip(values) {
             if input.value_type() != value.value_type() {
                 return Err(TypeError::UnexpectedType {
@@ -154,11 +171,13 @@ impl Circuit {
             }
 
             for (node, bit) in input.iter().zip(value.clone().into_iter_lsb0()) {
+                println!("Set input node {}", node.id);
                 feeds[node.id] = Some(bit);
             }
         }
 
         for gate in Arc::clone(&self).into_gates_iterator() {
+            println!("Evaluate gate {:?}", gate);
             match gate {
                 Gate::Xor { x, y, z } => {
                     let x = feeds[x.id].expect("Feed should be set");
@@ -298,11 +317,11 @@ impl Iterator for SubCircuitIterator {
         };
 
         let new_gate = match self.gates_iter.next()? {
-            CircuitGate::Gate(gate) => gate.copy_with(
+            CircuitGate::Gate(gate) => CircuitGate::Gate(gate.copy_with(
                 gate.x().id + self.feed_offset,
                 gate.y().unwrap_or(Node::new(0)).id() + self.feed_offset,
                 gate.z().id + self.feed_offset,
-            ),
+            )),
             CircuitGate::InputGate(gate) => {
                 let adapted_gates = adapt_gates(
                     Node::new(gate.x().id + self.feed_offset),
@@ -311,15 +330,15 @@ impl Iterator for SubCircuitIterator {
                     )),
                     Node::new(gate.z().id + self.feed_offset),
                 );
-                gate.copy_with(
+                CircuitGate::InputGate(gate.copy_with(
                     adapted_gates.0,
                     adapted_gates.1.unwrap_or_default(),
                     adapted_gates.2,
-                )
+                ))
             }
         };
 
-        Some(CircuitGate::Gate(new_gate))
+        Some(new_gate)
     }
 }
 
