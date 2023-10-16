@@ -153,11 +153,6 @@ impl CircuitBuilder {
         state.outputs.push(value.into());
     }
 
-    /// Remove all outputs from the circuit
-    pub fn clear_outputs(&self) {
-        self.state.borrow_mut().outputs.clear();
-    }
-
     /// Returns a tracer for a constant value
     pub fn get_constant<T: ToBinaryRepr + BitIterable>(&self, value: T) -> Tracer<'_, T::Repr> {
         let mut state = self.state.borrow_mut();
@@ -396,8 +391,8 @@ impl BuilderState {
             .push_back(self.gates.len() - self.circuit_break_points.iter().sum::<usize>());
 
         // Update the outputs
-        self.outputs = circuit.outputs().to_vec();
-        self.outputs
+        let mut outputs = circuit.outputs().to_vec();
+        outputs
             .iter_mut()
             .for_each(|output| output.shift_right(self.feed_id));
 
@@ -431,7 +426,7 @@ impl BuilderState {
         };
         self.sub_circuits.push(sub_circuit);
 
-        Ok(self.outputs.clone())
+        Ok(outputs)
     }
 
     /// Builds the circuit.
