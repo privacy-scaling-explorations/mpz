@@ -461,7 +461,7 @@ impl BuilderState {
         value.iter().for_each(|node| {
             self.input_feeds.insert(node.id());
         });
-        self.inputs.push(value.clone());
+        self.inputs.push(value);
     }
 }
 

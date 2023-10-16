@@ -292,4 +292,22 @@ mod tests {
             test_circ!(circ, reference, fn(SHA2_INITIAL_STATE, msg.as_slice()) -> [u8; 32]);
         }
     }
+
+    #[test]
+    #[cfg(feature = "sha2")]
+    fn test_sha256_trace() {
+        let builder = CircuitBuilder::new();
+
+        let state = builder.add_array_input::<u32, 8>();
+        let msg_input = builder.add_vec_input::<u8>(1);
+
+        let output = sha256_trace(builder.state(), state, 0, &msg_input);
+        builder.add_output(output);
+
+        let circ = builder.build_arc().unwrap();
+
+        let msg = vec![0_u8];
+        let reference = |state, msg| sha256(state, 0, msg);
+        test_circ!(circ, reference, fn(SHA2_INITIAL_STATE, msg.as_slice()) -> [u8; 32]);
+    }
 }
