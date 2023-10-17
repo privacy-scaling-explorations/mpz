@@ -276,27 +276,34 @@ pub(crate) struct SubCircuitIterator {
     gates_iter: Box<InnerCircuitIterator>,
 }
 
+impl SubCircuitIterator {
+    fn adapt_gates(
+        &self,
+        x: Node<Sink>,
+        y: Option<Node<Sink>>,
+        z: Node<Feed>,
+    ) -> (usize, Option<usize>, usize) {
+        let mut x = x.id();
+        let mut y = y.map(|y| y.id());
+
+        if let Some(new_x) = self.feed_map.get(&(x - self.feed_offset)) {
+            x = *new_x;
+        }
+
+        if let Some(ref mut y) = y {
+            if let Some(new_y) = self.feed_map.get(&(*y - self.feed_offset)) {
+                *y = *new_y;
+            }
+        }
+
+        (x, y, z.id())
+    }
+}
+
 impl Iterator for SubCircuitIterator {
     type Item = CircuitGate;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let adapt_gates = |x: Node<Sink>, y: Option<Node<Sink>>, z: Node<Feed>| {
-            let mut x = x.id();
-            let mut y = y.map(|y| y.id());
-
-            if let Some(new_x) = self.feed_map.get(&(x - self.feed_offset)) {
-                x = *new_x;
-            }
-
-            if let Some(ref mut y) = y {
-                if let Some(new_y) = self.feed_map.get(&(*y - self.feed_offset)) {
-                    *y = *new_y;
-                }
-            }
-
-            (x, y, z.id())
-        };
-
         let new_gate = match self.gates_iter.next()? {
             CircuitGate::Gate(gate) => CircuitGate::Gate(gate.copy_with(
                 gate.x().id + self.feed_offset,
@@ -304,7 +311,7 @@ impl Iterator for SubCircuitIterator {
                 gate.z().id + self.feed_offset,
             )),
             CircuitGate::InputGate(gate) => {
-                let adapted_gates = adapt_gates(
+                let adapted_gates = self.adapt_gates(
                     Node::new(gate.x().id + self.feed_offset),
                     Some(Node::new(
                         gate.y().unwrap_or(Node::new(0)).id() + self.feed_offset,
@@ -378,6 +385,7 @@ struct InnerCircuitIterator {
 impl Iterator for InnerCircuitIterator {
     type Item = CircuitGate;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.next_gate.is_some() {
             return self.next_gate.take();
