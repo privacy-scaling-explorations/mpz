@@ -156,36 +156,36 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        // let input_configs = self.state().remove_input_configs(inputs);
+        let assigned_values = self.state().memory.drain_assigned(inputs);
 
-        // let id_0 = format!("{}/0", id);
-        // let id_1 = format!("{}/1", id);
+        let id_0 = format!("{}/0", id);
+        let id_1 = format!("{}/1", id);
 
-        // let (gen_id, ev_id) = match self.role {
-        //     Role::Leader => (id_0, id_1),
-        //     Role::Follower => (id_1, id_0),
-        // };
+        let (gen_id, ev_id) = match self.role {
+            Role::Leader => (id_0, id_1),
+            Role::Follower => (id_1, id_0),
+        };
 
-        // // // Setup inputs concurrently.
-        // // futures::try_join!(
-        // //     self.gen
-        // //         .setup_inputs(&gen_id, &input_configs, sink, ot_send)
-        // //         .map_err(DEAPError::from),
-        // //     self.ev
-        // //         .setup_inputs(&ev_id, &input_configs, stream, ot_recv)
-        // //         .map_err(DEAPError::from)
-        // // )?;
+        // // Setup inputs concurrently.
+        futures::try_join!(
+            self.gen
+                .setup_assigned_values(&gen_id, &assigned_values, sink, ot_send)
+                .map_err(DEAPError::from),
+            self.ev
+                .setup_assigned_values(&ev_id, &assigned_values, stream, ot_recv)
+                .map_err(DEAPError::from)
+        )?;
 
-        // // Generate and evaluate concurrently.
-        // // Drop the encoded outputs, we don't need them here
-        // _ = futures::try_join!(
-        //     self.gen
-        //         .generate(circ.clone(), inputs, outputs, sink, false)
-        //         .map_err(DEAPError::from),
-        //     self.ev
-        //         .evaluate(circ.clone(), inputs, outputs, stream)
-        //         .map_err(DEAPError::from)
-        // )?;
+        // Generate and evaluate concurrently.
+        // Drop the encoded outputs, we don't need them here
+        _ = futures::try_join!(
+            self.gen
+                .generate(circ.clone(), inputs, outputs, sink, false)
+                .map_err(DEAPError::from),
+            self.ev
+                .evaluate(circ.clone(), inputs, outputs, stream)
+                .map_err(DEAPError::from)
+        )?;
 
         Ok(())
     }
@@ -225,36 +225,36 @@ impl DEAP {
         U: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
         OTR: OTReceiveEncoding,
     {
-        // if matches!(self.role, Role::Follower) {
-        //     return Err(DEAPError::RoleError(
-        //         "DEAP follower can not act as the prover".to_string(),
-        //     ))?;
-        // }
+        if matches!(self.role, Role::Follower) {
+            return Err(DEAPError::RoleError(
+                "DEAP follower can not act as the prover".to_string(),
+            ))?;
+        }
 
-        // let input_configs = self.state().remove_input_configs(inputs);
+        let assigned_values = self.state().memory.drain_assigned(inputs);
 
-        // // // The prover only acts as the evaluator for ZKPs instead of
-        // // // dual-execution.
-        // // self.ev
-        // //     .setup_inputs(id, &input_configs, stream, ot_recv)
-        // //     .map_err(DEAPError::from)
-        // //     .await?;
+        // The prover only acts as the evaluator for ZKPs instead of
+        // dual-execution.
+        self.ev
+            .setup_assigned_values(id, &assigned_values, stream, ot_recv)
+            .map_err(DEAPError::from)
+            .await?;
 
-        // let outputs = self
-        //     .ev
-        //     .evaluate(circ, inputs, outputs, stream)
-        //     .map_err(DEAPError::from)
-        //     .await?;
+        let outputs = self
+            .ev
+            .evaluate(circ, inputs, outputs, stream)
+            .map_err(DEAPError::from)
+            .await?;
 
-        // let output_digest = outputs.hash();
-        // let (decommitment, commitment) = output_digest.hash_commit();
+        let output_digest = outputs.hash();
+        let (decommitment, commitment) = output_digest.hash_commit();
 
-        // // Store output proof decommitment until finalization
-        // self.state()
-        //     .proof_decommitments
-        //     .insert(id.to_string(), decommitment);
+        // Store output proof decommitment until finalization
+        self.state()
+            .proof_decommitments
+            .insert(id.to_string(), decommitment);
 
-        // sink.send(GarbleMessage::HashCommitment(commitment)).await?;
+        sink.send(GarbleMessage::HashCommitment(commitment)).await?;
 
         Ok(())
     }
@@ -296,41 +296,41 @@ impl DEAP {
         U: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
         OTS: OTSendEncoding,
     {
-        // if matches!(self.role, Role::Leader) {
-        //     return Err(DEAPError::RoleError(
-        //         "DEAP leader can not act as the verifier".to_string(),
-        //     ))?;
-        // }
+        if matches!(self.role, Role::Leader) {
+            return Err(DEAPError::RoleError(
+                "DEAP leader can not act as the verifier".to_string(),
+            ))?;
+        }
 
-        // let input_configs = self.state().remove_input_configs(inputs);
+        let assigned_values = self.state().memory.drain_assigned(inputs);
 
-        // // // The verifier only acts as the generator for ZKPs instead of
-        // // // dual-execution.
-        // // self.gen
-        // //     .setup_inputs(id, &input_configs, sink, ot_send)
-        // //     .map_err(DEAPError::from)
-        // //     .await?;
+        // The verifier only acts as the generator for ZKPs instead of
+        // dual-execution.
+        self.gen
+            .setup_assigned_values(id, &assigned_values, sink, ot_send)
+            .map_err(DEAPError::from)
+            .await?;
 
-        // let (encoded_outputs, _) = self
-        //     .gen
-        //     .generate(circ.clone(), inputs, outputs, sink, false)
-        //     .map_err(DEAPError::from)
-        //     .await?;
+        let (encoded_outputs, _) = self
+            .gen
+            .generate(circ.clone(), inputs, outputs, sink, false)
+            .map_err(DEAPError::from)
+            .await?;
 
-        // let expected_outputs = expected_outputs
-        //     .iter()
-        //     .zip(encoded_outputs)
-        //     .map(|(expected, encoded)| encoded.select(expected.clone()).unwrap())
-        //     .collect::<Vec<_>>();
+        let expected_outputs = expected_outputs
+            .iter()
+            .zip(encoded_outputs)
+            .map(|(expected, encoded)| encoded.select(expected.clone()).unwrap())
+            .collect::<Vec<_>>();
 
-        // let expected_digest = expected_outputs.hash();
+        let expected_digest = expected_outputs.hash();
 
-        // let commitment = expect_msg_or_err!(stream, GarbleMessage::HashCommitment)?;
+        let commitment = expect_msg_or_err!(stream, GarbleMessage::HashCommitment)?;
 
-        // // Store commitment to proof until finalization
-        // self.state()
-        //     .proof_commitments
-        //     .insert(id.to_string(), (expected_digest, commitment));
+        // Store commitment to proof until finalization
+        self.state()
+            .proof_commitments
+            .insert(id.to_string(), (expected_digest, commitment));
 
         Ok(())
     }
@@ -772,6 +772,10 @@ impl State {
             .memory
             .new_input(&id, typ, Visibility::Private)
             .expect("otp id is unique");
+
+        self.memory
+            .assign(&value_ref, value.clone())
+            .expect("value should assign");
 
         (value_ref, value)
     }
