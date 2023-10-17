@@ -14,17 +14,18 @@ use mpz_circuits::{
     types::{Value, ValueType},
     Circuit,
 };
-use mpz_core::{
-    hash::Hash,
-    value::{ValueId, ValueRef},
-};
+use mpz_core::hash::Hash;
 use mpz_garble_core::{
     encoding_state, msg::GarbleMessage, ChaChaEncoder, EncodedValue, Encoder,
     Generator as GeneratorCore,
 };
 use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 
-use crate::{config::ValueIdConfig, ot::OTSendEncoding, registry::EncodingRegistry};
+use crate::{
+    ot::OTSendEncoding,
+    registry::EncodingRegistry,
+    value::{ValueId, ValueRef},
+};
 
 pub use config::{GeneratorConfig, GeneratorConfigBuilder};
 pub use error::GeneratorError;

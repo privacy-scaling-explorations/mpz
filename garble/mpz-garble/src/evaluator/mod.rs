@@ -14,10 +14,7 @@ use mpz_circuits::{
     types::{TypeError, Value, ValueType},
     Circuit,
 };
-use mpz_core::{
-    hash::Hash,
-    value::{ValueId, ValueRef},
-};
+use mpz_core::hash::Hash;
 use mpz_garble_core::{
     encoding_state, msg::GarbleMessage, Decoding, EncodedValue, Evaluator as EvaluatorCore,
 };
@@ -31,6 +28,7 @@ use crate::{
     config::ValueIdConfig,
     ot::{OTReceiveEncoding, OTVerifyEncoding},
     registry::EncodingRegistry,
+    value::{ValueId, ValueRef},
     Generator, GeneratorConfigBuilder,
 };
 

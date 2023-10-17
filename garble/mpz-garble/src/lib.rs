@@ -13,7 +13,6 @@ use mpz_circuits::{
     types::{PrimitiveType, StaticValueType, Value, ValueType},
     Circuit,
 };
-pub use mpz_core::value::{ValueId, ValueRef};
 
 pub mod config;
 pub(crate) mod evaluator;
@@ -23,6 +22,7 @@ pub mod ot;
 pub mod protocol;
 pub(crate) mod registry;
 mod threadpool;
+pub mod value;
 
 pub use evaluator::{Evaluator, EvaluatorConfig, EvaluatorConfigBuilder, EvaluatorError};
 pub use generator::{Generator, GeneratorConfig, GeneratorConfigBuilder, GeneratorError};

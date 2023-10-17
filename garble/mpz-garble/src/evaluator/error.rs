@@ -1,4 +1,4 @@
-use mpz_core::value::{ValueId, ValueRef};
+use crate::value::{ValueId, ValueRef};
 
 /// Errors that can occur while performing the role of an evaluator
 #[derive(Debug, thiserror::Error)]

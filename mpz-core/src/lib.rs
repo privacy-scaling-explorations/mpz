@@ -14,7 +14,6 @@ pub mod prp;
 pub mod serialize;
 pub mod tkprp;
 pub mod utils;
-pub mod value;
 
 pub use block::{Block, BlockSerialize};
 

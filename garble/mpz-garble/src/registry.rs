@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
 use mpz_circuits::types::ValueType;
-use mpz_core::value::{ValueId, ValueRef};
 use mpz_garble_core::{encoding_state::LabelState, EncodedValue};
 
-use crate::MemoryError;
+use crate::{
+    value::{ValueId, ValueRef},
+    MemoryError,
+};
 
 /// A registry of values.
 ///

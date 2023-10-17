@@ -1,5 +1,6 @@
-use mpz_core::value::ValueRef;
 use mpz_garble_core::ValueError;
+
+use crate::value::ValueRef;
 
 /// Errors that can occur while performing the role of a generator
 #[derive(Debug, thiserror::Error)]

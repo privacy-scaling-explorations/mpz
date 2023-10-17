@@ -13,7 +13,6 @@ use mpz_circuits::{
     types::{Value, ValueType},
     Circuit,
 };
-use mpz_core::value::ValueRef;
 use mpz_garble_core::{encoding_state::Active, msg::GarbleMessage, EncodedValue};
 use utils::id::NestedId;
 use utils_aio::{duplex::Duplex, mux::MuxChannel};
@@ -21,6 +20,7 @@ use utils_aio::{duplex::Duplex, mux::MuxChannel};
 use crate::{
     config::{Role, Visibility},
     ot::{VerifiableOTReceiveEncoding, VerifiableOTSendEncoding},
+    value::ValueRef,
     Decode, DecodeError, DecodePrivate, Execute, ExecutionError, Memory, MemoryError, Prove,
     ProveError, Thread, Verify, VerifyError, Vm, VmError,
 };

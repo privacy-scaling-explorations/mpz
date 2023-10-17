@@ -18,7 +18,6 @@ use mpz_circuits::{types::Value, Circuit};
 use mpz_core::{
     commit::{Decommitment, HashCommit},
     hash::{Hash, SecureHash},
-    value::{ValueId, ValueRef},
 };
 use mpz_garble_core::{msg::GarbleMessage, EqualityCheck};
 use rand::thread_rng;
@@ -31,6 +30,7 @@ use crate::{
     internal_circuits::{build_otp_circuit, build_otp_shared_circuit},
     ot::{OTReceiveEncoding, OTSendEncoding, OTVerifyEncoding},
     registry::ValueRegistry,
+    value::{ValueId, ValueRef},
 };
 
 pub use error::{DEAPError, PeerEncodingsError};
