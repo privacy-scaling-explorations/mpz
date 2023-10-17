@@ -44,7 +44,7 @@ pub trait StaticValueType: Into<Value> {
 /// A primitive type.
 ///
 /// For example, `u8` is a primitive type, but `[u8; 4]` is not.
-pub trait PrimitiveType: BinaryLength {}
+pub trait PrimitiveType: StaticValueType + BinaryLength {}
 
 /// A type that has a constant bit length.
 pub trait BinaryLength {
