@@ -24,7 +24,7 @@ pub enum CircuitError {
 }
 
 /// A binary circuit.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Circuit {
     pub(crate) inputs: Vec<BinaryRepr>,
@@ -36,22 +36,6 @@ pub struct Circuit {
     pub(crate) sub_circuits: Vec<SubCircuit>,
     pub(crate) break_points: VecDeque<usize>,
     pub(crate) gates_count: usize,
-}
-
-impl std::fmt::Debug for Circuit {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Circuit")
-            .field("inputs", &self.inputs)
-            .field("outputs", &self.outputs)
-            .field("gates", &"_")
-            .field("feed_count", &self.feed_count)
-            .field("and_count", &self.and_count)
-            .field("xor_count", &self.xor_count)
-            .field("sub_circuits", &self.sub_circuits)
-            .field("break_points", &self.break_points)
-            .field("gates_count", &self.gates_count)
-            .finish()
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -161,7 +145,6 @@ impl Circuit {
         feeds[0] = Some(false);
         feeds[1] = Some(true);
 
-        println!("Set input nodes");
         for (input, value) in self.inputs.iter().zip(values) {
             if input.value_type() != value.value_type() {
                 return Err(TypeError::UnexpectedType {
@@ -171,13 +154,11 @@ impl Circuit {
             }
 
             for (node, bit) in input.iter().zip(value.clone().into_iter_lsb0()) {
-                println!("Set input node {}", node.id);
                 feeds[node.id] = Some(bit);
             }
         }
 
         for gate in Arc::clone(&self).into_gates_iterator() {
-            println!("Evaluate gate {:?}", gate);
             match gate {
                 Gate::Xor { x, y, z } => {
                     let x = feeds[x.id].expect("Feed should be set");

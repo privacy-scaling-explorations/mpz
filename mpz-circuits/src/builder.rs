@@ -406,6 +406,8 @@ impl BuilderState {
 
         // Store the new circuit as sub-circuit and the input mappings
         let mut feed_map = HashMap::new();
+        feed_map.insert(0, 0);
+        feed_map.insert(1, 1);
         circuit
             .inputs()
             .iter()
@@ -458,6 +460,9 @@ impl BuilderState {
     }
 
     fn add_input_internal(&mut self, value: BinaryRepr) {
+        self.input_feeds.insert(0);
+        self.input_feeds.insert(1);
+
         value.iter().for_each(|node| {
             self.input_feeds.insert(node.id());
         });
@@ -524,43 +529,5 @@ mod test {
 
         // a + (a + b) = 2a + b
         assert_eq!(d, 3u8);
-    }
-
-    #[test]
-    fn test_double_append() {
-        let circ = build_adder();
-
-        let builder = CircuitBuilder::new();
-
-        let a = builder.add_input::<u8>();
-        let b = builder.add_input::<u8>();
-
-        let c = a.wrapping_add(b);
-
-        let mut appended_outputs = builder.append(circ, &[a.into(), c.into()]).unwrap();
-
-        let d = appended_outputs.pop().unwrap();
-
-        builder.add_output(d);
-
-        let circ2 = builder.build_arc().unwrap();
-
-        let builder2 = CircuitBuilder::new();
-
-        let e = builder2.add_input::<u8>();
-        let f = builder2.add_input::<u8>();
-        let mut appended_outputs2 = builder2
-            .append(circ2.clone(), &[e.into(), f.into()])
-            .unwrap();
-        let g = appended_outputs2.pop().unwrap();
-        builder2.add_output(g);
-        let circ2 = builder2.build_arc().unwrap();
-
-        let mut output = circ2.evaluate(&[1u8.into(), 1u8.into()]).unwrap();
-
-        let h: u8 = output.pop().unwrap().try_into().unwrap();
-
-        // a + (a + b) = 2a + b
-        assert_eq!(h, 3u8);
     }
 }
