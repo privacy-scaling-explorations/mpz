@@ -354,8 +354,9 @@ impl State {
     ) -> Result<EncodedValue<encoding_state::Full>, GeneratorError> {
         match (value, ty) {
             (ValueRef::Value { id }, ty) if !ty.is_array() => self.encode_by_id(id, ty),
-            (ValueRef::Array(ids), ValueType::Array(elem_ty, len)) if ids.len() == *len => {
-                let encodings = ids
+            (ValueRef::Array(array), ValueType::Array(elem_ty, len)) if array.len() == *len => {
+                let encodings = array
+                    .ids()
                     .iter()
                     .map(|id| self.encode_by_id(id, elem_ty))
                     .collect::<Result<Vec<_>, _>>()?;

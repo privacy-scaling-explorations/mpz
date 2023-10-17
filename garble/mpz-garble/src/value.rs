@@ -43,6 +43,38 @@ impl AsRef<str> for ValueId {
     }
 }
 
+/// A reference to an array value.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ArrayRef {
+    ids: Vec<ValueId>,
+}
+
+impl ArrayRef {
+    /// Creates a new array reference.
+    ///
+    /// # Invariants
+    ///
+    /// The outer context must enforce the following invariants:
+    ///
+    ///  * The array must have at least one value.
+    ///  * All values in the array must have the same type.
+    pub(crate) fn new(ids: Vec<ValueId>) -> Self {
+        assert!(ids.len() > 0, "cannot create an array with no values");
+
+        Self { ids }
+    }
+
+    /// Returns the value IDs.
+    pub(crate) fn ids(&self) -> &[ValueId] {
+        &self.ids
+    }
+
+    /// Returns the number of values.
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+}
+
 /// A reference to a value.
 ///
 /// Every single value is assigned a unique ID. Whereas, arrays are
@@ -52,8 +84,8 @@ impl AsRef<str> for ValueId {
 pub enum ValueRef {
     /// A single value.
     Value { id: ValueId },
-    /// An array of values.
-    Array(Vec<ValueId>),
+    /// A reference to an array of values.
+    Array(ArrayRef),
 }
 
 impl ValueRef {
@@ -62,7 +94,7 @@ impl ValueRef {
     pub fn len(&self) -> usize {
         match self {
             ValueRef::Value { .. } => 1,
-            ValueRef::Array(values) => values.len(),
+            ValueRef::Array(values) => values.ids.len(),
         }
     }
 
@@ -74,12 +106,13 @@ impl ValueRef {
             ValueRef::Value { id: value_id } => ValueRef::Value {
                 id: value_id.append_id(id),
             },
-            ValueRef::Array(values) => ValueRef::Array(
-                values
+            ValueRef::Array(values) => ValueRef::Array(ArrayRef {
+                ids: values
+                    .ids
                     .iter()
                     .map(|value_id| value_id.append_id(id))
                     .collect(),
-            ),
+            }),
         }
     }
 
@@ -92,7 +125,7 @@ impl ValueRef {
     pub fn iter(&self) -> Box<dyn Iterator<Item = &ValueId> + '_> {
         match self {
             ValueRef::Value { id, .. } => Box::new(std::iter::once(id)),
-            ValueRef::Array(values) => Box::new(values.iter()),
+            ValueRef::Array(values) => Box::new(values.ids.iter()),
         }
     }
 }
