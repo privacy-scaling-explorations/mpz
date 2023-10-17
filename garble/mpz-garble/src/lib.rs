@@ -8,8 +8,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use config::Visibility;
 use mpz_circuits::{
-    types::{StaticValueType, Value, ValueType},
+    types::{PrimitiveType, StaticValueType, Value, ValueType},
     Circuit,
 };
 pub use mpz_core::value::{ValueId, ValueRef};
@@ -144,64 +145,91 @@ pub trait Thread: Memory {}
 
 /// This trait provides methods for interacting with values in memory.
 pub trait Memory {
-    /// Adds a new public input value, returning a reference to it.
-    fn new_public_input<T: StaticValueType>(
+    /// Adds a new input value, returning a reference to it.
+    fn new_input_with_type(
         &self,
         id: &str,
-        value: T,
+        typ: ValueType,
+        visibility: Visibility,
     ) -> Result<ValueRef, MemoryError>;
+
+    /// Adds a new input value, returning a reference to it.
+    fn new_input<T: StaticValueType>(
+        &self,
+        id: &str,
+        visibility: Visibility,
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_input_with_type(id, T::value_type(), visibility)
+    }
+
+    /// Adds a new public input value, returning a reference to it.
+    fn new_public_input<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_input::<T>(id, Visibility::Public)
+    }
 
     /// Adds a new public array input value, returning a reference to it.
-    fn new_public_array_input<T: StaticValueType>(
+    fn new_public_array_input<T: PrimitiveType>(
         &self,
         id: &str,
-        value: Vec<T>,
-    ) -> Result<ValueRef, MemoryError>
-    where
-        Vec<T>: Into<Value>;
-
-    /// Adds a new public input value, returning a reference to it.
-    fn new_public_input_by_type(&self, id: &str, value: Value) -> Result<ValueRef, MemoryError>;
+        len: usize,
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_input_with_type(id, ValueType::new_array::<T>(len), Visibility::Public)
+    }
 
     /// Adds a new private input value, returning a reference to it.
-    fn new_private_input<T: StaticValueType>(
-        &self,
-        id: &str,
-        value: Option<T>,
-    ) -> Result<ValueRef, MemoryError>;
+    fn new_private_input<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_input::<T>(id, Visibility::Private)
+    }
 
     /// Adds a new private array input value, returning a reference to it.
-    fn new_private_array_input<T: StaticValueType>(
+    fn new_private_array_input<T: PrimitiveType>(
         &self,
         id: &str,
-        value: Option<Vec<T>>,
         len: usize,
-    ) -> Result<ValueRef, MemoryError>
-    where
-        Vec<T>: Into<Value>;
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_input_with_type(id, ValueType::new_array::<T>(len), Visibility::Private)
+    }
 
-    /// Adds a new private input value, returning a reference to it.
-    fn new_private_input_by_type(
+    /// Adds a new blind input value, returning a reference to it.
+    fn new_blind_input<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_input::<T>(id, Visibility::Blind)
+    }
+
+    /// Adds a new blind array input value, returning a reference to it.
+    fn new_blind_array_input<T: PrimitiveType>(
         &self,
         id: &str,
-        ty: &ValueType,
-        value: Option<Value>,
-    ) -> Result<ValueRef, MemoryError>;
+        len: usize,
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_input_with_type(id, ValueType::new_array::<T>(len), Visibility::Blind)
+    }
 
-    /// Creates a new output value, returning a reference to it.
-    fn new_output<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError>;
+    /// Adds a new output value, returning a reference to it.
+    fn new_output_with_type(&self, id: &str, typ: ValueType) -> Result<ValueRef, MemoryError>;
+
+    /// Adds a new output value, returning a reference to it.
+    fn new_output<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_output_with_type(id, T::value_type())
+    }
 
     /// Creates a new array output value, returning a reference to it.
-    fn new_array_output<T: StaticValueType>(
+    fn new_array_output<T: PrimitiveType>(
         &self,
         id: &str,
         len: usize,
-    ) -> Result<ValueRef, MemoryError>
-    where
-        Vec<T>: Into<Value>;
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_output_with_type(id, ValueType::new_array::<T>(len))
+    }
 
-    /// Creates a new output value, returning a reference to it.
-    fn new_output_by_type(&self, id: &str, ty: &ValueType) -> Result<ValueRef, MemoryError>;
+    /// Assigns a value.
+    fn assign(
+        &self,
+        value_ref: &ValueRef,
+        value: impl Into<Value>,
+    ) -> Result<ValueRef, MemoryError>;
+
+    /// Assigns a value.
+    fn assign_by_id(&self, id: &str, value: impl Into<Value>) -> Result<ValueRef, MemoryError>;
 
     /// Returns a value if it exists.
     fn get_value(&self, id: &str) -> Option<ValueRef>;
