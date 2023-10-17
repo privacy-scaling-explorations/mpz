@@ -18,18 +18,19 @@ pub mod config;
 pub(crate) mod evaluator;
 pub(crate) mod generator;
 pub(crate) mod internal_circuits;
+pub(crate) mod memory;
 pub mod ot;
 pub mod protocol;
-pub(crate) mod registry;
 mod threadpool;
 pub mod value;
 
 pub use evaluator::{Evaluator, EvaluatorConfig, EvaluatorConfigBuilder, EvaluatorError};
 pub use generator::{Generator, GeneratorConfig, GeneratorConfigBuilder, GeneratorError};
-pub use registry::ValueRegistry;
+pub use memory::{AssignedValues, ValueMemory};
 pub use threadpool::ThreadPool;
 
 use utils::id::NestedId;
+use value::{ValueId, ValueRef};
 
 /// Errors that can occur when using an implementation of [`Vm`].
 #[derive(Debug, thiserror::Error)]
@@ -65,10 +66,34 @@ pub enum MemoryError {
     DuplicateValueId(ValueId),
     #[error("duplicate value: {0:?}")]
     DuplicateValue(ValueRef),
+    #[error("value with id {0} has not been defined")]
+    Undefined(String),
     #[error(transparent)]
-    TypeError(#[from] mpz_circuits::types::TypeError),
-    #[error("invalid value type {1:?} for {0:?}")]
-    InvalidType(ValueId, mpz_circuits::types::ValueType),
+    Assignment(#[from] AssignmentError),
+}
+
+/// Errors that can occur when assigning values.
+#[derive(Debug, thiserror::Error)]
+pub enum AssignmentError {
+    /// The value is already assigned.
+    #[error("value already assigned: {0:?}")]
+    Duplicate(ValueId),
+    /// Can not assign to a blind input value.
+    #[error("can not assign to a blind input value: {0:?}")]
+    BlindInput(ValueId),
+    /// Can not assign to an output value.
+    #[error("can not assign to an output value: {0:?}")]
+    Output(ValueId),
+    /// Attempted to assign a value with an invalid type.
+    #[error("invalid value type {actual:?} for {value:?}, expected {expected:?}")]
+    Type {
+        /// The value reference.
+        value: ValueRef,
+        /// The expected type.
+        expected: ValueType,
+        /// The actual type.
+        actual: ValueType,
+    },
 }
 
 /// Errors that can occur when executing a circuit.
@@ -222,14 +247,10 @@ pub trait Memory {
     }
 
     /// Assigns a value.
-    fn assign(
-        &self,
-        value_ref: &ValueRef,
-        value: impl Into<Value>,
-    ) -> Result<ValueRef, MemoryError>;
+    fn assign(&self, value_ref: &ValueRef, value: impl Into<Value>) -> Result<(), MemoryError>;
 
     /// Assigns a value.
-    fn assign_by_id(&self, id: &str, value: impl Into<Value>) -> Result<ValueRef, MemoryError>;
+    fn assign_by_id(&self, id: &str, value: impl Into<Value>) -> Result<(), MemoryError>;
 
     /// Returns a value if it exists.
     fn get_value(&self, id: &str) -> Option<ValueRef>;

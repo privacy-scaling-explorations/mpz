@@ -46,7 +46,7 @@ pub enum FinalizationError {
 pub enum PeerEncodingsError {
     #[error("Encodings not available since DEAP instance already finalized")]
     AlreadyFinalized,
-    #[error("Value id was not found in registry: {0:?}")]
+    #[error("Value id was not found in memory: {0:?}")]
     ValueIdNotFound(String),
     #[error("Encoding is not available for value: {0:?}")]
     EncodingNotAvailable(ValueRef),

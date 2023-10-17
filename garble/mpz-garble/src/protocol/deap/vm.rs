@@ -216,15 +216,11 @@ impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
         self.deap().new_output_with_type(id, typ)
     }
 
-    fn assign(
-        &self,
-        value_ref: &ValueRef,
-        value: impl Into<Value>,
-    ) -> Result<ValueRef, MemoryError> {
+    fn assign(&self, value_ref: &ValueRef, value: impl Into<Value>) -> Result<(), MemoryError> {
         self.deap().assign(value_ref, value)
     }
 
-    fn assign_by_id(&self, id: &str, value: impl Into<Value>) -> Result<ValueRef, MemoryError> {
+    fn assign_by_id(&self, id: &str, value: impl Into<Value>) -> Result<(), MemoryError> {
         self.deap().assign_by_id(id, value)
     }
 

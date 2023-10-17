@@ -22,9 +22,10 @@ use mpz_garble_core::{
 use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 
 use crate::{
+    memory::EncodingMemory,
     ot::OTSendEncoding,
-    registry::EncodingRegistry,
     value::{ValueId, ValueRef},
+    AssignedValues,
 };
 
 pub use config::{GeneratorConfig, GeneratorConfigBuilder};
@@ -42,7 +43,7 @@ struct State {
     /// The encoder used to encode values
     encoder: ChaChaEncoder,
     /// Encodings of values
-    encoding_registry: EncodingRegistry<encoding_state::Full>,
+    memory: EncodingMemory<encoding_state::Full>,
     /// The set of values that are currently active.
     ///
     /// A value is considered active when it has been encoded and sent to the evaluator.
@@ -73,7 +74,7 @@ impl Generator {
 
     /// Returns the encoding for a value.
     pub fn get_encoding(&self, value: &ValueRef) -> Option<EncodedValue<encoding_state::Full>> {
-        self.state().encoding_registry.get_encoding(value)
+        self.state().memory.get_encoding(value)
     }
 
     pub(crate) fn get_encodings_by_id(
@@ -83,7 +84,7 @@ impl Generator {
         let state = self.state();
 
         ids.iter()
-            .map(|id| state.encoding_registry.get_encoding_by_id(id))
+            .map(|id| state.memory.get_encoding_by_id(id))
             .collect::<Option<Vec<_>>>()
     }
 
@@ -101,41 +102,27 @@ impl Generator {
         Ok(())
     }
 
-    /// Setup input values by transferring the encodings to the evaluator
-    /// either directly or via oblivious transfer.
+    /// Transfer encodings for the provided assigned values.
     ///
     /// # Arguments
     ///
-    /// * `id` - The ID of this operation
-    /// * `input_configs` - The inputs to set up
-    /// * `sink` - The sink to send the encodings to the evaluator
-    /// * `ot` - The OT sender.
-    pub async fn setup_inputs<
+    /// - `id` - The ID of this operation
+    /// - `values` - The assigned values
+    /// - `sink` - The sink to send the encodings to the evaluator
+    /// - `ot` - The OT sender
+    pub async fn setup_assigned_values<
         S: Sink<GarbleMessage, Error = std::io::Error> + Unpin,
         OT: OTSendEncoding,
     >(
         &self,
         id: &str,
-        input_configs: &[ValueIdConfig],
+        values: &AssignedValues,
         sink: &mut S,
         ot: &OT,
     ) -> Result<(), GeneratorError> {
-        let mut ot_send_values = Vec::new();
-        let mut direct_send_values = Vec::new();
-        for config in input_configs.iter().cloned() {
-            match config {
-                ValueIdConfig::Public { id, value, .. } => {
-                    direct_send_values.push((id, value));
-                }
-                ValueIdConfig::Private { id, value, ty } => {
-                    if let Some(value) = value {
-                        direct_send_values.push((id, value));
-                    } else {
-                        ot_send_values.push((id, ty));
-                    }
-                }
-            }
-        }
+        let ot_send_values = values.blind.clone();
+        let mut direct_send_values = values.public.clone();
+        direct_send_values.extend(values.private.iter().cloned());
 
         futures::try_join!(
             self.ot_send_active_encodings(id, &ot_send_values, ot),
@@ -152,7 +139,7 @@ impl Generator {
     /// - `id` - The ID of this operation
     /// - `values` - The values to send
     /// - `ot` - The OT sender
-    async fn ot_send_active_encodings<OT: OTSendEncoding>(
+    pub async fn ot_send_active_encodings<OT: OTSendEncoding>(
         &self,
         id: &str,
         values: &[(ValueId, ValueType)],
@@ -188,7 +175,7 @@ impl Generator {
     ///
     /// - `values` - The values to send
     /// - `sink` - The sink to send the encodings to the evaluator
-    async fn direct_send_active_encodings<
+    pub async fn direct_send_active_encodings<
         S: Sink<GarbleMessage, Error = std::io::Error> + Unpin,
     >(
         &self,
@@ -249,7 +236,7 @@ impl Generator {
                 .iter()
                 .map(|value| {
                     state
-                        .encoding_registry
+                        .memory
                         .get_encoding(value)
                         .ok_or(GeneratorError::MissingEncoding(value.clone()))
                 })
@@ -293,12 +280,10 @@ impl Generator {
                 .await?;
         }
 
-        // Add the outputs to the encoding registry and set as active.
+        // Add the outputs to the memory and set as active.
         let mut state = self.state();
         for (output, encoding) in outputs.iter().zip(encoded_outputs.iter()) {
-            state
-                .encoding_registry
-                .set_encoding(output, encoding.clone())?;
+            state.memory.set_encoding(output, encoding.clone())?;
             output.iter().for_each(|id| {
                 state.active.insert(id.clone());
             });
@@ -324,7 +309,7 @@ impl Generator {
                 .iter()
                 .map(|value| {
                     state
-                        .encoding_registry
+                        .memory
                         .get_encoding(value)
                         .ok_or(GeneratorError::MissingEncoding(value.clone()))
                         .map(|encoding| encoding.decoding())
@@ -375,8 +360,7 @@ impl State {
         let encoding = self.encoder.encode_by_type(id.to_u64(), ty);
 
         // Returns error if the encoding already exists
-        self.encoding_registry
-            .set_encoding_by_id(id, encoding.clone())?;
+        self.memory.set_encoding_by_id(id, encoding.clone())?;
 
         Ok(encoding)
     }

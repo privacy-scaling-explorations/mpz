@@ -3,9 +3,7 @@ use mpz_garble_core::msg::GarbleMessage;
 use mpz_ot::mock::mock_ot_shared_pair;
 use utils_aio::duplex::MemoryDuplex;
 
-use mpz_garble::{
-    config::ValueConfig, Evaluator, Generator, GeneratorConfigBuilder, ValueRegistry,
-};
+use mpz_garble::{config::Visibility, Evaluator, Generator, GeneratorConfigBuilder, ValueMemory};
 
 #[tokio::test]
 async fn test_semi_honest() {
@@ -18,35 +16,32 @@ async fn test_semi_honest() {
     );
     let ev = Evaluator::default();
 
-    let mut value_registry = ValueRegistry::default();
-
     let key = [69u8; 16];
     let msg = [42u8; 16];
 
-    let key_ref = value_registry
-        .add_value("key", <[u8; 16]>::value_type())
-        .unwrap();
-    let msg_ref = value_registry
-        .add_value("msg", <[u8; 16]>::value_type())
-        .unwrap();
-    let ciphertext_ref = value_registry
-        .add_value("ciphertext", <[u8; 16]>::value_type())
-        .unwrap();
-
     let gen_fut = async {
-        let value_configs = [
-            ValueConfig::new_private::<[u8; 16]>(key_ref.clone(), Some(key))
-                .unwrap()
-                .flatten(),
-            ValueConfig::new_private::<[u8; 16]>(msg_ref.clone(), None)
-                .unwrap()
-                .flatten(),
-        ]
-        .concat();
+        let mut memory = ValueMemory::default();
 
-        gen.setup_inputs("test", &value_configs, &mut gen_channel, &ot_send)
-            .await
+        let key_ref = memory
+            .new_input("key", <[u8; 16]>::value_type(), Visibility::Private)
             .unwrap();
+        let msg_ref = memory
+            .new_input("msg", <[u8; 16]>::value_type(), Visibility::Blind)
+            .unwrap();
+        let ciphertext_ref = memory
+            .new_output("ciphertext", <[u8; 16]>::value_type())
+            .unwrap();
+
+        memory.assign(&key_ref, key.into()).unwrap();
+
+        gen.setup_assigned_values(
+            "test",
+            &memory.drain_assigned(&[key_ref.clone(), msg_ref.clone()]),
+            &mut gen_channel,
+            &ot_send,
+        )
+        .await
+        .unwrap();
 
         gen.generate(
             AES128.clone(),
@@ -57,22 +52,33 @@ async fn test_semi_honest() {
         )
         .await
         .unwrap();
+
+        gen.get_encoding(&ciphertext_ref).unwrap()
     };
 
     let ev_fut = async {
-        let value_configs = [
-            ValueConfig::new_private::<[u8; 16]>(key_ref.clone(), None)
-                .unwrap()
-                .flatten(),
-            ValueConfig::new_private::<[u8; 16]>(msg_ref.clone(), Some(msg))
-                .unwrap()
-                .flatten(),
-        ]
-        .concat();
+        let mut memory = ValueMemory::default();
 
-        ev.setup_inputs("test", &value_configs, &mut ev_channel, &ot_recv)
-            .await
+        let key_ref = memory
+            .new_input("key", <[u8; 16]>::value_type(), Visibility::Blind)
             .unwrap();
+        let msg_ref = memory
+            .new_input("msg", <[u8; 16]>::value_type(), Visibility::Private)
+            .unwrap();
+        let ciphertext_ref = memory
+            .new_output("ciphertext", <[u8; 16]>::value_type())
+            .unwrap();
+
+        memory.assign(&msg_ref, msg.into()).unwrap();
+
+        ev.setup_assigned_values(
+            "test",
+            &memory.drain_assigned(&[key_ref.clone(), msg_ref.clone()]),
+            &mut ev_channel,
+            &ot_recv,
+        )
+        .await
+        .unwrap();
 
         _ = ev
             .evaluate(
@@ -83,12 +89,11 @@ async fn test_semi_honest() {
             )
             .await
             .unwrap();
+
+        ev.get_encoding(&ciphertext_ref).unwrap()
     };
 
-    tokio::join!(gen_fut, ev_fut);
-
-    let ciphertext_full_encoding = gen.get_encoding(&ciphertext_ref).unwrap();
-    let ciphertext_active_encoding = ev.get_encoding(&ciphertext_ref).unwrap();
+    let (ciphertext_full_encoding, ciphertext_active_encoding) = tokio::join!(gen_fut, ev_fut);
 
     let decoding = ciphertext_full_encoding.decoding();
     let ciphertext: [u8; 16] = ciphertext_active_encoding

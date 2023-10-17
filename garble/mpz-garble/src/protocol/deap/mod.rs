@@ -14,7 +14,10 @@ use std::{
 };
 
 use futures::{Sink, SinkExt, Stream, StreamExt, TryFutureExt};
-use mpz_circuits::{types::Value, Circuit};
+use mpz_circuits::{
+    types::{Value, ValueType},
+    Circuit,
+};
 use mpz_core::{
     commit::{Decommitment, HashCommit},
     hash::{Hash, SecureHash},
@@ -24,13 +27,13 @@ use rand::thread_rng;
 use utils_aio::expect_msg_or_err;
 
 use crate::{
-    config::{Role, ValueConfig, ValueIdConfig, Visibility},
+    config::{Role, Visibility},
     evaluator::{Evaluator, EvaluatorConfigBuilder},
     generator::{Generator, GeneratorConfigBuilder},
     internal_circuits::{build_otp_circuit, build_otp_shared_circuit},
+    memory::ValueMemory,
     ot::{OTReceiveEncoding, OTSendEncoding, OTVerifyEncoding},
-    registry::ValueRegistry,
-    value::{ValueId, ValueRef},
+    value::ValueRef,
 };
 
 pub use error::{DEAPError, PeerEncodingsError};
@@ -50,11 +53,7 @@ pub struct DEAP {
 
 #[derive(Debug, Default)]
 struct State {
-    /// A registry of all values
-    value_registry: ValueRegistry,
-    /// An internal buffer for value configurations which get
-    /// drained and set up prior to execution.
-    input_buffer: HashMap<ValueId, ValueIdConfig>,
+    memory: ValueMemory,
 
     /// Equality check decommitments withheld by the leader
     /// prior to finalization
@@ -157,36 +156,36 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let input_configs = self.state().remove_input_configs(inputs);
+        // let input_configs = self.state().remove_input_configs(inputs);
 
-        let id_0 = format!("{}/0", id);
-        let id_1 = format!("{}/1", id);
+        // let id_0 = format!("{}/0", id);
+        // let id_1 = format!("{}/1", id);
 
-        let (gen_id, ev_id) = match self.role {
-            Role::Leader => (id_0, id_1),
-            Role::Follower => (id_1, id_0),
-        };
+        // let (gen_id, ev_id) = match self.role {
+        //     Role::Leader => (id_0, id_1),
+        //     Role::Follower => (id_1, id_0),
+        // };
 
-        // Setup inputs concurrently.
-        futures::try_join!(
-            self.gen
-                .setup_inputs(&gen_id, &input_configs, sink, ot_send)
-                .map_err(DEAPError::from),
-            self.ev
-                .setup_inputs(&ev_id, &input_configs, stream, ot_recv)
-                .map_err(DEAPError::from)
-        )?;
+        // // // Setup inputs concurrently.
+        // // futures::try_join!(
+        // //     self.gen
+        // //         .setup_inputs(&gen_id, &input_configs, sink, ot_send)
+        // //         .map_err(DEAPError::from),
+        // //     self.ev
+        // //         .setup_inputs(&ev_id, &input_configs, stream, ot_recv)
+        // //         .map_err(DEAPError::from)
+        // // )?;
 
-        // Generate and evaluate concurrently.
-        // Drop the encoded outputs, we don't need them here
-        _ = futures::try_join!(
-            self.gen
-                .generate(circ.clone(), inputs, outputs, sink, false)
-                .map_err(DEAPError::from),
-            self.ev
-                .evaluate(circ.clone(), inputs, outputs, stream)
-                .map_err(DEAPError::from)
-        )?;
+        // // Generate and evaluate concurrently.
+        // // Drop the encoded outputs, we don't need them here
+        // _ = futures::try_join!(
+        //     self.gen
+        //         .generate(circ.clone(), inputs, outputs, sink, false)
+        //         .map_err(DEAPError::from),
+        //     self.ev
+        //         .evaluate(circ.clone(), inputs, outputs, stream)
+        //         .map_err(DEAPError::from)
+        // )?;
 
         Ok(())
     }
@@ -226,36 +225,36 @@ impl DEAP {
         U: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
         OTR: OTReceiveEncoding,
     {
-        if matches!(self.role, Role::Follower) {
-            return Err(DEAPError::RoleError(
-                "DEAP follower can not act as the prover".to_string(),
-            ))?;
-        }
+        // if matches!(self.role, Role::Follower) {
+        //     return Err(DEAPError::RoleError(
+        //         "DEAP follower can not act as the prover".to_string(),
+        //     ))?;
+        // }
 
-        let input_configs = self.state().remove_input_configs(inputs);
+        // let input_configs = self.state().remove_input_configs(inputs);
 
-        // The prover only acts as the evaluator for ZKPs instead of
-        // dual-execution.
-        self.ev
-            .setup_inputs(id, &input_configs, stream, ot_recv)
-            .map_err(DEAPError::from)
-            .await?;
+        // // // The prover only acts as the evaluator for ZKPs instead of
+        // // // dual-execution.
+        // // self.ev
+        // //     .setup_inputs(id, &input_configs, stream, ot_recv)
+        // //     .map_err(DEAPError::from)
+        // //     .await?;
 
-        let outputs = self
-            .ev
-            .evaluate(circ, inputs, outputs, stream)
-            .map_err(DEAPError::from)
-            .await?;
+        // let outputs = self
+        //     .ev
+        //     .evaluate(circ, inputs, outputs, stream)
+        //     .map_err(DEAPError::from)
+        //     .await?;
 
-        let output_digest = outputs.hash();
-        let (decommitment, commitment) = output_digest.hash_commit();
+        // let output_digest = outputs.hash();
+        // let (decommitment, commitment) = output_digest.hash_commit();
 
-        // Store output proof decommitment until finalization
-        self.state()
-            .proof_decommitments
-            .insert(id.to_string(), decommitment);
+        // // Store output proof decommitment until finalization
+        // self.state()
+        //     .proof_decommitments
+        //     .insert(id.to_string(), decommitment);
 
-        sink.send(GarbleMessage::HashCommitment(commitment)).await?;
+        // sink.send(GarbleMessage::HashCommitment(commitment)).await?;
 
         Ok(())
     }
@@ -297,41 +296,41 @@ impl DEAP {
         U: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
         OTS: OTSendEncoding,
     {
-        if matches!(self.role, Role::Leader) {
-            return Err(DEAPError::RoleError(
-                "DEAP leader can not act as the verifier".to_string(),
-            ))?;
-        }
+        // if matches!(self.role, Role::Leader) {
+        //     return Err(DEAPError::RoleError(
+        //         "DEAP leader can not act as the verifier".to_string(),
+        //     ))?;
+        // }
 
-        let input_configs = self.state().remove_input_configs(inputs);
+        // let input_configs = self.state().remove_input_configs(inputs);
 
-        // The verifier only acts as the generator for ZKPs instead of
-        // dual-execution.
-        self.gen
-            .setup_inputs(id, &input_configs, sink, ot_send)
-            .map_err(DEAPError::from)
-            .await?;
+        // // // The verifier only acts as the generator for ZKPs instead of
+        // // // dual-execution.
+        // // self.gen
+        // //     .setup_inputs(id, &input_configs, sink, ot_send)
+        // //     .map_err(DEAPError::from)
+        // //     .await?;
 
-        let (encoded_outputs, _) = self
-            .gen
-            .generate(circ.clone(), inputs, outputs, sink, false)
-            .map_err(DEAPError::from)
-            .await?;
+        // let (encoded_outputs, _) = self
+        //     .gen
+        //     .generate(circ.clone(), inputs, outputs, sink, false)
+        //     .map_err(DEAPError::from)
+        //     .await?;
 
-        let expected_outputs = expected_outputs
-            .iter()
-            .zip(encoded_outputs)
-            .map(|(expected, encoded)| encoded.select(expected.clone()).unwrap())
-            .collect::<Vec<_>>();
+        // let expected_outputs = expected_outputs
+        //     .iter()
+        //     .zip(encoded_outputs)
+        //     .map(|(expected, encoded)| encoded.select(expected.clone()).unwrap())
+        //     .collect::<Vec<_>>();
 
-        let expected_digest = expected_outputs.hash();
+        // let expected_digest = expected_outputs.hash();
 
-        let commitment = expect_msg_or_err!(stream, GarbleMessage::HashCommitment)?;
+        // let commitment = expect_msg_or_err!(stream, GarbleMessage::HashCommitment)?;
 
-        // Store commitment to proof until finalization
-        self.state()
-            .proof_commitments
-            .insert(id.to_string(), (expected_digest, commitment));
+        // // Store commitment to proof until finalization
+        // self.state()
+        //     .proof_commitments
+        //     .insert(id.to_string(), (expected_digest, commitment));
 
         Ok(())
     }
@@ -454,49 +453,23 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let (otp_refs, masked_refs): (Vec<_>, Vec<_>) = values
-            .iter()
-            .map(|value| (value.append_id("otp"), value.append_id("masked")))
-            .unzip();
-
-        let (otp_tys, otp_values) = {
+        let (((otp_refs, otp_typs), otp_values), mask_refs): (((Vec<_>, Vec<_>), Vec<_>), Vec<_>) = {
             let mut state = self.state();
 
-            let otp_tys = values
+            values
                 .iter()
                 .map(|value| {
-                    state
-                        .value_registry
-                        .get_value_type_with_ref(value)
-                        .ok_or_else(|| DEAPError::ValueDoesNotExist(value.clone()))
+                    let (otp_ref, otp_value) = state.new_private_otp(value, "otp");
+                    let otp_typ = otp_value.value_type();
+                    let mask_ref = state.new_output_mask(value, "mask");
+
+                    (((otp_ref, otp_typ), otp_value), mask_ref)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let otp_values = otp_tys
-                .iter()
-                .map(|ty| Value::random(&mut thread_rng(), ty))
-                .collect::<Vec<_>>();
-
-            for ((otp_ref, otp_ty), otp_value) in
-                otp_refs.iter().zip(otp_tys.iter()).zip(otp_values.iter())
-            {
-                state.add_input_config(
-                    otp_ref,
-                    ValueConfig::new(
-                        otp_ref.clone(),
-                        otp_ty.clone(),
-                        Some(otp_value.clone()),
-                        Visibility::Private,
-                    )
-                    .expect("config is valid"),
-                );
-            }
-
-            (otp_tys, otp_values)
+                .unzip()
         };
 
         // Apply OTPs to values
-        let circ = build_otp_circuit(&otp_tys);
+        let circ = build_otp_circuit(&otp_typs);
 
         let inputs = values
             .iter()
@@ -506,19 +479,12 @@ impl DEAP {
             .collect::<Vec<_>>();
 
         self.execute(
-            id,
-            circ,
-            &inputs,
-            &masked_refs,
-            sink,
-            stream,
-            ot_send,
-            ot_recv,
+            id, circ, &inputs, &mask_refs, sink, stream, ot_send, ot_recv,
         )
         .await?;
 
         // Decode masked values
-        let masked_values = self.decode(id, &masked_refs, sink, stream).await?;
+        let masked_values = self.decode(id, &mask_refs, sink, stream).await?;
 
         // Remove OTPs, returning plaintext values
         Ok(masked_values
@@ -543,37 +509,22 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let (otp_refs, masked_refs): (Vec<_>, Vec<_>) = values
-            .iter()
-            .map(|value| (value.append_id("otp"), value.append_id("masked")))
-            .unzip();
-
-        let otp_tys = {
+        let ((otp_refs, otp_typs), mask_refs): ((Vec<_>, Vec<_>), Vec<_>) = {
             let mut state = self.state();
 
-            let otp_tys = values
+            values
                 .iter()
                 .map(|value| {
-                    state
-                        .value_registry
-                        .get_value_type_with_ref(value)
-                        .ok_or_else(|| DEAPError::ValueDoesNotExist(value.clone()))
+                    let (otp_ref, otp_typ) = state.new_blind_otp(value, "otp");
+                    let mask_ref = state.new_output_mask(value, "mask");
+
+                    ((otp_ref, otp_typ), mask_ref)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            for (otp_ref, otp_ty) in otp_refs.iter().zip(otp_tys.iter()) {
-                state.add_input_config(
-                    otp_ref,
-                    ValueConfig::new(otp_ref.clone(), otp_ty.clone(), None, Visibility::Private)
-                        .expect("config is valid"),
-                );
-            }
-
-            otp_tys
+                .unzip()
         };
 
         // Apply OTPs to values
-        let circ = build_otp_circuit(&otp_tys);
+        let circ = build_otp_circuit(&otp_typs);
 
         let inputs = values
             .iter()
@@ -583,19 +534,12 @@ impl DEAP {
             .collect::<Vec<_>>();
 
         self.execute(
-            id,
-            circ,
-            &inputs,
-            &masked_refs,
-            sink,
-            stream,
-            ot_send,
-            ot_recv,
+            id, circ, &inputs, &mask_refs, sink, stream, ot_send, ot_recv,
         )
         .await?;
 
         // Discard masked values
-        _ = self.decode(id, &masked_refs, sink, stream).await?;
+        _ = self.decode(id, &mask_refs, sink, stream).await?;
 
         Ok(())
     }
@@ -615,83 +559,36 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let (otp_0_refs, (otp_1_refs, masked_refs)): (Vec<_>, (Vec<_>, Vec<_>)) = values
-            .iter()
-            .map(|value| {
-                (
-                    value.append_id("otp_0"),
-                    (value.append_id("otp_1"), value.append_id("masked")),
-                )
-            })
-            .unzip();
-
-        let (otp_tys, otp_values) = {
+        #[allow(clippy::type_complexity)]
+        let ((((otp_0_refs, otp_1_refs), otp_typs), otp_values), mask_refs): (
+            (((Vec<_>, Vec<_>), Vec<_>), Vec<_>),
+            Vec<_>,
+        ) = {
             let mut state = self.state();
 
-            let otp_tys = values
+            values
                 .iter()
                 .map(|value| {
-                    state
-                        .value_registry
-                        .get_value_type_with_ref(value)
-                        .ok_or_else(|| DEAPError::ValueDoesNotExist(value.clone()))
+                    let (otp_0_ref, otp_1_ref, otp_value, otp_typ) = match self.role {
+                        Role::Leader => {
+                            let (otp_0_ref, otp_value) = state.new_private_otp(value, "otp_0");
+                            let (otp_1_ref, otp_typ) = state.new_blind_otp(value, "otp_1");
+                            (otp_0_ref, otp_1_ref, otp_value, otp_typ)
+                        }
+                        Role::Follower => {
+                            let (otp_0_ref, otp_typ) = state.new_blind_otp(value, "otp_0");
+                            let (otp_1_ref, otp_value) = state.new_private_otp(value, "otp_1");
+                            (otp_0_ref, otp_1_ref, otp_value, otp_typ)
+                        }
+                    };
+                    let mask_ref = state.new_output_mask(value, "mask");
+                    ((((otp_0_ref, otp_1_ref), otp_typ), otp_value), mask_ref)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let otp_values = otp_tys
-                .iter()
-                .map(|ty| Value::random(&mut thread_rng(), ty))
-                .collect::<Vec<_>>();
-
-            for (((otp_0_ref, opt_1_ref), otp_ty), otp_value) in otp_0_refs
-                .iter()
-                .zip(&otp_1_refs)
-                .zip(&otp_tys)
-                .zip(&otp_values)
-            {
-                let (otp_0_config, otp_1_config) = match self.role {
-                    Role::Leader => (
-                        ValueConfig::new(
-                            otp_0_ref.clone(),
-                            otp_ty.clone(),
-                            Some(otp_value.clone()),
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                        ValueConfig::new(
-                            opt_1_ref.clone(),
-                            otp_ty.clone(),
-                            None,
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                    ),
-                    Role::Follower => (
-                        ValueConfig::new(
-                            otp_0_ref.clone(),
-                            otp_ty.clone(),
-                            None,
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                        ValueConfig::new(
-                            opt_1_ref.clone(),
-                            otp_ty.clone(),
-                            Some(otp_value.clone()),
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                    ),
-                };
-                state.add_input_config(otp_0_ref, otp_0_config);
-                state.add_input_config(opt_1_ref, otp_1_config);
-            }
-
-            (otp_tys, otp_values)
+                .unzip()
         };
 
         // Apply OTPs to values
-        let circ = build_otp_shared_circuit(&otp_tys);
+        let circ = build_otp_shared_circuit(&otp_typs);
 
         let inputs = values
             .iter()
@@ -702,19 +599,12 @@ impl DEAP {
             .collect::<Vec<_>>();
 
         self.execute(
-            id,
-            circ,
-            &inputs,
-            &masked_refs,
-            sink,
-            stream,
-            ot_send,
-            ot_recv,
+            id, circ, &inputs, &mask_refs, sink, stream, ot_send, ot_recv,
         )
         .await?;
 
         // Decode masked values
-        let masked_values = self.decode(id, &masked_refs, sink, stream).await?;
+        let masked_values = self.decode(id, &mask_refs, sink, stream).await?;
 
         match self.role {
             Role::Leader => {
@@ -861,21 +751,66 @@ impl DEAP {
 }
 
 impl State {
-    /// Adds input configs to the buffer.
-    fn add_input_config(&mut self, value: &ValueRef, config: ValueConfig) {
-        value
-            .iter()
-            .zip(config.flatten())
-            .for_each(|(id, config)| _ = self.input_buffer.insert(id.clone(), config));
+    pub(crate) fn new_private_otp(
+        &mut self,
+        value_ref: &ValueRef,
+        suffix: &str,
+    ) -> (ValueRef, Value) {
+        let mut id = self
+            .memory
+            .get_id_by_ref(value_ref)
+            .expect("value is defined if reference exists")
+            .to_string();
+        id.push('/');
+        id.push_str(suffix);
+
+        let typ = self.memory.get_value_type(value_ref);
+
+        let value = Value::random(&mut thread_rng(), &typ);
+
+        let value_ref = self
+            .memory
+            .new_input(&id, typ, Visibility::Private)
+            .expect("otp id is unique");
+
+        (value_ref, value)
     }
 
-    /// Returns input configs from the buffer.
-    fn remove_input_configs(&mut self, values: &[ValueRef]) -> Vec<ValueIdConfig> {
-        values
-            .iter()
-            .flat_map(|value| value.iter())
-            .filter_map(|id| self.input_buffer.remove(id))
-            .collect::<Vec<_>>()
+    pub(crate) fn new_blind_otp(
+        &mut self,
+        value_ref: &ValueRef,
+        suffix: &str,
+    ) -> (ValueRef, ValueType) {
+        let mut id = self
+            .memory
+            .get_id_by_ref(value_ref)
+            .expect("value is defined if reference exists")
+            .to_string();
+        id.push('/');
+        id.push_str(suffix);
+
+        let typ = self.memory.get_value_type(value_ref);
+
+        (
+            self.memory
+                .new_input(&id, typ.clone(), Visibility::Blind)
+                .expect("otp id is unique"),
+            typ,
+        )
+    }
+
+    pub(crate) fn new_output_mask(&mut self, value_ref: &ValueRef, suffix: &str) -> ValueRef {
+        let mut id = self
+            .memory
+            .get_id_by_ref(value_ref)
+            .expect("value is defined if reference exists")
+            .to_string();
+        id.push('/');
+        id.push_str(suffix);
+
+        let typ = self.memory.get_value_type(value_ref);
+
+        self.memory.new_output(&id, typ).expect("mask id is unique")
     }
 
     /// Drain the states to be finalized.

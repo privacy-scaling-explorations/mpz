@@ -18,7 +18,7 @@ pub enum GeneratorError {
     #[error("missing encoding for value")]
     MissingEncoding(ValueRef),
     #[error(transparent)]
-    EncodingRegistryError(#[from] crate::registry::EncodingRegistryError),
+    EncodingRegistryError(#[from] crate::memory::EncodingMemoryError),
 }
 
 impl From<mpz_ot::OTError> for GeneratorError {

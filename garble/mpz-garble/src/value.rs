@@ -59,7 +59,7 @@ impl ArrayRef {
     ///  * The array must have at least one value.
     ///  * All values in the array must have the same type.
     pub(crate) fn new(ids: Vec<ValueId>) -> Self {
-        assert!(ids.len() > 0, "cannot create an array with no values");
+        assert!(!ids.is_empty(), "cannot create an array with no values");
 
         Self { ids }
     }
@@ -70,6 +70,7 @@ impl ArrayRef {
     }
 
     /// Returns the number of values.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.ids.len()
     }
@@ -122,10 +123,30 @@ impl ValueRef {
     }
 
     /// Returns an iterator of the value IDs.
-    pub fn iter(&self) -> Box<dyn Iterator<Item = &ValueId> + '_> {
+    pub fn iter(&self) -> ValueRefIter<'_> {
         match self {
-            ValueRef::Value { id, .. } => Box::new(std::iter::once(id)),
-            ValueRef::Array(values) => Box::new(values.ids.iter()),
+            ValueRef::Value { id } => ValueRefIter::Value(std::iter::once(id)),
+            ValueRef::Array(values) => ValueRefIter::Array(values.ids.iter()),
+        }
+    }
+}
+
+/// An iterator over value IDs of a reference.
+pub enum ValueRefIter<'a> {
+    /// A single value.
+    Value(std::iter::Once<&'a ValueId>),
+    /// An array of values.
+    Array(std::slice::Iter<'a, ValueId>),
+}
+
+impl<'a> Iterator for ValueRefIter<'a> {
+    type Item = &'a ValueId;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            ValueRefIter::Value(iter) => iter.next(),
+            ValueRefIter::Array(iter) => iter.next(),
         }
     }
 }
