@@ -947,9 +947,11 @@ mod tests {
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
 
-            let key_ref = leader.new_private_input("key", Some(key)).unwrap();
-            let msg_ref = leader.new_private_input::<[u8; 16]>("msg", None).unwrap();
+            let key_ref = leader.new_private_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = leader.new_blind_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = leader.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            leader.assign(&key_ref, key).unwrap();
 
             async move {
                 leader
@@ -983,9 +985,11 @@ mod tests {
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
 
-            let key_ref = follower.new_private_input::<[u8; 16]>("key", None).unwrap();
-            let msg_ref = follower.new_private_input("msg", Some(msg)).unwrap();
+            let key_ref = follower.new_blind_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = follower.new_private_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = follower.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            follower.assign(&msg_ref, msg).unwrap();
 
             async move {
                 follower
@@ -1039,9 +1043,11 @@ mod tests {
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
             let circ = circ.clone();
-            let a_ref = leader.new_private_input("a", Some(a)).unwrap();
-            let b_ref = leader.new_private_input::<u8>("b", None).unwrap();
+            let a_ref = leader.new_private_input::<u8>("a").unwrap();
+            let b_ref = leader.new_blind_input::<u8>("b").unwrap();
             let c_ref = leader.new_output::<u8>("c").unwrap();
+
+            leader.assign(&a_ref, a).unwrap();
 
             async move {
                 leader
@@ -1082,9 +1088,11 @@ mod tests {
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
 
-            let a_ref = follower.new_private_input::<u8>("a", None).unwrap();
-            let b_ref = follower.new_private_input("b", Some(b)).unwrap();
+            let a_ref = follower.new_blind_input::<u8>("a").unwrap();
+            let b_ref = follower.new_private_input::<u8>("b").unwrap();
             let c_ref = follower.new_output::<u8>("c").unwrap();
+
+            follower.assign(&b_ref, b).unwrap();
 
             async move {
                 follower
@@ -1143,9 +1151,11 @@ mod tests {
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
             let circ = circ.clone();
-            let a_ref = leader.new_private_input("a", Some(a)).unwrap();
-            let b_ref = leader.new_private_input::<u8>("b", None).unwrap();
+            let a_ref = leader.new_private_input::<u8>("a").unwrap();
+            let b_ref = leader.new_blind_input::<u8>("b").unwrap();
             let c_ref = leader.new_output::<u8>("c").unwrap();
+
+            leader.assign(&a_ref, a).unwrap();
 
             async move {
                 leader
@@ -1186,9 +1196,11 @@ mod tests {
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
 
-            let a_ref = follower.new_private_input::<u8>("a", None).unwrap();
-            let b_ref = follower.new_private_input("b", Some(b)).unwrap();
+            let a_ref = follower.new_blind_input::<u8>("a").unwrap();
+            let b_ref = follower.new_private_input::<u8>("b").unwrap();
             let c_ref = follower.new_output::<u8>("c").unwrap();
+
+            follower.assign(&b_ref, b).unwrap();
 
             async move {
                 follower
@@ -1270,11 +1282,11 @@ mod tests {
 
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
-            let key_ref = leader
-                .new_private_input::<[u8; 16]>("key", Some(key))
-                .unwrap();
-            let msg_ref = leader.new_private_input::<[u8; 16]>("msg", None).unwrap();
+            let key_ref = leader.new_private_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = leader.new_blind_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = leader.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            leader.assign(&key_ref, key).unwrap();
 
             async move {
                 leader
@@ -1299,11 +1311,11 @@ mod tests {
 
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
-            let key_ref = follower.new_private_input::<[u8; 16]>("key", None).unwrap();
-            let msg_ref = follower
-                .new_private_input::<[u8; 16]>("msg", Some(msg))
-                .unwrap();
+            let key_ref = follower.new_blind_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = follower.new_private_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = follower.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            follower.assign(&msg_ref, msg).unwrap();
 
             async move {
                 follower
