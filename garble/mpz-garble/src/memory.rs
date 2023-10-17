@@ -488,6 +488,36 @@ mod tests {
     #[case::u32_array(PhantomData::<[u32; 16]>)]
     #[case::u64_array(PhantomData::<[u64; 16]>)]
     #[case::u128_array(PhantomData::<[u128; 16]>)]
+    fn test_value_memory_duplicate_fails<T>(#[case] _ty: PhantomData<T>)
+    where
+        T: StaticValueType + Default + std::fmt::Debug,
+    {
+        let mut memory = ValueMemory::default();
+
+        let _ = memory
+            .new_input("test", T::value_type(), Visibility::Private)
+            .unwrap();
+
+        let err = memory
+            .new_input("test", T::value_type(), Visibility::Private)
+            .unwrap_err();
+
+        assert!(matches!(err, MemoryError::DuplicateValueId(_)));
+    }
+
+    #[rstest]
+    #[case::bit(PhantomData::<bool>)]
+    #[case::u8(PhantomData::<u8>)]
+    #[case::u16(PhantomData::<u16>)]
+    #[case::u64(PhantomData::<u64>)]
+    #[case::u64(PhantomData::<u64>)]
+    #[case::u128(PhantomData::<u128>)]
+    #[case::bit_array(PhantomData::<[bool; 16]>)]
+    #[case::u8_array(PhantomData::<[u8; 16]>)]
+    #[case::u16_array(PhantomData::<[u16; 16]>)]
+    #[case::u32_array(PhantomData::<[u32; 16]>)]
+    #[case::u64_array(PhantomData::<[u64; 16]>)]
+    #[case::u128_array(PhantomData::<[u128; 16]>)]
     fn test_encoding_memory_set_duplicate_fails<T>(
         encoder: ChaChaEncoder,
         #[case] _ty: PhantomData<T>,
