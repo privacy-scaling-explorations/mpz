@@ -6,7 +6,7 @@ use utils_aio::duplex::MemoryDuplex;
 use mpz_garble::{config::Visibility, Evaluator, Generator, GeneratorConfigBuilder, ValueMemory};
 
 #[tokio::test]
-async fn test_semi_honest() {
+async fn test_offline_garble() {
     let (mut gen_channel, mut ev_channel) = MemoryDuplex::<GarbleMessage>::new();
     let (ot_send, ot_recv) = mock_ot_shared_pair();
 
@@ -36,19 +36,8 @@ async fn test_semi_honest() {
             .new_output("ciphertext", ciphertext_typ.clone())
             .unwrap();
 
-        memory.assign(&key_ref, key.into()).unwrap();
-
         gen.generate_input_encoding(&key_ref, &key_typ);
         gen.generate_input_encoding(&msg_ref, &msg_typ);
-
-        gen.setup_assigned_values(
-            "test",
-            &memory.drain_assigned(&[key_ref.clone(), msg_ref.clone()]),
-            &mut gen_channel,
-            &ot_send,
-        )
-        .await
-        .unwrap();
 
         gen.generate(
             AES128.clone(),
@@ -56,6 +45,17 @@ async fn test_semi_honest() {
             &[ciphertext_ref.clone()],
             &mut gen_channel,
             false,
+        )
+        .await
+        .unwrap();
+
+        memory.assign(&key_ref, key.into()).unwrap();
+
+        gen.setup_assigned_values(
+            "test",
+            &memory.drain_assigned(&[key_ref.clone(), msg_ref.clone()]),
+            &mut gen_channel,
+            &ot_send,
         )
         .await
         .unwrap();
@@ -75,6 +75,15 @@ async fn test_semi_honest() {
         let ciphertext_ref = memory
             .new_output("ciphertext", ciphertext_typ.clone())
             .unwrap();
+
+        ev.receive_garbled_circuit(
+            AES128.clone(),
+            &[key_ref.clone(), msg_ref.clone()],
+            &[ciphertext_ref.clone()],
+            &mut ev_channel,
+        )
+        .await
+        .unwrap();
 
         memory.assign(&msg_ref, msg.into()).unwrap();
 

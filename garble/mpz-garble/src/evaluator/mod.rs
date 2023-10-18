@@ -17,6 +17,7 @@ use mpz_circuits::{
 use mpz_core::hash::Hash;
 use mpz_garble_core::{
     encoding_state, msg::GarbleMessage, Decoding, EncodedValue, Evaluator as EvaluatorCore,
+    GarbledCircuit,
 };
 use utils::iter::FilterDrain;
 use utils_aio::{
@@ -27,7 +28,7 @@ use utils_aio::{
 use crate::{
     memory::EncodingMemory,
     ot::{OTReceiveEncoding, OTVerifyEncoding},
-    value::{ValueId, ValueRef},
+    value::{CircuitRefs, ValueId, ValueRef},
     AssignedValues, Generator, GeneratorConfigBuilder,
 };
 
@@ -60,6 +61,10 @@ struct State {
     received_values: HashMap<ValueId, ValueType>,
     /// Values which have been decoded
     decoded_values: HashSet<ValueId>,
+    /// Pre-transferred garbled circuits
+    ///
+    /// (inputs, outputs) => garbled circuit
+    garbled_circuits: HashMap<CircuitRefs, GarbledCircuit>,
     /// OT logs
     ot_log: HashMap<String, Vec<ValueId>>,
     /// Garbled circuit logs
@@ -258,7 +263,68 @@ impl Evaluator {
         Ok(())
     }
 
-    /// Evaluate a garbled circuit, receiving the encrypted gates in batches from the provided stream.
+    /// Receives a garbled circuit from the generator, storing it for later evaluation.
+    ///
+    /// # Arguments
+    ///
+    /// * `circ` - The circuit to receive
+    /// * `inputs` - The inputs to the circuit
+    /// * `outputs` - The outputs from the circuit
+    /// * `stream` - The stream from the generator
+    pub async fn receive_garbled_circuit<
+        S: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
+    >(
+        &self,
+        circ: Arc<Circuit>,
+        inputs: &[ValueRef],
+        outputs: &[ValueRef],
+        stream: &mut S,
+    ) -> Result<(), EvaluatorError> {
+        let refs = CircuitRefs {
+            inputs: inputs.to_vec(),
+            outputs: outputs.to_vec(),
+        };
+
+        if self.state().garbled_circuits.contains_key(&refs) {
+            return Err(EvaluatorError::DuplicateCircuit);
+        }
+
+        let gate_count = circ.and_count();
+        let mut gates = Vec::with_capacity(gate_count);
+        while gates.len() < gate_count {
+            let encrypted_gates = expect_msg_or_err!(stream, GarbleMessage::EncryptedGates)?;
+            gates.extend(encrypted_gates);
+        }
+
+        // If configured, expect the output encoding commitments
+        let encoding_commitments = if self.config.encoding_commitments {
+            let commitments = expect_msg_or_err!(stream, GarbleMessage::EncodingCommitments)?;
+
+            // Make sure the generator sent the expected number of commitments.
+            if commitments.len() != circ.outputs().len() {
+                return Err(EvaluatorError::IncorrectValueCount {
+                    expected: circ.outputs().len(),
+                    actual: commitments.len(),
+                });
+            }
+
+            Some(commitments)
+        } else {
+            None
+        };
+
+        self.state().garbled_circuits.insert(
+            refs,
+            GarbledCircuit {
+                gates,
+                commitments: encoding_commitments,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Evaluate a circuit.
     ///
     /// Returns the encoded outputs of the evaluated circuit.
     ///
@@ -275,6 +341,11 @@ impl Evaluator {
         outputs: &[ValueRef],
         stream: &mut S,
     ) -> Result<Vec<EncodedValue<encoding_state::Active>>, EvaluatorError> {
+        let refs = CircuitRefs {
+            inputs: inputs.to_vec(),
+            outputs: outputs.to_vec(),
+        };
+
         let encoded_inputs = {
             let state = self.state();
             inputs
@@ -294,11 +365,19 @@ impl Evaluator {
             EvaluatorCore::new(circ.clone(), &encoded_inputs)?
         };
 
-        while !ev.is_complete() {
-            let encrypted_gates = expect_msg_or_err!(stream, GarbleMessage::EncryptedGates)?;
+        let existing_garbled_circuit = self.state().garbled_circuits.remove(&refs);
 
-            for batch in encrypted_gates.chunks(self.config.batch_size) {
-                let batch = batch.to_vec();
+        // If we've already received the garbled circuit, we evaluate it, otherwise we stream the encrypted gates
+        // from the generator.
+        let encoded_outputs = if let Some(GarbledCircuit {
+            mut gates,
+            commitments,
+        }) = existing_garbled_circuit
+        {
+            while !ev.is_complete() {
+                let batch = gates
+                    .drain(..gates.len().min(self.config.batch_size))
+                    .collect::<Vec<_>>();
                 // Move the evaluator to a new thread to process the batch then send it back
                 ev = Backend::spawn(move || {
                     ev.evaluate(batch.iter());
@@ -306,27 +385,53 @@ impl Evaluator {
                 })
                 .await;
             }
-        }
 
-        let encoded_outputs = ev.outputs()?;
-
-        // If configured, expect the output encoding commitments
-        // from the generator and verify them.
-        if self.config.encoding_commitments {
-            let commitments = expect_msg_or_err!(stream, GarbleMessage::EncodingCommitments)?;
-
-            // Make sure the generator sent the expected number of commitments.
-            if commitments.len() != encoded_outputs.len() {
-                return Err(EvaluatorError::IncorrectValueCount {
-                    expected: encoded_outputs.len(),
-                    actual: commitments.len(),
-                });
+            let encoded_outputs = ev.outputs()?;
+            if self.config.encoding_commitments {
+                for (output, commitment) in encoded_outputs
+                    .iter()
+                    .zip(commitments.expect("commitments were checked to be present"))
+                {
+                    commitment.verify(output)?;
+                }
             }
 
-            for (output, commitment) in encoded_outputs.iter().zip(commitments) {
-                commitment.verify(output)?;
+            encoded_outputs
+        } else {
+            while !ev.is_complete() {
+                let mut gates = expect_msg_or_err!(stream, GarbleMessage::EncryptedGates)?;
+                while !gates.is_empty() {
+                    let batch = gates
+                        .drain(..gates.len().min(self.config.batch_size))
+                        .collect::<Vec<_>>();
+                    // Move the evaluator to a new thread to process the batch then send it back
+                    ev = Backend::spawn(move || {
+                        ev.evaluate(batch.iter());
+                        ev
+                    })
+                    .await;
+                }
             }
-        }
+
+            let encoded_outputs = ev.outputs()?;
+            if self.config.encoding_commitments {
+                let commitments = expect_msg_or_err!(stream, GarbleMessage::EncodingCommitments)?;
+
+                // Make sure the generator sent the expected number of commitments.
+                if commitments.len() != encoded_outputs.len() {
+                    return Err(EvaluatorError::IncorrectValueCount {
+                        expected: encoded_outputs.len(),
+                        actual: commitments.len(),
+                    });
+                }
+
+                for (output, commitment) in encoded_outputs.iter().zip(commitments) {
+                    commitment.verify(output)?;
+                }
+            }
+
+            encoded_outputs
+        };
 
         // Add the output encodings to the memory.
         let mut state = self.state();
@@ -417,8 +522,7 @@ impl Evaluator {
         // Generate encodings for all received values
         let received_values: Vec<(ValueId, ValueType)> =
             self.state().received_values.drain().collect();
-        gen.generate_encodings(&received_values)
-            .map_err(VerificationError::from)?;
+        gen.generate_input_encodings_by_id(&received_values);
 
         // Verify all OTs in the log
         let mut ot_futs: FuturesUnordered<_> = self

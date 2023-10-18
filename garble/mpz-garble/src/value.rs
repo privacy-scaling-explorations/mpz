@@ -150,3 +150,10 @@ impl<'a> Iterator for ValueRefIter<'a> {
         }
     }
 }
+
+/// References to the inputs and outputs of a circuit.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct CircuitRefs {
+    pub(crate) inputs: Vec<ValueRef>,
+    pub(crate) outputs: Vec<ValueRef>,
+}

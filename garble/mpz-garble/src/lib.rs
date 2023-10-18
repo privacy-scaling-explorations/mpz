@@ -98,6 +98,17 @@ pub enum AssignmentError {
     },
 }
 
+/// Errors that can occur when loading a circuit.
+#[derive(Debug, thiserror::Error)]
+pub enum LoadError {
+    /// IO error.
+    #[error(transparent)]
+    IOError(#[from] std::io::Error),
+    /// Protocol error.
+    #[error(transparent)]
+    ProtocolError(#[from] Box<dyn std::error::Error + Send + Sync>),
+}
+
 /// Errors that can occur when executing a circuit.
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
@@ -296,6 +307,20 @@ pub trait Memory {
 
         Ok(ValueRef::Array(ArrayRef::new(ids)))
     }
+}
+
+/// This trait provides methods for loading a circuit.
+///
+/// Implementations may perform pre-processing prior to execution.
+#[async_trait]
+pub trait Load {
+    /// Loads a circuit with the provided inputs and output values.
+    async fn load(
+        &mut self,
+        circ: Arc<Circuit>,
+        inputs: &[ValueRef],
+        outputs: &[ValueRef],
+    ) -> Result<(), LoadError>;
 }
 
 /// This trait provides methods for executing a circuit.

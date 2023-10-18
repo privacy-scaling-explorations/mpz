@@ -15,7 +15,9 @@ pub enum GeneratorError {
     IOError(#[from] std::io::Error),
     #[error(transparent)]
     ValueError(#[from] ValueError),
-    #[error("missing encoding for value")]
+    #[error("duplicate encoding for value: {0:?}")]
+    DuplicateEncoding(ValueRef),
+    #[error("missing encoding for value: {0:?}")]
     MissingEncoding(ValueRef),
     #[error(transparent)]
     EncodingRegistryError(#[from] crate::memory::EncodingMemoryError),

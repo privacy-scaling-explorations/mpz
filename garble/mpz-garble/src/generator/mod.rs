@@ -4,7 +4,7 @@ mod config;
 mod error;
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     ops::DerefMut,
     sync::{Arc, Mutex},
 };
@@ -24,7 +24,7 @@ use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 use crate::{
     memory::EncodingMemory,
     ot::OTSendEncoding,
-    value::{ValueId, ValueRef},
+    value::{CircuitRefs, ValueId, ValueRef},
     AssignedValues,
 };
 
@@ -44,6 +44,8 @@ struct State {
     encoder: ChaChaEncoder,
     /// Encodings of values
     memory: EncodingMemory<encoding_state::Full>,
+    /// Transferred garbled circuits
+    garbled: HashMap<CircuitRefs, Option<Hash>>,
     /// The set of values that are currently active.
     ///
     /// A value is considered active when it has been encoded and sent to the evaluator.
@@ -88,18 +90,29 @@ impl Generator {
             .collect::<Option<Vec<_>>>()
     }
 
-    /// Generate encodings for a slice of values
-    pub(crate) fn generate_encodings(
-        &self,
-        values: &[(ValueId, ValueType)],
-    ) -> Result<(), GeneratorError> {
+    /// Generates encoding for the provided input value.
+    ///
+    /// If an encoding for a value have already been generated, it is ignored.
+    ///
+    /// # Panics
+    ///
+    /// If the provided value type does not match the value reference.
+    pub fn generate_input_encoding(&self, value: &ValueRef, typ: &ValueType) {
+        self.state().encode(value, typ);
+    }
+
+    /// Generates encodings for the provided input values.
+    ///
+    /// If encodings for a value have already been generated, it is ignored.
+    ///
+    /// # Panics
+    ///
+    /// If the provided value type is an array
+    pub(crate) fn generate_input_encodings_by_id(&self, values: &[(ValueId, ValueType)]) {
         let mut state = self.state();
-
-        for (id, ty) in values {
-            _ = state.encode_by_id(id, ty)?;
+        for (value_id, value_typ) in values {
+            state.encode_by_id(value_id, value_typ);
         }
-
-        Ok(())
     }
 
     /// Transfer active encodings for the provided assigned values.
@@ -139,7 +152,7 @@ impl Generator {
     /// - `id` - The ID of this operation
     /// - `values` - The values to send
     /// - `ot` - The OT sender
-    pub async fn ot_send_active_encodings<OT: OTSendEncoding>(
+    pub(crate) async fn ot_send_active_encodings<OT: OTSendEncoding>(
         &self,
         id: &str,
         values: &[(ValueId, ValueType)],
@@ -151,16 +164,16 @@ impl Generator {
 
         let full_encodings = {
             let mut state = self.state();
-            // Filter out any values that are already active, setting them active otherwise.
+            // Filter out any values that are already active
             let mut values = values
                 .iter()
-                .filter(|(id, _)| state.active.insert(id.clone()))
+                .filter(|(id, _)| !state.active.contains(id))
                 .collect::<Vec<_>>();
-            values.sort_by_key(|(id, _)| id.clone());
+            values.sort_by(|(id_a, _), (id_b, _)| id_a.cmp(id_b));
 
             values
                 .iter()
-                .map(|(id, ty)| state.encode_by_id(id, ty))
+                .map(|(id, _)| state.activate_encoding(id))
                 .collect::<Result<Vec<_>, GeneratorError>>()?
         };
 
@@ -175,7 +188,7 @@ impl Generator {
     ///
     /// - `values` - The values to send
     /// - `sink` - The sink to send the encodings to the evaluator
-    pub async fn direct_send_active_encodings<
+    pub(crate) async fn direct_send_active_encodings<
         S: Sink<GarbleMessage, Error = std::io::Error> + Unpin,
     >(
         &self,
@@ -188,17 +201,17 @@ impl Generator {
 
         let active_encodings = {
             let mut state = self.state();
-            // Filter out any values that are already active, setting them active otherwise.
+            // Filter out any values that are already active
             let mut values = values
                 .iter()
-                .filter(|(id, _)| state.active.insert(id.clone()))
+                .filter(|(id, _)| !state.active.contains(id))
                 .collect::<Vec<_>>();
-            values.sort_by_key(|(id, _)| id.clone());
+            values.sort_by(|(id_a, _), (id_b, _)| id_a.cmp(id_b));
 
             values
                 .iter()
                 .map(|(id, value)| {
-                    let full_encoding = state.encode_by_id(id, &value.value_type())?;
+                    let full_encoding = state.activate_encoding(id)?;
                     Ok(full_encoding.select(value.clone())?)
                 })
                 .collect::<Result<Vec<_>, GeneratorError>>()?
@@ -229,8 +242,29 @@ impl Generator {
         sink: &mut S,
         hash: bool,
     ) -> Result<(Vec<EncodedValue<encoding_state::Full>>, Option<Hash>), GeneratorError> {
+        let refs = CircuitRefs {
+            inputs: inputs.to_vec(),
+            outputs: outputs.to_vec(),
+        };
         let (delta, inputs) = {
             let state = self.state();
+
+            // If the circuit has already been garbled, return early
+            if let Some(hash) = state.garbled.get(&refs) {
+                return Ok((
+                    outputs
+                        .iter()
+                        .map(|output| {
+                            state
+                                .memory
+                                .get_encoding(output)
+                                .expect("encoding exists if circuit is garbled already")
+                        })
+                        .collect(),
+                    *hash,
+                ));
+            }
+
             let delta = state.encoder.delta();
             let inputs = inputs
                 .iter()
@@ -289,6 +323,8 @@ impl Generator {
             });
         }
 
+        state.garbled.insert(refs, hash);
+
         Ok((encoded_outputs, hash))
     }
 
@@ -331,12 +367,14 @@ impl State {
         }
     }
 
-    #[allow(dead_code)]
-    fn encode(
-        &mut self,
-        value: &ValueRef,
-        ty: &ValueType,
-    ) -> Result<EncodedValue<encoding_state::Full>, GeneratorError> {
+    /// Generates an encoding for a value
+    ///
+    /// If an encoding for the value already exists, it is returned instead.
+    ///
+    /// # Panics
+    ///
+    /// If the provided value type does not match the value reference.
+    fn encode(&mut self, value: &ValueRef, ty: &ValueType) -> EncodedValue<encoding_state::Full> {
         match (value, ty) {
             (ValueRef::Value { id }, ty) if !ty.is_array() => self.encode_by_id(id, ty),
             (ValueRef::Array(array), ValueType::Array(elem_ty, len)) if array.len() == *len => {
@@ -344,23 +382,44 @@ impl State {
                     .ids()
                     .iter()
                     .map(|id| self.encode_by_id(id, elem_ty))
-                    .collect::<Result<Vec<_>, _>>()?;
+                    .collect();
 
-                Ok(EncodedValue::Array(encodings))
+                EncodedValue::Array(encodings)
             }
             _ => panic!("invalid value and type combination: {:?} {:?}", value, ty),
         }
     }
 
-    fn encode_by_id(
+    /// Generates an encoding for a value
+    ///
+    /// If an encoding for the value already exists, it is returned instead.
+    fn encode_by_id(&mut self, id: &ValueId, ty: &ValueType) -> EncodedValue<encoding_state::Full> {
+        if let Some(encoding) = self.memory.get_encoding_by_id(id) {
+            encoding
+        } else {
+            let encoding = self.encoder.encode_by_type(id.to_u64(), ty);
+            self.memory
+                .set_encoding_by_id(id, encoding.clone())
+                .expect("encoding does not already exist");
+            encoding
+        }
+    }
+
+    fn activate_encoding(
         &mut self,
         id: &ValueId,
-        ty: &ValueType,
     ) -> Result<EncodedValue<encoding_state::Full>, GeneratorError> {
-        let encoding = self.encoder.encode_by_type(id.to_u64(), ty);
+        let encoding = self
+            .memory
+            .get_encoding_by_id(id)
+            .ok_or_else(|| GeneratorError::MissingEncoding(ValueRef::Value { id: id.clone() }))?;
 
-        // Returns error if the encoding already exists
-        self.memory.set_encoding_by_id(id, encoding.clone())?;
+        // Returns error if the encoding is already active
+        if !self.active.insert(id.clone()) {
+            return Err(GeneratorError::DuplicateEncoding(ValueRef::Value {
+                id: id.clone(),
+            }));
+        }
 
         Ok(encoding)
     }

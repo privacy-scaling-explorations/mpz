@@ -3,6 +3,8 @@ use std::ops::Index;
 use mpz_core::Block;
 use serde::{Deserialize, Serialize};
 
+use crate::EncodingCommitment;
+
 /// Encrypted gate truth table
 ///
 /// For the half-gate garbling scheme a truth table will typically have 2 rows, except for in
@@ -31,4 +33,13 @@ impl Index<usize> for EncryptedGate {
     fn index(&self, index: usize) -> &Self::Output {
         &self.0[index]
     }
+}
+
+/// A garbled circuit
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GarbledCircuit {
+    /// Encrypted gates of the circuit
+    pub gates: Vec<EncryptedGate>,
+    /// Encoding commitments of the circuit outputs
+    pub commitments: Option<Vec<EncodingCommitment>>,
 }
