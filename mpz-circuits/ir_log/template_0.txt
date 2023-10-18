@@ -1,0 +1,3 @@
+TEMPLATE(Multiplier2_0)(
+STORE(line:13,template_id:0,dest_type:SIGNAL,dest:INDEXED: (VALUE(line:0,template_id:0,as:U32,op_number:0,value:0), NONE),src:COMPUTE(line:13,template_id:0,op_number:0,op:MUL,stack:LOAD(line:13,template_id:0,address_type:SIGNAL,src:INDEXED: (VALUE(line:0,template_id:0,as:U32,op_number:1,value:1), NONE));LOAD(line:13,template_id:0,address_type:SIGNAL,src:INDEXED: (VALUE(line:0,template_id:0,as:U32,op_number:2,value:2), NONE));))
+)

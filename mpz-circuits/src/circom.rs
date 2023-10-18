@@ -22,7 +22,7 @@ use circom_constraint_generation::FlagsExecution;
 use circom_parser;
 use circom_compiler::compiler_interface;
 use circom_compiler::compiler_interface::{Config, VCP};
-use circom_program_structure::{error_code::ReportCode, ast::{Expression, Statement, SignalType, VariableType}};
+use circom_program_structure::{error_code::ReportCode, ast::{Expression, Statement, SignalType, VariableType, ExpressionInfixOpcode, Meta}};
 use circom_program_structure::error_definition::Report;
 use circom_program_structure::file_definition::FileLibrary;
 use circom_constraint_writers::debug_writer::DebugWriter;
@@ -839,70 +839,88 @@ impl ArithmeticCircuit {
 
 //WIP HERE
 
-// fn execute_infix_op(
-//     meta: &Meta,
-//     infix: ExpressionInfixOpcode,
-//     l_value: &AExpr,
-//     r_value: &AExpr,
-//     runtime: &mut RuntimeInformation,
-// ) -> Result<AExpr, ()> {
-//     use ExpressionInfixOpcode::*;
-//     let field = runtime.constants.get_p();
-//     let possible_result = match infix {
-//         Mul => Result::Ok(AExpr::mul(l_value, r_value, field)),
-//         //Div => AExpr::div(l_value, r_value, field),
-//         Add => Result::Ok(AExpr::add(l_value, r_value, field)),
-//         Sub => Result::Ok(AExpr::sub(l_value, r_value, field)),
-//         // Pow => Result::Ok(AExpr::pow(l_value, r_value, field)),
-//         // IntDiv => AExpr::idiv(l_value, r_value, field),
-//         // Mod => AExpr::mod_op(l_value, r_value, field),
-//         // ShiftL => AExpr::shift_l(l_value, r_value, field),
-//         // ShiftR => AExpr::shift_r(l_value, r_value, field),
-//         // LesserEq => Result::Ok(AExpr::lesser_eq(l_value, r_value, field)),
-//         // GreaterEq => Result::Ok(AExpr::greater_eq(l_value, r_value, field)),
-//         // Lesser => Result::Ok(AExpr::lesser(l_value, r_value, field)),
-//         // Greater => Result::Ok(AExpr::greater(l_value, r_value, field)),
-//         // Eq => Result::Ok(AExpr::eq(l_value, r_value, field)),
-//         // NotEq => Result::Ok(AExpr::not_eq(l_value, r_value, field)),
-//         // BoolOr => Result::Ok(AExpr::bool_or(l_value, r_value, field)),
-//         // BoolAnd => Result::Ok(AExpr::bool_and(l_value, r_value, field)),
-//         // BitOr => Result::Ok(AExpr::bit_or(l_value, r_value, field)),
-//         // BitAnd => Result::Ok(AExpr::bit_and(l_value, r_value, field)),
-//         // BitXor => Result::Ok(AExpr::bit_xor(l_value, r_value, field)),
-//     };
-//     treat_result_with_arithmetic_error(
-//         possible_result,
-//         meta,
-//         &mut runtime.runtime_errors,
-//         &runtime.call_trace,
-//     )
-// }
+fn traverse_infix_op(
+    ac: &mut ArithmeticCircuit,
+    var: &String,
+    varlop: &String,
+    varrop: &String,
+    meta: &Meta,
+    infix: ExpressionInfixOpcode
+) {
+    use ExpressionInfixOpcode::*;
+    match infix {
+        Mul => {
+            println!("Mul op {} = {} * {}", var, varlop, varrop);
+        },
+        Div => {
+            println!("Div op {} = {} / {}", var, varlop, varrop);
+        },
+        Add => {
+            println!("Add op {} = {} + {}", var, varlop, varrop);
+        },
+        Sub => {
+            println!("Sub op {} = {} - {}", var, varlop, varrop);
+        },
+        // Pow => {},
+        // IntDiv => {},
+        // Mod => {},
+        // ShiftL => {},
+        // ShiftR => {},
+        // LesserEq => {},
+        // GreaterEq => {},
+        // Lesser => {},
+        // Greater => {},
+        Eq => {
+            println!("Eq op {} = {} == {}", var, varlop, varrop);
+        },
+        NotEq => {
+            println!("Neq op {} = {} != {}", var, varlop, varrop);
+        },
+        // BoolOr => {},
+        // BoolAnd => {},
+        // BitOr => {},
+        // BitAnd => {},
+        // BitXor => {},
+        _ => {
+            unreachable!()
+        }
+    };
+}
 
-// fn execute_expression (
-//     expr: &Expression,
-//     program_archive: &ProgramArchive,
-//     runtime: &mut RuntimeInformation,
-//     flags: FlagsExecution
-// ) -> Result<FoldedValue, ()> {
-//     use Expression::*;
-//     let mut can_be_simplified = true;
-//     let res = match expr {
-//         Number(_, value) => {
-//             let a_value = AExpr::Number { value: value.clone() };
-//             let ae_slice = AExpressionSlice::new(&a_value);
-//             FoldedValue { arithmetic_slice: Option::Some(ae_slice), ..FoldedValue::default() }
-//         },
-//         InfixOp { meta, lhe, infix_op, rhe, .. } => {
-//             let l_fold = execute_expression(lhe, program_archive, runtime, flags)?;
-//             let r_fold = execute_expression(rhe, program_archive, runtime, flags)?;
-//             let l_value = safe_unwrap_to_single_arithmetic_expression(l_fold, line!());
-//             let r_value = safe_unwrap_to_single_arithmetic_expression(r_fold, line!());
-//             let r_value = execute_infix_op(meta, *infix_op, &l_value, &r_value, runtime)?;
-//             let r_slice = AExpressionSlice::new(&r_value);
-//             FoldedValue { arithmetic_slice: Option::Some(r_slice), ..FoldedValue::default() }
-//         },
-//     }
-// }
+fn traverse_expression (
+    ac: &mut ArithmeticCircuit,
+    var: &String,
+    expr: &Expression,
+    program_archive: &ProgramArchive
+) {
+    use Expression::*;
+    // let mut can_be_simplified = true;
+    match expr {
+        Number(_, value) => {
+            
+        },
+        InfixOp { meta, lhe, infix_op, rhe, .. } => {
+            let varlop = String::from("vl");
+            let varrop = String::from("vr");
+            traverse_expression(ac, &varlop, lhe, program_archive);
+            traverse_expression(ac, &varrop, rhe, program_archive);
+            traverse_infix_op(ac, var, &varlop, &varrop, meta, *infix_op);
+        }
+        PrefixOp { meta, prefix_op, rhe } => {
+            
+        },
+        InlineSwitchOp { meta, cond, if_true, if_false } => todo!(),
+        ParallelOp { meta, rhe } => todo!(),
+        Variable { meta, name, access } => {
+
+        },
+        Call { meta, id, args } => todo!(),
+        AnonymousComp { meta, id, is_parallel, params, signals, names } => todo!(),
+        ArrayInLine { meta, values } => todo!(),
+        Tuple { meta, values } => todo!(),
+        UniformArray { meta, value, dimension } => todo!(),
+    }
+}
 
 fn traverse_signal_declaration(
     ac: &mut ArithmeticCircuit,
@@ -915,20 +933,34 @@ fn traverse_signal_declaration(
         Input => {
             ac.gate_count += 1;
             if signal_name.contains("garb_") {
-                ac.inputs_garb.push(ac.gate_count)
+                ac.inputs_garb.push(ac.gate_count);
+                println!("Garbler input {}", signal_name);
             } else if signal_name.contains("eval_") {
                 ac.inputs_eval.push(ac.gate_count);
+                println!("Evaluator input {}", signal_name);
             }
         }
         Output => {
             ac.gate_count += 1;
             ac.outputs.push(ac.gate_count);
+            println!("Output {}", signal_name);
         }
         Intermediate => {
             ac.gate_count += 1;
             ac.inters.push(ac.gate_count);
+            println!("Intermediate {}", signal_name);
         }
     }
+
+}
+
+fn traverse_variable_declaration(
+    ac: &mut ArithmeticCircuit,
+    var_name: &str
+) {
+    ac.gate_count += 1;
+    ac.inters.push(ac.gate_count);
+    println!("Intermediate (variable) {}", var_name);
 
 }
 
@@ -947,6 +979,9 @@ fn traverse_statement (
 
     match stmt {
         InitializationBlock { initializations, .. } => {
+            for istmt in initializations.iter() {
+                traverse_statement(ac, istmt, program_archive);
+            }
         }
         Declaration { meta, xtype, name, dimensions, .. } => {
             match xtype {
@@ -986,6 +1021,16 @@ fn traverse_statement (
                     //         )?
                     //     };
                     match xtype {
+                        // VariableType::Component => execute_component_declaration(
+                        //     name,
+                        //     &usable_dimensions,
+                        //     &mut runtime.environment,
+                        //     actual_node,
+                        // ),
+                        VariableType::Var => traverse_variable_declaration(
+                            ac,
+                            name
+                        ),
                         VariableType::Signal(signal_type, tag_list) => traverse_signal_declaration (
                             ac,
                             name,
@@ -1000,7 +1045,7 @@ fn traverse_statement (
             }
             // Option::None
         }
-        // IfThenElse { cond, if_case, else_case, .. } => {
+        IfThenElse { cond, if_case, else_case, .. } => {
         //     let else_case = else_case.as_ref().map(|e| e.as_ref());
         //     let (possible_return, can_simplify, _) = execute_conditional_statement(
         //         cond,
@@ -1041,7 +1086,10 @@ fn traverse_statement (
         //     } else if !condition_result.unwrap() {
         //         break returned;
         //     }
-        // },
+        },
+        While { cond, stmt, .. } => loop {
+            
+        },
         ConstraintEquality { meta, lhe, rhe, .. } => {
             // debug_assert!(actual_node.is_some());
             // let f_left = execute_expression(lhe, program_archive, runtime, flags)?;
@@ -1102,7 +1150,8 @@ fn traverse_statement (
             
         }
         Substitution { meta, var, access, op, rhe, .. } => {
-            //Here we are
+            traverse_expression(ac, var, rhe, program_archive);
+            // println!("Assigning {} to {}", var, )
         }
         Block { stmts, .. } => {
         }
