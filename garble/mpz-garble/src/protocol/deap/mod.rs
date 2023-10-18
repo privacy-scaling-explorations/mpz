@@ -166,7 +166,7 @@ impl DEAP {
             Role::Follower => (id_1, id_0),
         };
 
-        // // Setup inputs concurrently.
+        // Setup inputs concurrently.
         futures::try_join!(
             self.gen
                 .setup_assigned_values(&gen_id, &assigned_values, sink, ot_send)
