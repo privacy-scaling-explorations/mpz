@@ -822,6 +822,15 @@ pub struct ArithmeticNode {
     pub output: u32
 }
 
+impl ArithmeticNode {
+    pub fn new() -> ArithmeticNode {
+        ArithmeticNode { gate_id: (0), gate_type: (0), input_lhs: (0), input_rhs: (0), output: (0) }
+    }
+    pub fn from(gate_id: u32, gate_type: u32, input_lhs: u32, input_rhs: u32, output: u32) -> ArithmeticNode {
+        ArithmeticNode { gate_id, gate_type, input_lhs, input_rhs, output }
+    }
+}
+
 pub struct ArithmeticCircuit {
     pub gate_count: u32,
     pub inputs_garb: Vec<u32>,
@@ -829,11 +838,102 @@ pub struct ArithmeticCircuit {
     pub inters: Vec<u32>,
     pub outputs: Vec<u32>,
     pub gates: HashMap<u32, ArithmeticNode>,
+    pub var_names: HashMap<String, u32>
 }
 
 impl ArithmeticCircuit {
     pub fn new() -> ArithmeticCircuit {
-        ArithmeticCircuit { gate_count: 0, inputs_garb: Vec::new(), inputs_eval: Vec::new(), inters: Vec::new(), outputs: Vec::new(), gates: HashMap::new() }
+        ArithmeticCircuit { gate_count: 0, inputs_garb: Vec::new(), inputs_eval: Vec::new(), inters: Vec::new(), outputs: Vec::new(), gates: HashMap::new(), var_names: HashMap::new() }
+    }
+
+    pub fn add_var(&mut self, 
+        signal_name: &str,
+        signal_type: SignalType) -> u32 {
+        self.gate_count += 1;
+        self.var_names.insert(signal_name.to_string(), self.gate_count);
+        use SignalType::*;
+        match signal_type {
+            Input => {
+                if signal_name.contains("garb_") {
+                    self.inputs_garb.push(self.gate_count);
+                    println!("Garbler input {} {}", self.gate_count, signal_name);
+                } else if signal_name.contains("eval_") {
+                    self.inputs_eval.push(self.gate_count);
+                    println!("Evaluator input {} {}", self.gate_count, signal_name);
+                }
+            }
+            Output => {
+                self.outputs.push(self.gate_count);
+                println!("Output {} {}", self.gate_count, signal_name);
+            }
+            Intermediate => {
+                
+                self.inters.push(self.gate_count);
+                println!("Intermediate {} {}", self.gate_count, signal_name);
+            }
+        }
+
+        self.gate_count
+    } 
+
+    //We support ADD, MUL, CADD, CMUL, DIV, CDIV, CINVERT, IFTHENELSE, FOR
+
+    pub fn add_gate(&mut self, 
+        var: &String,
+        varlop: &String,
+        varrop: &String,
+        infix: ExpressionInfixOpcode) -> ArithmeticNode {
+            self.gate_count += 1;
+            println!("New gate {}", self.gate_count);
+            let output = *self.var_names.get(var).unwrap();
+            let input_rhs = *self.var_names.get(varrop).unwrap();
+            let input_lhs = *self.var_names.get(varlop).unwrap();
+            let mut gate_type = 0;
+            use ExpressionInfixOpcode::*;
+            match infix {
+                Mul => {
+                    println!("Mul op {} = {} * {}", var, varlop, varrop);
+                    gate_type = 1;               
+                }
+                Div => {
+                    println!("Div op {} = {} / {}", var, varlop, varrop);
+                    gate_type = 2;
+                },
+                Add => {
+                    println!("Add op {} = {} + {}", var, varlop, varrop);
+                    gate_type = 3; 
+                },
+                Sub => {
+                    println!("Sub op {} = {} - {}", var, varlop, varrop);
+                    gate_type = 4; 
+                },
+                // Pow => {},
+                // IntDiv => {},
+                // Mod => {},
+                // ShiftL => {},
+                // ShiftR => {},
+                // LesserEq => {},
+                // GreaterEq => {},
+                // Lesser => {},
+                // Greater => {},
+                Eq => {
+                    println!("Eq op {} = {} == {}", var, varlop, varrop);
+                    gate_type = 5;  
+                },
+                NotEq => {
+                    println!("Neq op {} = {} != {}", var, varlop, varrop);
+                    gate_type = 6; 
+                },
+                // BoolOr => {},
+                // BoolAnd => {},
+                // BitOr => {},
+                // BitAnd => {},
+                // BitXor => {},
+                _ => {
+                    unreachable!()
+                }
+            };
+            ArithmeticNode::from(self.gate_count, gate_type, input_lhs, input_rhs, output)
     }
 }
 
@@ -847,44 +947,7 @@ fn traverse_infix_op(
     meta: &Meta,
     infix: ExpressionInfixOpcode
 ) {
-    use ExpressionInfixOpcode::*;
-    match infix {
-        Mul => {
-            println!("Mul op {} = {} * {}", var, varlop, varrop);
-        },
-        Div => {
-            println!("Div op {} = {} / {}", var, varlop, varrop);
-        },
-        Add => {
-            println!("Add op {} = {} + {}", var, varlop, varrop);
-        },
-        Sub => {
-            println!("Sub op {} = {} - {}", var, varlop, varrop);
-        },
-        // Pow => {},
-        // IntDiv => {},
-        // Mod => {},
-        // ShiftL => {},
-        // ShiftR => {},
-        // LesserEq => {},
-        // GreaterEq => {},
-        // Lesser => {},
-        // Greater => {},
-        Eq => {
-            println!("Eq op {} = {} == {}", var, varlop, varrop);
-        },
-        NotEq => {
-            println!("Neq op {} = {} != {}", var, varlop, varrop);
-        },
-        // BoolOr => {},
-        // BoolAnd => {},
-        // BitOr => {},
-        // BitAnd => {},
-        // BitXor => {},
-        _ => {
-            unreachable!()
-        }
-    };
+    ac.add_gate(var, varlop, varrop, infix);
 }
 
 fn traverse_expression (
@@ -892,27 +955,24 @@ fn traverse_expression (
     var: &String,
     expr: &Expression,
     program_archive: &ProgramArchive
-) {
+) -> String {
     use Expression::*;
     // let mut can_be_simplified = true;
     match expr {
         Number(_, value) => {
-            
+            value.to_string()
         },
         InfixOp { meta, lhe, infix_op, rhe, .. } => {
-            let varlop = String::from("vl");
-            let varrop = String::from("vr");
-            traverse_expression(ac, &varlop, lhe, program_archive);
-            traverse_expression(ac, &varrop, rhe, program_archive);
+            let varlop = traverse_expression(ac, var, lhe, program_archive);
+            let varrop = traverse_expression(ac, var, rhe, program_archive);
             traverse_infix_op(ac, var, &varlop, &varrop, meta, *infix_op);
+            var.to_string()
         }
-        PrefixOp { meta, prefix_op, rhe } => {
-            
-        },
+        PrefixOp { meta, prefix_op, rhe } => todo!(),
         InlineSwitchOp { meta, cond, if_true, if_false } => todo!(),
         ParallelOp { meta, rhe } => todo!(),
         Variable { meta, name, access } => {
-
+            name.to_string()
         },
         Call { meta, id, args } => todo!(),
         AnonymousComp { meta, id, is_parallel, params, signals, names } => todo!(),
@@ -927,40 +987,14 @@ fn traverse_signal_declaration(
     signal_name: &str,
     signal_type: SignalType
 ) {
-    use SignalType::*;
-    
-    match signal_type {
-        Input => {
-            ac.gate_count += 1;
-            if signal_name.contains("garb_") {
-                ac.inputs_garb.push(ac.gate_count);
-                println!("Garbler input {}", signal_name);
-            } else if signal_name.contains("eval_") {
-                ac.inputs_eval.push(ac.gate_count);
-                println!("Evaluator input {}", signal_name);
-            }
-        }
-        Output => {
-            ac.gate_count += 1;
-            ac.outputs.push(ac.gate_count);
-            println!("Output {}", signal_name);
-        }
-        Intermediate => {
-            ac.gate_count += 1;
-            ac.inters.push(ac.gate_count);
-            println!("Intermediate {}", signal_name);
-        }
-    }
-
+    ac.add_var(signal_name, signal_type);
 }
 
 fn traverse_variable_declaration(
     ac: &mut ArithmeticCircuit,
     var_name: &str
 ) {
-    ac.gate_count += 1;
-    ac.inters.push(ac.gate_count);
-    println!("Intermediate (variable) {}", var_name);
+    ac.add_var(var_name, SignalType::Intermediate);
 
 }
 

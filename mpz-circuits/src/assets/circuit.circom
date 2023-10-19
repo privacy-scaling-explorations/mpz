@@ -4,27 +4,19 @@ pragma circom 2.0.0;
 
 template Multiplier2 () {  
 
-   // Declaration of signals.  
+   // Declaration of signals 
    signal input garb_a;  
    signal input eval_b;  
+   signal i;
    signal output c;  
 
-   // Constraints.  
-   c <== garb_a * eval_b;  
-   garb_a <== eval_b * eval_b;
+   // Computation  
+   i <== garb_a + eval_b;
 
-   var i = 0;
+   var j = 100;
 
-   if (i == 0) {
-      c <== garb_a * garb_a; 
-   } else {
-      eval_b <== c * c;
-   }
-
-   while(i < 3){
-      i = i + 1;
-      c <== garb_a * garb_a; 
-   }
+   var t = i * j;
+   c <== garb_a * t;
 }
 
 component main = Multiplier2();
