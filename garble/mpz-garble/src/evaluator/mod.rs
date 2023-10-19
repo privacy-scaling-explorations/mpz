@@ -372,16 +372,14 @@ impl Evaluator {
         let encoded_outputs = if let Some(GarbledCircuit { gates, commitments }) =
             existing_garbled_circuit
         {
-            while !ev.is_complete() {
-                for batch in gates.chunks(self.config.batch_size) {
-                    let batch = batch.to_vec();
-                    // Move the evaluator to a new thread to process the batch then send it back
-                    ev = Backend::spawn(move || {
-                        ev.evaluate(batch.iter());
-                        ev
-                    })
-                    .await;
-                }
+            for batch in gates.chunks(self.config.batch_size) {
+                let batch = batch.to_vec();
+                // Move the evaluator to a new thread to process the batch then send it back
+                ev = Backend::spawn(move || {
+                    ev.evaluate(batch.iter());
+                    ev
+                })
+                .await;
             }
 
             let encoded_outputs = ev.outputs()?;
