@@ -238,7 +238,7 @@ impl Receiver<state::Extension> {
         let base: Vec<Block> = (0..CSP).map(|x| bytemuck::cast((1_u128) << x)).collect();
 
         // Computes Z.
-        let mut w = Block::inn_prdt_red(&z_star, &base);
+        let mut w = Block::inn_prdt_red(z_star, &base);
 
         // Computes W.
         w ^= Block::inn_prdt_red(&self.state.chis, &self.state.unchecked_ws);

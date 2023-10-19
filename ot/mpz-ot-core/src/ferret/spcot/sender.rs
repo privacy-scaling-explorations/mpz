@@ -105,7 +105,7 @@ impl Sender<state::Extension> {
 
         // Computes M0 and M1.
         let mut ms: Vec<[Block; 2]> = qs
-            .into_iter()
+            .iter()
             .zip(bs)
             .map(|(&q, b)| {
                 if b {
