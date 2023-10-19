@@ -15,6 +15,14 @@ template Multiplier2 () {
 
    var j = 100;
 
+   var k = 0;
+
+   if (garb_a != 3) {
+      k = k + 1;
+   } else {
+      j = j + 1;
+   }
+
    var t = i * j;
    c <== garb_a * t;
 }

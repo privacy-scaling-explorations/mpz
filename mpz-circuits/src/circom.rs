@@ -960,6 +960,7 @@ fn traverse_expression (
     // let mut can_be_simplified = true;
     match expr {
         Number(_, value) => {
+            ac.add_var(&value.to_string(), SignalType::Intermediate);
             value.to_string()
         },
         InfixOp { meta, lhe, infix_op, rhe, .. } => {
@@ -968,7 +969,10 @@ fn traverse_expression (
             traverse_infix_op(ac, var, &varlop, &varrop, meta, *infix_op);
             var.to_string()
         }
-        PrefixOp { meta, prefix_op, rhe } => todo!(),
+        PrefixOp { meta, prefix_op, rhe } => {
+            println!("Prefix found ");
+            var.to_string()
+        },
         InlineSwitchOp { meta, cond, if_true, if_false } => todo!(),
         ParallelOp { meta, rhe } => todo!(),
         Variable { meta, name, access } => {
@@ -1080,6 +1084,12 @@ fn traverse_statement (
             // Option::None
         }
         IfThenElse { cond, if_case, else_case, .. } => {
+            let var = String::from("IFTHENELSE");
+            ac.add_var(&var, SignalType::Intermediate);
+            let lhs = traverse_expression(ac, &var, cond, program_archive);
+            traverse_statement(ac, &if_case, program_archive);
+            let else_case = else_case.as_ref().map(|e| e.as_ref());
+            traverse_statement(ac, else_case.unwrap(), program_archive);
         //     let else_case = else_case.as_ref().map(|e| e.as_ref());
         //     let (possible_return, can_simplify, _) = execute_conditional_statement(
         //         cond,
@@ -1122,7 +1132,11 @@ fn traverse_statement (
         //     }
         },
         While { cond, stmt, .. } => loop {
-            
+            let var = String::from("while");
+            ac.add_var(&var, SignalType::Intermediate);
+            let lhs = traverse_expression(ac, &var, cond, program_archive);
+            println!("While cond {}", lhs);
+            traverse_statement(ac, stmt, program_archive);
         },
         ConstraintEquality { meta, lhe, rhe, .. } => {
             // debug_assert!(actual_node.is_some());
@@ -1184,10 +1198,11 @@ fn traverse_statement (
             
         }
         Substitution { meta, var, access, op, rhe, .. } => {
-            traverse_expression(ac, var, rhe, program_archive);
-            // println!("Assigning {} to {}", var, )
+            let rhs = traverse_expression(ac, var, rhe, program_archive);
+            println!("Assigning {} to {}", rhs, var);
         }
         Block { stmts, .. } => {
+            traverse_sequence_of_statements(ac, stmts, program_archive, true);
         }
         LogCall { args, .. } => {
         }
