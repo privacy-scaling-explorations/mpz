@@ -31,9 +31,11 @@ impl Sender {
         Sender {
             state: state::Extension {
                 delta,
-                vs: Vec::default(),
+                unchecked_vs: Vec::default(),
+                vs_length: Vec::default(),
                 cot_counter: 0,
                 exec_counter: 0,
+                extended: false,
                 prg: Prg::from_seed(seed),
             },
         }
@@ -55,6 +57,11 @@ impl Sender<state::Extension> {
         qs: &[Block],
         mask: MaskBits,
     ) -> Result<ExtendFromSender, SenderError> {
+        if self.state.extended {
+            return Err(SenderError::InvalidState(
+                "extension is not allowed".to_string(),
+            ));
+        }
         let MaskBits { bs } = mask;
 
         if qs.len() != h {
@@ -76,10 +83,17 @@ impl Sender<state::Extension> {
         let ggm_tree = GgmTree::new(h);
         let mut k0 = vec![Block::ZERO; h];
         let mut k1 = vec![Block::ZERO; h];
-        let mut tree = vec![Block::ZERO; 1<<h];
+        let mut tree = vec![Block::ZERO; 1 << h];
         ggm_tree.gen(s, &mut tree, &mut k0, &mut k1);
 
-        self.state.vs.extend_from_slice(&tree);
+        // Stores the tree, i.e., the possible output of sender.
+        self.state.unchecked_vs.extend_from_slice(&tree);
+
+        // Stores the length of this extension.
+        self.state.vs_length.push(1 << h);
+
+        // Computes the sum of the leaves and delta.
+        let sum = tree.iter().fold(self.state.delta, |acc, &x| acc ^ x);
 
         // Computes M0 and M1.
         let mut ms: Vec<[Block; 2]> = qs
@@ -107,13 +121,6 @@ impl Sender<state::Extension> {
                 *m1 ^= *k1;
             });
 
-        // Computes the sum of the leaves and delta.
-        let sum = self
-            .state
-            .vs
-            .iter()
-            .fold(self.state.delta, |acc, &x| acc ^ x);
-
         Ok(ExtendFromSender { ms, sum })
     }
 
@@ -123,15 +130,13 @@ impl Sender<state::Extension> {
     ///
     /// # Arguments
     ///
-    /// * `h` - The depth of the GGM tree.
-    /// * `checkfc` - The blocks received from the ideal functionality for the check.
+    /// * `y_star` - The blocks received from the ideal functionality for the check.
     /// * `checkfr` - The blocks received from the receiver for the check.
     pub fn check(
         &mut self,
-        h: usize,
         y_star: &[Block],
         checkfr: CheckFromReceiver,
-    ) -> Result<(Vec<Block>, CheckFromSender), SenderError> {
+    ) -> Result<(Vec<Vec<Block>>, CheckFromSender), SenderError> {
         let CheckFromReceiver { chis_seed, x_prime } = checkfr;
 
         if y_star.len() != CSP {
@@ -162,17 +167,29 @@ impl Sender<state::Extension> {
         let mut v = Block::inn_prdt_red(&y, &base);
 
         // Computes V
-        let mut chis = vec![Block::ZERO; 1 << h];
-        Prg::from_seed(chis_seed).random_blocks(&mut chis);
-        v ^= Block::inn_prdt_red(&chis, &self.state.vs);
+        let mut prg = Prg::from_seed(chis_seed);
+        let mut chis = Vec::new();
+        for n in &self.state.vs_length {
+            let mut chi = vec![Block::ZERO; *n];
+            prg.random_blocks(&mut chi);
+            chis.extend_from_slice(&chi);
+        }
+        v ^= Block::inn_prdt_red(&chis, &self.state.unchecked_vs);
 
         // Computes H'(V)
         let hashed_v = Hash::from(blake3(&v.to_bytes()));
 
-        self.state.exec_counter += 1;
-        self.state.cot_counter += self.state.vs.len();
+        let mut res = Vec::new();
+        for n in &self.state.vs_length {
+            let tmp: Vec<Block> = self.state.unchecked_vs.drain(..*n).collect();
+            res.push(tmp);
+        }
 
-        Ok((self.state.vs.clone(), CheckFromSender { hashed_v }))
+        self.state.exec_counter += self.state.vs_length.len();
+        self.state.cot_counter += self.state.unchecked_vs.len();
+        self.state.extended = true;
+
+        Ok((res, CheckFromSender { hashed_v }))
     }
 }
 
@@ -204,17 +221,21 @@ pub mod state {
     /// In this state the sender performs COT extension with random choice bits (potentially multiple times). Also in this state the sender responds to COT requests.
     pub struct Extension {
         /// Sender's global secret.
-        pub delta: Block,
-        /// Sender's output blocks.
-        pub vs: Vec<Block>,
+        pub(super) delta: Block,
+        /// Sender's output blocks, support multiple extensions.
+        pub(super) unchecked_vs: Vec<Block>,
+        /// Store the length of each extension.
+        pub(super) vs_length: Vec<usize>,
 
         /// Current COT counter
-        pub cot_counter: usize,
+        pub(super) cot_counter: usize,
         /// Current execution counter
-        pub exec_counter: usize,
+        pub(super) exec_counter: usize,
+        /// This is to prevent the receiver from extending twice
+        pub(super) extended: bool,
 
         /// A PRG to generate random strings.
-        pub prg: Prg,
+        pub(super) prg: Prg,
     }
 
     impl State for Extension {}

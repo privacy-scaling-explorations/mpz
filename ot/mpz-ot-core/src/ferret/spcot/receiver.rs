@@ -30,10 +30,12 @@ impl Receiver {
     pub fn setup(self, seed: Block) -> Receiver<state::Extension> {
         Receiver {
             state: state::Extension {
-                ws: Vec::default(),
+                unchecked_ws: Vec::default(),
                 chis: Vec::default(),
+                alphas_and_length: Vec::default(),
                 cot_counter: 0,
                 exec_counter: 0,
+                extended: false,
                 prg: Prg::from_seed(seed),
             },
         }
@@ -56,6 +58,12 @@ impl Receiver<state::Extension> {
         alpha: usize,
         rs: &[bool],
     ) -> Result<MaskBits, ReceiverError> {
+        if self.state.extended {
+            return Err(ReceiverError::InvalidState(
+                "extension is not allowed".to_string(),
+            ));
+        }
+
         if alpha > (1 << h) {
             return Err(ReceiverError::InvalidInput(
                 "the input pos should be no more than 2^h".to_string(),
@@ -99,6 +107,12 @@ impl Receiver<state::Extension> {
         ts: &[Block],
         extendfs: ExtendFromSender,
     ) -> Result<(), ReceiverError> {
+        if self.state.extended {
+            return Err(ReceiverError::InvalidState(
+                "extension is not allowed".to_string(),
+            ));
+        }
+
         if alpha > (1 << h) {
             return Err(ReceiverError::InvalidInput(
                 "the input pos should be no more than 2^h".to_string(),
@@ -146,10 +160,11 @@ impl Receiver<state::Extension> {
         let mut tree = vec![Block::ZERO; 1 << h];
         ggm_tree.reconstruct(&mut tree, &k, &alpha_bar_vec);
 
-        self.state.ws.extend_from_slice(&tree);
+        // Sets `tree[alpha]`, which is `ws[alpha]`.
+        tree[alpha] = tree.iter().fold(sum, |acc, &x| acc ^ x);
 
-        // Sets `ws[alpha]`.
-        self.state.ws[alpha] = self.state.ws.iter().fold(sum, |acc, &x| acc ^ x);
+        self.state.unchecked_ws.extend_from_slice(&tree);
+        self.state.alphas_and_length.push((alpha, 1 << h));
 
         Ok(())
     }
@@ -160,21 +175,8 @@ impl Receiver<state::Extension> {
     ///
     /// # Arguments
     ///
-    /// * `h` - The depth of the GGM tree.
-    /// * `alpha` - The chosen position.
     /// * `x_star` - The message from COT ideal functionality for the receiver. Only the random bits are used.
-    pub fn check_pre(
-        &mut self,
-        h: usize,
-        alpha: usize,
-        x_star: &[bool],
-    ) -> Result<CheckFromReceiver, ReceiverError> {
-        if alpha > (1 << h) {
-            return Err(ReceiverError::InvalidInput(
-                "the input pos should be no more than 2^h".to_string(),
-            ));
-        }
-
+    pub fn check_pre(&mut self, x_star: &[bool]) -> Result<CheckFromReceiver, ReceiverError> {
         if x_star.len() != CSP {
             return Err(ReceiverError::InvalidLength(
                 "the length of x* should be 128".to_string(),
@@ -182,10 +184,19 @@ impl Receiver<state::Extension> {
         }
 
         let chis_seed = self.state.prg.random_block();
-        self.state.chis = vec![Block::ZERO; 1 << h];
-        Prg::from_seed(chis_seed).random_blocks(&mut self.state.chis);
+        let mut prg = Prg::from_seed(chis_seed);
 
-        let x_prime: Vec<bool> = self.state.chis[alpha]
+        // The sum of all the chi[alpha].
+        let mut sum_chi_alpha = Block::ZERO;
+
+        for (alpha, n) in &self.state.alphas_and_length {
+            let mut chis = vec![Block::ZERO; *n];
+            prg.random_blocks(&mut chis);
+            sum_chi_alpha ^= chis[*alpha];
+            self.state.chis.extend_from_slice(&chis);
+        }
+
+        let x_prime: Vec<bool> = sum_chi_alpha
             .to_lsb0_vec()
             .into_iter()
             .zip(x_star)
@@ -207,7 +218,7 @@ impl Receiver<state::Extension> {
         &mut self,
         z_star: &[Block],
         check: CheckFromSender,
-    ) -> Result<Vec<Block>, ReceiverError> {
+    ) -> Result<Vec<(Vec<Block>, usize)>, ReceiverError> {
         let CheckFromSender { hashed_v } = check;
 
         if z_star.len() != CSP {
@@ -223,7 +234,7 @@ impl Receiver<state::Extension> {
         let mut w = Block::inn_prdt_red(&z_star, &base);
 
         // Computes W.
-        w ^= Block::inn_prdt_red(&self.state.chis, &self.state.ws);
+        w ^= Block::inn_prdt_red(&self.state.chis, &self.state.unchecked_ws);
 
         // Computes H'(W)
         let hashed_w = Hash::from(blake3(&w.to_bytes()));
@@ -232,9 +243,17 @@ impl Receiver<state::Extension> {
             return Err(ReceiverError::ConsistencyCheckFailed);
         }
 
-        self.state.exec_counter += 1;
-        self.state.cot_counter += self.state.ws.len();
-        Ok(self.state.ws.clone())
+        self.state.exec_counter += self.state.alphas_and_length.len();
+        self.state.cot_counter += self.state.unchecked_ws.len();
+        self.state.extended = true;
+
+        let mut res = Vec::new();
+        for (alpha, n) in &self.state.alphas_and_length {
+            let tmp: Vec<Block> = self.state.unchecked_ws.drain(..*n).collect();
+            res.push((tmp, *alpha));
+        }
+
+        Ok(res)
     }
 }
 
@@ -266,17 +285,21 @@ pub mod state {
     /// In this state the receiver performs COT extension and outputs random choice bits (potentially multiple times).
     pub struct Extension {
         /// Receiver's output blocks.
-        pub ws: Vec<Block>,
+        pub(super) unchecked_ws: Vec<Block>,
         /// Receiver's random challenges chis.
-        pub chis: Vec<Block>,
+        pub(super) chis: Vec<Block>,
+        /// Stores the alpha and the length in each extend phase.
+        pub(super) alphas_and_length: Vec<(usize, usize)>,
 
         /// Current COT counter
-        pub cot_counter: usize,
+        pub(super) cot_counter: usize,
         /// Current execution counter
-        pub exec_counter: usize,
+        pub(super) exec_counter: usize,
+        /// This is to prevent the receiver from extending twice
+        pub(super) extended: bool,
 
         /// A PRG to generate random strings.
-        pub prg: Prg,
+        pub(super) prg: Prg,
     }
 
     impl State for Extension {}

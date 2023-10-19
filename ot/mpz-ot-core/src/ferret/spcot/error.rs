@@ -4,6 +4,8 @@
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum SenderError {
+    #[error("invalid state: expected {0}")]
+    InvalidState(String),
     #[error("invalid length: expected {0}")]
     InvalidLength(String),
 }
@@ -12,6 +14,8 @@ pub enum SenderError {
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum ReceiverError {
+    #[error("invalid state: expected {0}")]
+    InvalidState(String),
     #[error("invalid input: expected {0}")]
     InvalidInput(String),
     #[error("invalid length: expected {0}")]

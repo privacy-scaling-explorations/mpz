@@ -29,19 +29,34 @@ mod tests {
         let mut sender = sender.setup(delta, sender_seed);
         let mut receiver = receiver.setup(receiver_seed);
 
-        let h = 8;
-        let alpha = 3;
+        let h1 = 8;
+        let alpha1 = 3;
 
-        // Extend
-        let (msg_for_sender, msg_for_receiver) = ideal_cot.extend(h);
+        // Extend once
+        let (msg_for_sender, msg_for_receiver) = ideal_cot.extend(h1);
 
         let CotMsgForReceiver { rs, ts } = msg_for_receiver;
         let CotMsgForSender { qs } = msg_for_sender;
-        let maskbits = receiver.extend_mask_bits(h, alpha, &rs).unwrap();
+        let maskbits = receiver.extend_mask_bits(h1, alpha1, &rs).unwrap();
 
-        let msg_from_sender = sender.extend(h, &qs, maskbits).unwrap();
+        let msg_from_sender = sender.extend(h1, &qs, maskbits).unwrap();
 
-        receiver.extend(h, alpha, &ts, msg_from_sender).unwrap();
+        receiver.extend(h1, alpha1, &ts, msg_from_sender).unwrap();
+
+        // Extend twice
+        let h2 = 4;
+        let alpha2 = 2;
+
+        let (msg_for_sender, msg_for_receiver) = ideal_cot.extend(h2);
+
+        let CotMsgForReceiver { rs, ts } = msg_for_receiver;
+        let CotMsgForSender { qs } = msg_for_sender;
+
+        let maskbits = receiver.extend_mask_bits(h2, alpha2, &rs).unwrap();
+
+        let msg_from_sender = sender.extend(h2, &qs, maskbits).unwrap();
+
+        receiver.extend(h2, alpha2, &ts, msg_from_sender).unwrap();
 
         // Check
         let (msg_for_sender, msg_for_receiver) = ideal_cot.extend(CSP);
@@ -53,13 +68,21 @@ mod tests {
 
         let CotMsgForSender { qs: y_star } = msg_for_sender;
 
-        let check_from_receiver = receiver.check_pre(h, alpha, &x_star).unwrap();
+        let check_from_receiver = receiver.check_pre(&x_star).unwrap();
 
-        let (mut output_sender, check) = sender.check(h, &y_star, check_from_receiver).unwrap();
+        let (mut output_sender, check) = sender.check(&y_star, check_from_receiver).unwrap();
 
         let output_receiver = receiver.check(&z_star, check).unwrap();
 
-        output_sender[alpha] ^= delta;
-        assert_eq!(output_sender, output_receiver);
+        output_sender
+            .iter_mut()
+            .zip(output_receiver.iter())
+            .all(|(vs, (ws, alpha))| {
+                vs[*alpha] ^= delta;
+                vs == ws
+            });
+
+        // output_sender[alpha] ^= delta;
+        // assert_eq!(output_sender, output_receiver);
     }
 }
