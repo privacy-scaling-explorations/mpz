@@ -36,7 +36,11 @@ impl Memory for DEAP {
         self.state().memory.get_ref_by_id(id).cloned()
     }
 
-    fn get_value_type(&self, id: &str) -> Option<ValueType> {
+    fn get_value_type(&self, value_ref: &ValueRef) -> ValueType {
+        self.state().memory.get_value_type(value_ref)
+    }
+
+    fn get_value_type_by_id(&self, id: &str) -> Option<ValueType> {
         let state = self.state();
         let value_ref = state.memory.get_ref_by_id(id)?;
         Some(state.memory.get_value_type(value_ref))

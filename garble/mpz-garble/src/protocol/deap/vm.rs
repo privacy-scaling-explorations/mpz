@@ -228,8 +228,12 @@ impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
         self.deap().get_value(id)
     }
 
-    fn get_value_type(&self, id: &str) -> Option<ValueType> {
-        self.deap().get_value_type(id)
+    fn get_value_type(&self, value_ref: &ValueRef) -> ValueType {
+        self.deap().get_value_type(value_ref)
+    }
+
+    fn get_value_type_by_id(&self, id: &str) -> Option<ValueType> {
+        self.deap().get_value_type_by_id(id)
     }
 }
 

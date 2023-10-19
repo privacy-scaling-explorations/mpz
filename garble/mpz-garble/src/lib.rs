@@ -30,7 +30,7 @@ pub use memory::{AssignedValues, ValueMemory};
 pub use threadpool::ThreadPool;
 
 use utils::id::NestedId;
-use value::{ValueId, ValueRef};
+use value::{ArrayRef, ValueId, ValueRef};
 
 /// Errors that can occur when using an implementation of [`Vm`].
 #[derive(Debug, thiserror::Error)]
@@ -68,6 +68,8 @@ pub enum MemoryError {
     DuplicateValue(ValueRef),
     #[error("value with id {0} has not been defined")]
     Undefined(String),
+    #[error("attempted to create an invalid array: {0}")]
+    InvalidArray(String),
     #[error(transparent)]
     Assignment(#[from] AssignmentError),
 }
@@ -255,8 +257,45 @@ pub trait Memory {
     /// Returns a value if it exists.
     fn get_value(&self, id: &str) -> Option<ValueRef>;
 
+    /// Returns the type of a value.
+    fn get_value_type(&self, value_ref: &ValueRef) -> ValueType;
+
     /// Returns the type of a value if it exists.
-    fn get_value_type(&self, id: &str) -> Option<ValueType>;
+    fn get_value_type_by_id(&self, id: &str) -> Option<ValueType>;
+
+    /// Creates an array from the provided values.
+    ///
+    /// All values must be of the same primitive type.
+    fn array_from_values(&self, values: &[ValueRef]) -> Result<ValueRef, MemoryError> {
+        if values.is_empty() {
+            return Err(MemoryError::InvalidArray(
+                "cannot create an array with no values".to_string(),
+            ));
+        }
+
+        let mut ids = Vec::with_capacity(values.len());
+        let elem_typ = self.get_value_type(&values[0]);
+        for value in values {
+            let ValueRef::Value { id } = value else {
+                return Err(MemoryError::InvalidArray(
+                    "an array can only contain primitive types".to_string(),
+                ));
+            };
+
+            let value_typ = self.get_value_type(value);
+
+            if value_typ != elem_typ {
+                return Err(MemoryError::InvalidArray(format!(
+                    "all values in an array must have the same type, expected {:?}, got {:?}",
+                    elem_typ, value_typ
+                )));
+            };
+
+            ids.push(id.clone());
+        }
+
+        Ok(ValueRef::Array(ArrayRef::new(ids)))
+    }
 }
 
 /// This trait provides methods for executing a circuit.
