@@ -133,6 +133,8 @@ impl Sender<state::Extension> {
         self.state.hasher.update(&ms.to_bytes());
         self.state.hasher.update(&sum.to_bytes());
 
+        self.state.exec_counter += 1;
+
         Ok(ExtendFromSender { ms, sum })
     }
 
@@ -200,7 +202,6 @@ impl Sender<state::Extension> {
             res.push(tmp);
         }
 
-        self.state.exec_counter += self.state.vs_length.len();
         self.state.cot_counter += self.state.unchecked_vs.len();
         self.state.extended = true;
 

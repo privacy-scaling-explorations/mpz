@@ -173,6 +173,8 @@ impl Receiver<state::Extension> {
         self.state.unchecked_ws.extend_from_slice(&tree);
         self.state.alphas_and_length.push((alpha, 1 << h));
 
+        self.state.exec_counter += 1;
+
         Ok(())
     }
 
@@ -250,7 +252,6 @@ impl Receiver<state::Extension> {
             return Err(ReceiverError::ConsistencyCheckFailed);
         }
 
-        self.state.exec_counter += self.state.alphas_and_length.len();
         self.state.cot_counter += self.state.unchecked_ws.len();
         self.state.extended = true;
 
