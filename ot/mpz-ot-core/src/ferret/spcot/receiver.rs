@@ -1,7 +1,10 @@
 //! SPCOT receiver
 use crate::ferret::{spcot::error::ReceiverError, CSP};
 use itybity::ToBits;
-use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, utils::blake3, Block};
+use mpz_core::{
+    aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, serialize::CanonicalSerialize,
+    utils::blake3, Block,
+};
 use rand_core::SeedableRng;
 
 use super::msgs::{CheckFromReceiver, CheckFromSender, ExtendFromSender, MaskBits};
@@ -24,10 +27,7 @@ impl Receiver {
     ///
     /// See step 1 in Figure 6.
     ///
-    /// # Arguments
-    ///
-    /// * `seed` - The random seed to generate PRG.
-    pub fn setup(self, seed: Block) -> Receiver<state::Extension> {
+    pub fn setup(self) -> Receiver<state::Extension> {
         Receiver {
             state: state::Extension {
                 unchecked_ws: Vec::default(),
@@ -36,7 +36,7 @@ impl Receiver {
                 cot_counter: 0,
                 exec_counter: 0,
                 extended: false,
-                prg: Prg::from_seed(seed),
+                hasher: blake3::Hasher::new(),
             },
         }
     }
@@ -87,6 +87,9 @@ impl Receiver<state::Extension> {
             .map(|(alpha, r)| alpha == r)
             .collect();
 
+        // Updates hasher.
+        self.state.hasher.update(&bs.to_bytes());
+
         Ok(MaskBits { bs })
     }
 
@@ -131,6 +134,10 @@ impl Receiver<state::Extension> {
                 "the length of M should be h".to_string(),
             ));
         }
+
+        // Updates hasher
+        self.state.hasher.update(&ms.to_bytes());
+        self.state.hasher.update(&sum.to_bytes());
 
         let mut alpha_bar_vec = alpha.to_msb0_vec();
         alpha_bar_vec.drain(0..alpha_bar_vec.len() - h);
@@ -183,8 +190,8 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let chis_seed = self.state.prg.random_block();
-        let mut prg = Prg::from_seed(chis_seed);
+        let seed = *self.state.hasher.finalize().as_bytes();
+        let mut prg = Prg::from_seed(Block::try_from(&seed[0..16]).unwrap());
 
         // The sum of all the chi[alpha].
         let mut sum_chi_alpha = Block::ZERO;
@@ -203,7 +210,7 @@ impl Receiver<state::Extension> {
             .map(|(x, &x_star)| x != x_star)
             .collect();
 
-        Ok(CheckFromReceiver { chis_seed, x_prime })
+        Ok(CheckFromReceiver { x_prime })
     }
 
     /// Performs the final consistency check.
@@ -298,8 +305,8 @@ pub mod state {
         /// This is to prevent the receiver from extending twice
         pub(super) extended: bool,
 
-        /// A PRG to generate random strings.
-        pub(super) prg: Prg,
+        /// A hasher to generate chi seed.
+        pub(super) hasher: blake3::Hasher,
     }
 
     impl State for Extension {}

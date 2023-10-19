@@ -1,6 +1,9 @@
 //! SPCOT sender.
 use crate::ferret::{spcot::error::SenderError, CSP};
-use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, utils::blake3, Block};
+use mpz_core::{
+    aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, serialize::CanonicalSerialize,
+    utils::blake3, Block,
+};
 use rand_core::SeedableRng;
 
 use super::msgs::{CheckFromReceiver, CheckFromSender, ExtendFromSender, MaskBits};
@@ -37,6 +40,7 @@ impl Sender {
                 exec_counter: 0,
                 extended: false,
                 prg: Prg::from_seed(seed),
+                hasher: blake3::Hasher::new(),
             },
         }
     }
@@ -62,7 +66,6 @@ impl Sender<state::Extension> {
                 "extension is not allowed".to_string(),
             ));
         }
-        let MaskBits { bs } = mask;
 
         if qs.len() != h {
             return Err(SenderError::InvalidLength(
@@ -70,11 +73,16 @@ impl Sender<state::Extension> {
             ));
         }
 
+        let MaskBits { bs } = mask;
+
         if bs.len() != h {
             return Err(SenderError::InvalidLength(
                 "the length of b should be h".to_string(),
             ));
         }
+
+        // Updates hasher.
+        self.state.hasher.update(&bs.to_bytes());
 
         // Step 3-4, Figure 6.
 
@@ -121,6 +129,10 @@ impl Sender<state::Extension> {
                 *m1 ^= *k1;
             });
 
+        // Updates hasher
+        self.state.hasher.update(&ms.to_bytes());
+        self.state.hasher.update(&sum.to_bytes());
+
         Ok(ExtendFromSender { ms, sum })
     }
 
@@ -137,7 +149,7 @@ impl Sender<state::Extension> {
         y_star: &[Block],
         checkfr: CheckFromReceiver,
     ) -> Result<(Vec<Vec<Block>>, CheckFromSender), SenderError> {
-        let CheckFromReceiver { chis_seed, x_prime } = checkfr;
+        let CheckFromReceiver { x_prime } = checkfr;
 
         if y_star.len() != CSP {
             return Err(SenderError::InvalidLength(
@@ -167,7 +179,10 @@ impl Sender<state::Extension> {
         let mut v = Block::inn_prdt_red(&y, &base);
 
         // Computes V
-        let mut prg = Prg::from_seed(chis_seed);
+        // let mut prg = Prg::from_seed(chis_seed);
+        let seed = *self.state.hasher.finalize().as_bytes();
+        let mut prg = Prg::from_seed(Block::try_from(&seed[0..16]).unwrap());
+
         let mut chis = Vec::new();
         for n in &self.state.vs_length {
             let mut chi = vec![Block::ZERO; *n];
@@ -236,6 +251,8 @@ pub mod state {
 
         /// A PRG to generate random strings.
         pub(super) prg: Prg,
+        /// A hasher to generate chi seed.
+        pub(super) hasher: blake3::Hasher,
     }
 
     impl State for Extension {}

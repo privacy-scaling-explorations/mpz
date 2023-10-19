@@ -24,10 +24,9 @@ mod tests {
         let mut prg = Prg::new();
         let sender_seed = prg.random_block();
         let delta = ideal_cot.delta;
-        let receiver_seed = prg.random_block();
 
         let mut sender = sender.setup(delta, sender_seed);
-        let mut receiver = receiver.setup(receiver_seed);
+        let mut receiver = receiver.setup();
 
         let h1 = 8;
         let alpha1 = 3;
@@ -81,8 +80,5 @@ mod tests {
                 vs[*alpha] ^= delta;
                 vs == ws
             });
-
-        // output_sender[alpha] ^= delta;
-        // assert_eq!(output_sender, output_receiver);
     }
 }
