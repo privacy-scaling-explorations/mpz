@@ -1,17 +1,15 @@
 //! SPCOT receiver
 use crate::ferret::{spcot::error::ReceiverError, CSP};
 use itybity::ToBits;
-use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, Block};
+use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, utils::blake3, Block};
 use rand_core::SeedableRng;
 
-use super::msgs::{
-    CheckFromReceiver, CheckFromSender, CotMsgForReceiver, ExtendFromSender, MaskBits,
-};
+use super::msgs::{CheckFromReceiver, CheckFromSender, ExtendFromSender, MaskBits};
 
 /// SPCOT receiver.
 #[derive(Debug, Default)]
 pub struct Receiver<T: state::State = state::Initialized> {
-    pub(crate) state: T,
+    state: T,
 }
 
 impl Receiver {
@@ -51,20 +49,18 @@ impl Receiver<state::Extension> {
     ///
     /// * `h` - The depth of the GGM tree.
     /// * `alpha` - The chosen position.
-    /// * `extend` - The message from COT ideal functionality for the receiver. Only the random bits are used.
+    /// * `rs` - The message from COT ideal functionality for the receiver. Only the random bits are used.
     pub fn extend_mask_bits(
         &mut self,
         h: usize,
         alpha: usize,
-        extend: CotMsgForReceiver,
+        rs: &[bool],
     ) -> Result<MaskBits, ReceiverError> {
         if alpha > (1 << h) {
             return Err(ReceiverError::InvalidInput(
                 "the input pos should be no more than 2^h".to_string(),
             ));
         }
-
-        let CotMsgForReceiver { rs, ts: _ } = extend;
 
         if rs.len() != h {
             return Err(ReceiverError::InvalidLength(
@@ -86,7 +82,7 @@ impl Receiver<state::Extension> {
         Ok(MaskBits { bs })
     }
 
-    /// Performs the GGM reconstruction step in extension.
+    /// Performs the GGM reconstruction step in extension. This function can be called multiple times before checking.
     ///
     /// See step 5 in Figure 6.
     ///
@@ -94,13 +90,13 @@ impl Receiver<state::Extension> {
     ///
     /// * `h` - The depth of the GGM tree.
     /// * `alpha` - The chosen position.
-    /// * `extendfc` - The message from COT ideal functionality for the receiver. Only the chosen blocks are used.
+    /// * `ts` - The message from COT ideal functionality for the receiver. Only the chosen blocks are used.
     /// * `extendfr` - The message sent from the sender.
     pub fn extend(
         &mut self,
         h: usize,
         alpha: usize,
-        extendfc: CotMsgForReceiver,
+        ts: &[Block],
         extendfs: ExtendFromSender,
     ) -> Result<(), ReceiverError> {
         if alpha > (1 << h) {
@@ -109,7 +105,6 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let CotMsgForReceiver { rs: _, ts } = extendfc;
         let ExtendFromSender { ms, sum } = extendfs;
         if ts.len() != h {
             return Err(ReceiverError::InvalidLength(
@@ -134,7 +129,7 @@ impl Receiver<state::Extension> {
             .zip(ts)
             .zip(alpha_bar_vec.iter())
             .enumerate()
-            .map(|(i, (([m0, m1], t), &b))| {
+            .map(|(i, (([m0, m1], &t), &b))| {
                 let tweak: Block = bytemuck::cast([i, self.state.exec_counter]);
                 if !b {
                     // H(t, i|ell) ^ M0
@@ -148,8 +143,10 @@ impl Receiver<state::Extension> {
 
         // Reconstructs GGM tree except `ws[alpha]`.
         let ggm_tree = GgmTree::new(h);
-        self.state.ws = vec![Block::ZERO; 1 << h];
-        ggm_tree.reconstruct(&mut self.state.ws, &k, &alpha_bar_vec);
+        let mut tree = vec![Block::ZERO; 1 << h];
+        ggm_tree.reconstruct(&mut tree, &k, &alpha_bar_vec);
+
+        self.state.ws.extend_from_slice(&tree);
 
         // Sets `ws[alpha]`.
         self.state.ws[alpha] = self.state.ws.iter().fold(sum, |acc, &x| acc ^ x);
@@ -165,20 +162,18 @@ impl Receiver<state::Extension> {
     ///
     /// * `h` - The depth of the GGM tree.
     /// * `alpha` - The chosen position.
-    /// * `check` - The message from COT ideal functionality for the receiver. Only the random bits are used.
+    /// * `x_star` - The message from COT ideal functionality for the receiver. Only the random bits are used.
     pub fn check_pre(
         &mut self,
         h: usize,
         alpha: usize,
-        check: CotMsgForReceiver,
+        x_star: &[bool],
     ) -> Result<CheckFromReceiver, ReceiverError> {
         if alpha > (1 << h) {
             return Err(ReceiverError::InvalidInput(
                 "the input pos should be no more than 2^h".to_string(),
             ));
         }
-
-        let CotMsgForReceiver { rs: x_star, ts: _ } = check;
 
         if x_star.len() != CSP {
             return Err(ReceiverError::InvalidLength(
@@ -194,7 +189,7 @@ impl Receiver<state::Extension> {
             .to_lsb0_vec()
             .into_iter()
             .zip(x_star)
-            .map(|(x, x_star)| x != x_star)
+            .map(|(x, &x_star)| x != x_star)
             .collect();
 
         Ok(CheckFromReceiver { chis_seed, x_prime })
@@ -206,15 +201,14 @@ impl Receiver<state::Extension> {
     ///
     /// # Arguments
     ///
-    /// * `checkfc` - The message from COT ideal functionality for the receiver. Only the chosen blocks are used.
+    /// * `z_star` - The message from COT ideal functionality for the receiver. Only the chosen blocks are used.
     /// * `check` - The hashed value sent from the Sender.
     pub fn check(
         &mut self,
-        checkfc: CotMsgForReceiver,
+        z_star: &[Block],
         check: CheckFromSender,
-    ) -> Result<(), ReceiverError> {
+    ) -> Result<Vec<Block>, ReceiverError> {
         let CheckFromSender { hashed_v } = check;
-        let CotMsgForReceiver { rs: _, ts: z_star } = checkfc;
 
         if z_star.len() != CSP {
             return Err(ReceiverError::InvalidLength(
@@ -232,9 +226,7 @@ impl Receiver<state::Extension> {
         w ^= Block::inn_prdt_red(&self.state.chis, &self.state.ws);
 
         // Computes H'(W)
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(&w.to_bytes());
-        let hashed_w = Hash::from(*hasher.finalize().as_bytes());
+        let hashed_w = Hash::from(blake3(&w.to_bytes()));
 
         if hashed_v != hashed_w {
             return Err(ReceiverError::ConsistencyCheckFailed);
@@ -242,7 +234,7 @@ impl Receiver<state::Extension> {
 
         self.state.exec_counter += 1;
         self.state.cot_counter += self.state.ws.len();
-        Ok(())
+        Ok(self.state.ws.clone())
     }
 }
 

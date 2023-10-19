@@ -10,7 +10,10 @@ mod tests {
     use mpz_core::prg::Prg;
 
     use super::{receiver::Receiver as SpcotReceiver, sender::Sender as SpcotSender};
-    use crate::ferret::{ideal_cot::IdealCOT, CSP};
+    use crate::ferret::{
+        ideal_cot::{CotMsgForReceiver, CotMsgForSender, IdealCOT},
+        CSP,
+    };
 
     #[test]
     fn spcot_test() {
@@ -32,30 +35,31 @@ mod tests {
         // Extend
         let (msg_for_sender, msg_for_receiver) = ideal_cot.extend(h);
 
-        let maskbits = receiver
-            .extend_mask_bits(h, alpha, msg_for_receiver.clone())
-            .unwrap();
+        let CotMsgForReceiver { rs, ts } = msg_for_receiver;
+        let CotMsgForSender { qs } = msg_for_sender;
+        let maskbits = receiver.extend_mask_bits(h, alpha, &rs).unwrap();
 
-        let msg_from_sender = sender.extend(h, msg_for_sender, maskbits).unwrap();
+        let msg_from_sender = sender.extend(h, &qs, maskbits).unwrap();
 
-        receiver
-            .extend(h, alpha, msg_for_receiver, msg_from_sender)
-            .unwrap();
+        receiver.extend(h, alpha, &ts, msg_from_sender).unwrap();
 
         // Check
         let (msg_for_sender, msg_for_receiver) = ideal_cot.extend(CSP);
 
-        let check_from_receiver = receiver
-            .check_pre(h, alpha, msg_for_receiver.clone())
-            .unwrap();
+        let CotMsgForReceiver {
+            rs: x_star,
+            ts: z_star,
+        } = msg_for_receiver;
 
-        let check = sender
-            .check(h, msg_for_sender, check_from_receiver)
-            .unwrap();
+        let CotMsgForSender { qs: y_star } = msg_for_sender;
 
-        receiver.check(msg_for_receiver, check).unwrap();
+        let check_from_receiver = receiver.check_pre(h, alpha, &x_star).unwrap();
 
-        sender.state.vs[alpha] ^= sender.state.delta;
-        assert_eq!(sender.state.vs, receiver.state.ws);
+        let (mut output_sender, check) = sender.check(h, &y_star, check_from_receiver).unwrap();
+
+        let output_receiver = receiver.check(&z_star, check).unwrap();
+
+        output_sender[alpha] ^= delta;
+        assert_eq!(output_sender, output_receiver);
     }
 }

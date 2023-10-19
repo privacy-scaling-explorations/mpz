@@ -6,30 +6,12 @@ use serde::{Deserialize, Serialize};
 /// A SPCOT message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(missing_docs)]
-pub enum Message<BaseMsg> {
-    BaseMsg(BaseMsg),
+pub enum Message<CotMsg> {
+    CotMsg(CotMsg),
     MaskBits(MaskBits),
     ExtendFromSender(ExtendFromSender),
-    CotMsgForSender(CotMsgForSender),
-    CotMsgForReceiver(CotMsgForReceiver),
     CheckFromReceiver(CheckFromReceiver),
     CheckFromSender(CheckFromSender),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/// The message that sender receives from the COT functionality.
-pub struct CotMsgForSender {
-    /// The random blocks that sender receives from the COT functionality.
-    pub qs: Vec<Block>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/// The message that receiver receives from the COT functionality.
-pub struct CotMsgForReceiver {
-    /// The random bits that receiver receives from the COT functionality.
-    pub rs: Vec<bool>,
-    /// The chosen blocks that receiver receivers from the COT functionality.
-    pub ts: Vec<Block>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

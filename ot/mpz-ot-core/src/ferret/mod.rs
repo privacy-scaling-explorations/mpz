@@ -8,9 +8,23 @@ pub const CSP: usize = 128;
 pub mod ideal_cot {
     //! Ideal functionality of COT.
     use mpz_core::{prg::Prg, Block};
+    use serde::{Deserialize, Serialize};
 
-    use super::spcot::msgs::{CotMsgForReceiver, CotMsgForSender};
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    /// The message that sender receives from the COT functionality.
+    pub struct CotMsgForSender {
+        /// The random blocks that sender receives from the COT functionality.
+        pub qs: Vec<Block>,
+    }
 
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    /// The message that receiver receives from the COT functionality.
+    pub struct CotMsgForReceiver {
+        /// The random bits that receiver receives from the COT functionality.
+        pub rs: Vec<bool>,
+        /// The chosen blocks that receiver receivers from the COT functionality.
+        pub ts: Vec<Block>,
+    }
     #[allow(missing_docs)]
     pub struct IdealCOT {
         pub delta: Block,

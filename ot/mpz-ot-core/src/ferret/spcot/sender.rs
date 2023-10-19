@@ -1,16 +1,14 @@
 //! SPCOT sender.
 use crate::ferret::{spcot::error::SenderError, CSP};
-use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, Block};
+use mpz_core::{aes::FIXED_KEY_AES, ggm_tree::GgmTree, hash::Hash, prg::Prg, utils::blake3, Block};
 use rand_core::SeedableRng;
 
-use super::msgs::{
-    CheckFromReceiver, CheckFromSender, CotMsgForSender, ExtendFromSender, MaskBits,
-};
+use super::msgs::{CheckFromReceiver, CheckFromSender, ExtendFromSender, MaskBits};
 
 /// SPCOT sender.
 #[derive(Debug, Default)]
 pub struct Sender<T: state::State = state::Initialized> {
-    pub(crate) state: T,
+    state: T,
 }
 
 impl Sender {
@@ -54,15 +52,14 @@ impl Sender<state::Extension> {
     pub fn extend(
         &mut self,
         h: usize,
-        extend: CotMsgForSender,
+        qs: &[Block],
         mask: MaskBits,
     ) -> Result<ExtendFromSender, SenderError> {
-        let CotMsgForSender { qs } = extend;
         let MaskBits { bs } = mask;
 
         if qs.len() != h {
             return Err(SenderError::InvalidLength(
-                "the length of q should be 128".to_string(),
+                "the length of q should be h".to_string(),
             ));
         }
 
@@ -79,14 +76,16 @@ impl Sender<state::Extension> {
         let ggm_tree = GgmTree::new(h);
         let mut k0 = vec![Block::ZERO; h];
         let mut k1 = vec![Block::ZERO; h];
-        self.state.vs = vec![Block::ZERO; 1 << h];
-        ggm_tree.gen(s, &mut self.state.vs, &mut k0, &mut k1);
+        let mut tree = vec![Block::ZERO; 1<<h];
+        ggm_tree.gen(s, &mut tree, &mut k0, &mut k1);
+
+        self.state.vs.extend_from_slice(&tree);
 
         // Computes M0 and M1.
         let mut ms: Vec<[Block; 2]> = qs
             .into_iter()
             .zip(bs)
-            .map(|(q, b)| {
+            .map(|(&q, b)| {
                 if b {
                     [q ^ self.state.delta, q]
                 } else {
@@ -130,10 +129,9 @@ impl Sender<state::Extension> {
     pub fn check(
         &mut self,
         h: usize,
-        checkfc: CotMsgForSender,
+        y_star: &[Block],
         checkfr: CheckFromReceiver,
-    ) -> Result<CheckFromSender, SenderError> {
-        let CotMsgForSender { qs: y_star } = checkfc;
+    ) -> Result<(Vec<Block>, CheckFromSender), SenderError> {
         let CheckFromReceiver { chis_seed, x_prime } = checkfr;
 
         if y_star.len() != CSP {
@@ -169,14 +167,12 @@ impl Sender<state::Extension> {
         v ^= Block::inn_prdt_red(&chis, &self.state.vs);
 
         // Computes H'(V)
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(&v.to_bytes());
-        let hashed_v = Hash::from(*hasher.finalize().as_bytes());
+        let hashed_v = Hash::from(blake3(&v.to_bytes()));
 
         self.state.exec_counter += 1;
         self.state.cot_counter += self.state.vs.len();
 
-        Ok(CheckFromSender { hashed_v })
+        Ok((self.state.vs.clone(), CheckFromSender { hashed_v }))
     }
 }
 
