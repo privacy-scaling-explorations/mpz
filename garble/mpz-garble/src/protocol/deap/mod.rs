@@ -458,10 +458,12 @@ impl DEAP {
 
             values
                 .iter()
-                .map(|value| {
-                    let (otp_ref, otp_value) = state.new_private_otp(value, "otp");
+                .enumerate()
+                .map(|(idx, value)| {
+                    let (otp_ref, otp_value) =
+                        state.new_private_otp(&format!("{id}/{idx}/otp"), value);
                     let otp_typ = otp_value.value_type();
-                    let mask_ref = state.new_output_mask(value, "mask");
+                    let mask_ref = state.new_output_mask(&format!("{id}/{idx}/mask"), value);
 
                     (((otp_ref, otp_typ), otp_value), mask_ref)
                 })
@@ -514,9 +516,10 @@ impl DEAP {
 
             values
                 .iter()
-                .map(|value| {
-                    let (otp_ref, otp_typ) = state.new_blind_otp(value, "otp");
-                    let mask_ref = state.new_output_mask(value, "mask");
+                .enumerate()
+                .map(|(idx, value)| {
+                    let (otp_ref, otp_typ) = state.new_blind_otp(&format!("{id}/{idx}/otp"), value);
+                    let mask_ref = state.new_output_mask(&format!("{id}/{idx}/mask"), value);
 
                     ((otp_ref, otp_typ), mask_ref)
                 })
@@ -568,20 +571,25 @@ impl DEAP {
 
             values
                 .iter()
-                .map(|value| {
+                .enumerate()
+                .map(|(idx, value)| {
                     let (otp_0_ref, otp_1_ref, otp_value, otp_typ) = match self.role {
                         Role::Leader => {
-                            let (otp_0_ref, otp_value) = state.new_private_otp(value, "otp_0");
-                            let (otp_1_ref, otp_typ) = state.new_blind_otp(value, "otp_1");
+                            let (otp_0_ref, otp_value) =
+                                state.new_private_otp(&format!("{id}/{idx}/otp_0"), value);
+                            let (otp_1_ref, otp_typ) =
+                                state.new_blind_otp(&format!("{id}/{idx}/otp_1"), value);
                             (otp_0_ref, otp_1_ref, otp_value, otp_typ)
                         }
                         Role::Follower => {
-                            let (otp_0_ref, otp_typ) = state.new_blind_otp(value, "otp_0");
-                            let (otp_1_ref, otp_value) = state.new_private_otp(value, "otp_1");
+                            let (otp_0_ref, otp_typ) =
+                                state.new_blind_otp(&format!("{id}/{idx}/otp_0"), value);
+                            let (otp_1_ref, otp_value) =
+                                state.new_private_otp(&format!("{id}/{idx}/otp_1"), value);
                             (otp_0_ref, otp_1_ref, otp_value, otp_typ)
                         }
                     };
-                    let mask_ref = state.new_output_mask(value, "mask");
+                    let mask_ref = state.new_output_mask(&format!("{id}/{idx}/mask"), value);
                     ((((otp_0_ref, otp_1_ref), otp_typ), otp_value), mask_ref)
                 })
                 .unzip()
@@ -751,26 +759,13 @@ impl DEAP {
 }
 
 impl State {
-    pub(crate) fn new_private_otp(
-        &mut self,
-        value_ref: &ValueRef,
-        suffix: &str,
-    ) -> (ValueRef, Value) {
-        let mut id = self
-            .memory
-            .get_id_by_ref(value_ref)
-            .expect("value is defined if reference exists")
-            .to_string();
-        id.push('/');
-        id.push_str(suffix);
-
+    pub(crate) fn new_private_otp(&mut self, id: &str, value_ref: &ValueRef) -> (ValueRef, Value) {
         let typ = self.memory.get_value_type(value_ref);
-
         let value = Value::random(&mut thread_rng(), &typ);
 
         let value_ref = self
             .memory
-            .new_input(&id, typ, Visibility::Private)
+            .new_input(id, typ, Visibility::Private)
             .expect("otp id is unique");
 
         self.memory
@@ -782,39 +777,22 @@ impl State {
 
     pub(crate) fn new_blind_otp(
         &mut self,
+        id: &str,
         value_ref: &ValueRef,
-        suffix: &str,
     ) -> (ValueRef, ValueType) {
-        let mut id = self
-            .memory
-            .get_id_by_ref(value_ref)
-            .expect("value is defined if reference exists")
-            .to_string();
-        id.push('/');
-        id.push_str(suffix);
-
         let typ = self.memory.get_value_type(value_ref);
 
         (
             self.memory
-                .new_input(&id, typ.clone(), Visibility::Blind)
+                .new_input(id, typ.clone(), Visibility::Blind)
                 .expect("otp id is unique"),
             typ,
         )
     }
 
-    pub(crate) fn new_output_mask(&mut self, value_ref: &ValueRef, suffix: &str) -> ValueRef {
-        let mut id = self
-            .memory
-            .get_id_by_ref(value_ref)
-            .expect("value is defined if reference exists")
-            .to_string();
-        id.push('/');
-        id.push_str(suffix);
-
+    pub(crate) fn new_output_mask(&mut self, id: &str, value_ref: &ValueRef) -> ValueRef {
         let typ = self.memory.get_value_type(value_ref);
-
-        self.memory.new_output(&id, typ).expect("mask id is unique")
+        self.memory.new_output(id, typ).expect("mask id is unique")
     }
 
     /// Drain the states to be finalized.
