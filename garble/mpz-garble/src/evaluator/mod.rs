@@ -369,21 +369,19 @@ impl Evaluator {
 
         // If we've already received the garbled circuit, we evaluate it, otherwise we stream the encrypted gates
         // from the generator.
-        let encoded_outputs = if let Some(GarbledCircuit {
-            mut gates,
-            commitments,
-        }) = existing_garbled_circuit
+        let encoded_outputs = if let Some(GarbledCircuit { gates, commitments }) =
+            existing_garbled_circuit
         {
             while !ev.is_complete() {
-                let batch = gates
-                    .drain(..gates.len().min(self.config.batch_size))
-                    .collect::<Vec<_>>();
-                // Move the evaluator to a new thread to process the batch then send it back
-                ev = Backend::spawn(move || {
-                    ev.evaluate(batch.iter());
-                    ev
-                })
-                .await;
+                for batch in gates.chunks(self.config.batch_size) {
+                    let batch = batch.to_vec();
+                    // Move the evaluator to a new thread to process the batch then send it back
+                    ev = Backend::spawn(move || {
+                        ev.evaluate(batch.iter());
+                        ev
+                    })
+                    .await;
+                }
             }
 
             let encoded_outputs = ev.outputs()?;
@@ -399,11 +397,9 @@ impl Evaluator {
             encoded_outputs
         } else {
             while !ev.is_complete() {
-                let mut gates = expect_msg_or_err!(stream, GarbleMessage::EncryptedGates)?;
-                while !gates.is_empty() {
-                    let batch = gates
-                        .drain(..gates.len().min(self.config.batch_size))
-                        .collect::<Vec<_>>();
+                let gates = expect_msg_or_err!(stream, GarbleMessage::EncryptedGates)?;
+                for batch in gates.chunks(self.config.batch_size) {
+                    let batch = batch.to_vec();
                     // Move the evaluator to a new thread to process the batch then send it back
                     ev = Backend::spawn(move || {
                         ev.evaluate(batch.iter());
