@@ -876,6 +876,17 @@ impl ArithmeticCircuit {
         self.gate_count
     } 
 
+    pub fn assign_var(&mut self, 
+        signal_name: &str,
+        signal_type: SignalType) -> u32 {
+        self.gate_count += 1;
+        self.var_names.insert(signal_name.to_string(), self.gate_count);
+        use SignalType::*;
+        self.inters.push(self.gate_count);
+        println!("Intermediate {} {}", self.gate_count, signal_name);
+        self.gate_count
+}
+
     //We support ADD, MUL, CADD, CMUL, DIV, CDIV, CINVERT, IFTHENELSE, FOR
 
     pub fn add_gate(&mut self, 
@@ -883,6 +894,7 @@ impl ArithmeticCircuit {
         varlop: &String,
         varrop: &String,
         infix: ExpressionInfixOpcode) -> ArithmeticNode {
+            self.assign_var(var, SignalType::Intermediate);
             self.gate_count += 1;
             println!("New gate {}", self.gate_count);
             let output = *self.var_names.get(var).unwrap();
@@ -933,7 +945,15 @@ impl ArithmeticCircuit {
                     unreachable!()
                 }
             };
-            ArithmeticNode::from(self.gate_count, gate_type, input_lhs, input_rhs, output)
+            let an = ArithmeticNode::from(self.gate_count, gate_type, input_lhs, input_rhs, output);
+            self.gates.insert(self.gate_count, ArithmeticNode::from(self.gate_count, gate_type, input_lhs, input_rhs, output));
+            an
+    }
+
+    pub fn print_ac(&mut self) {
+        for (ank, anv) in self.gates.iter() {
+            println!("Gate {}: {} = {} {} {}", ank, anv.output, anv.input_lhs, anv.gate_type, anv.input_rhs);
+        }
     }
 }
 
@@ -1227,6 +1247,7 @@ fn traverse_sequence_of_statements (
     if is_complete_template{
         //execute_delayed_declarations(program_archive, runtime, actual_node, flags)?;
     }
+    ac.print_ac();
 }
 
 pub fn traverse_program (
