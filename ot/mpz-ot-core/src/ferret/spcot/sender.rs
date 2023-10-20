@@ -176,7 +176,7 @@ impl Sender<state::Extension> {
 
         let mut chis = Vec::new();
         for n in &self.state.vs_length {
-            let mut chi = vec![Block::ZERO; *n];
+            let mut chi = vec![Block::ZERO; *n as usize];
             prg.random_blocks(&mut chi);
             chis.extend_from_slice(&chi);
         }
@@ -187,7 +187,7 @@ impl Sender<state::Extension> {
 
         let mut res = Vec::new();
         for n in &self.state.vs_length {
-            let tmp: Vec<Block> = self.state.unchecked_vs.drain(..*n).collect();
+            let tmp: Vec<Block> = self.state.unchecked_vs.drain(..*n as usize).collect();
             res.push(tmp);
         }
 
@@ -229,7 +229,7 @@ pub mod state {
         /// Sender's output blocks, support multiple extensions.
         pub(super) unchecked_vs: Vec<Block>,
         /// Store the length of each extension.
-        pub(super) vs_length: Vec<usize>,
+        pub(super) vs_length: Vec<u32>,
 
         /// Current COT counter
         pub(super) cot_counter: usize,
