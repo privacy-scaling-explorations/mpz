@@ -80,7 +80,7 @@ impl Receiver<state::Extension> {
 
         let bs: Vec<bool> = alpha
             .iter_msb0()
-            .skip(u32::BITS as usize - h)
+            .skip(32 - h)
             // Computes alpha_i XOR r_i XOR 1.
             .zip(rs.iter())
             .map(|(alpha, &r)| alpha == r)
@@ -140,7 +140,7 @@ impl Receiver<state::Extension> {
 
         let alpha_bar_vec: Vec<bool> = alpha
             .iter_msb0()
-            .skip(u32::BITS as usize - h)
+            .skip(32 - h)
             .map(|a| !a)
             .collect();
 
