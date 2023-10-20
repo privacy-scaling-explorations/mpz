@@ -138,11 +138,7 @@ impl Receiver<state::Extension> {
         self.state.hasher.update(&ms.to_bytes());
         self.state.hasher.update(&sum.to_bytes());
 
-        let alpha_bar_vec: Vec<bool> = alpha
-            .iter_msb0()
-            .skip(32 - h)
-            .map(|a| !a)
-            .collect();
+        let alpha_bar_vec: Vec<bool> = alpha.iter_msb0().skip(32 - h).map(|a| !a).collect();
 
         // Setp 5 in Figure 6.
         let k: Vec<Block> = ms
