@@ -116,13 +116,14 @@ impl Sender<state::Extension> {
             })
             .collect();
 
-        ms.iter_mut().enumerate().for_each(|(i, blks)| {
-            let tweak: Block = bytemuck::cast([i, self.state.exec_counter]);
-            let tweaks = [tweak, tweak];
-            FIXED_KEY_AES.tccr_many(&tweaks, blks);
-        });
-
         ms.iter_mut()
+            .enumerate()
+            .map(|(i, blks)| {
+                let tweak: Block = bytemuck::cast([i, self.state.exec_counter]);
+                let tweaks = [tweak, tweak];
+                FIXED_KEY_AES.tccr_many(&tweaks, blks);
+                blks
+            })
             .zip(k0.iter().zip(k1.iter()))
             .for_each(|([m0, m1], (k0, k1))| {
                 *m0 ^= *k0;
@@ -154,15 +155,15 @@ impl Sender<state::Extension> {
         let CheckFromReceiver { x_prime } = checkfr;
 
         if y_star.len() != CSP {
-            return Err(SenderError::InvalidLength(
-                "the length of y* should be 128".to_string(),
-            ));
+            return Err(SenderError::InvalidLength(format!(
+                "the length of y* should be {CSP}"
+            )));
         }
 
         if x_prime.len() != CSP {
-            return Err(SenderError::InvalidLength(
-                "the length of x' should be 128".to_string(),
-            ));
+            return Err(SenderError::InvalidLength(format!(
+                "the length of x' should be {CSP}"
+            )));
         }
 
         // Step 8 in Figure 6.
@@ -225,7 +226,6 @@ pub mod state {
 
     /// The sender's initial state.
     #[derive(Default)]
-    #[allow(missing_docs)]
     pub struct Initialized {}
 
     impl State for Initialized {}

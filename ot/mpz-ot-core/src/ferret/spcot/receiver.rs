@@ -55,7 +55,7 @@ impl Receiver<state::Extension> {
     pub fn extend_mask_bits(
         &mut self,
         h: usize,
-        alpha: usize,
+        alpha: u32,
         rs: &[bool],
     ) -> Result<MaskBits, ReceiverError> {
         if self.state.extended {
@@ -77,14 +77,13 @@ impl Receiver<state::Extension> {
         }
 
         // Step 4 in Figure 6
-        let mut alpha_vec = alpha.to_msb0_vec();
-        alpha_vec.drain(0..alpha_vec.len() - h);
 
-        let bs: Vec<bool> = alpha_vec
-            .iter()
+        let bs: Vec<bool> = alpha
+            .iter_msb0()
+            .skip(u32::BITS as usize - h)
             // Computes alpha_i XOR r_i XOR 1.
             .zip(rs.iter())
-            .map(|(alpha, r)| alpha == r)
+            .map(|(alpha, &r)| alpha == r)
             .collect();
 
         // Updates hasher.
@@ -106,7 +105,7 @@ impl Receiver<state::Extension> {
     pub fn extend(
         &mut self,
         h: usize,
-        alpha: usize,
+        alpha: u32,
         ts: &[Block],
         extendfs: ExtendFromSender,
     ) -> Result<(), ReceiverError> {
@@ -139,10 +138,11 @@ impl Receiver<state::Extension> {
         self.state.hasher.update(&ms.to_bytes());
         self.state.hasher.update(&sum.to_bytes());
 
-        let mut alpha_bar_vec = alpha.to_msb0_vec();
-        alpha_bar_vec.drain(0..alpha_bar_vec.len() - h);
-
-        alpha_bar_vec.iter_mut().for_each(|a| *a = !*a);
+        let alpha_bar_vec: Vec<bool> = alpha
+            .iter_msb0()
+            .skip(u32::BITS as usize - h)
+            .map(|a| !a)
+            .collect();
 
         // Setp 5 in Figure 6.
         let k: Vec<Block> = ms
@@ -168,7 +168,7 @@ impl Receiver<state::Extension> {
         ggm_tree.reconstruct(&mut tree, &k, &alpha_bar_vec);
 
         // Sets `tree[alpha]`, which is `ws[alpha]`.
-        tree[alpha] = tree.iter().fold(sum, |acc, &x| acc ^ x);
+        tree[alpha as usize] = tree.iter().fold(sum, |acc, &x| acc ^ x);
 
         self.state.unchecked_ws.extend_from_slice(&tree);
         self.state.alphas_and_length.push((alpha, 1 << h));
@@ -187,9 +187,9 @@ impl Receiver<state::Extension> {
     /// * `x_star` - The message from COT ideal functionality for the receiver. Only the random bits are used.
     pub fn check_pre(&mut self, x_star: &[bool]) -> Result<CheckFromReceiver, ReceiverError> {
         if x_star.len() != CSP {
-            return Err(ReceiverError::InvalidLength(
-                "the length of x* should be 128".to_string(),
-            ));
+            return Err(ReceiverError::InvalidLength(format!(
+                "the length of x* should be {CSP}"
+            )));
         }
 
         let seed = *self.state.hasher.finalize().as_bytes();
@@ -201,13 +201,12 @@ impl Receiver<state::Extension> {
         for (alpha, n) in &self.state.alphas_and_length {
             let mut chis = vec![Block::ZERO; *n];
             prg.random_blocks(&mut chis);
-            sum_chi_alpha ^= chis[*alpha];
+            sum_chi_alpha ^= chis[*alpha as usize];
             self.state.chis.extend_from_slice(&chis);
         }
 
         let x_prime: Vec<bool> = sum_chi_alpha
-            .to_lsb0_vec()
-            .into_iter()
+            .iter_lsb0()
             .zip(x_star)
             .map(|(x, &x_star)| x != x_star)
             .collect();
@@ -227,13 +226,13 @@ impl Receiver<state::Extension> {
         &mut self,
         z_star: &[Block],
         check: CheckFromSender,
-    ) -> Result<Vec<(Vec<Block>, usize)>, ReceiverError> {
+    ) -> Result<Vec<(Vec<Block>, u32)>, ReceiverError> {
         let CheckFromSender { hashed_v } = check;
 
         if z_star.len() != CSP {
-            return Err(ReceiverError::InvalidLength(
-                "the length of z* should be 128".to_string(),
-            ));
+            return Err(ReceiverError::InvalidLength(format!(
+                "the length of z* should be {CSP}"
+            )));
         }
 
         // Computes the base X^i
@@ -281,7 +280,6 @@ pub mod state {
 
     /// The receiver's initial state.
     #[derive(Default)]
-    #[allow(missing_docs)]
     pub struct Initialized {}
 
     impl State for Initialized {}
@@ -297,7 +295,7 @@ pub mod state {
         /// Receiver's random challenges chis.
         pub(super) chis: Vec<Block>,
         /// Stores the alpha and the length in each extend phase.
-        pub(super) alphas_and_length: Vec<(usize, usize)>,
+        pub(super) alphas_and_length: Vec<(u32, usize)>,
 
         /// Current COT counter
         pub(super) cot_counter: usize,

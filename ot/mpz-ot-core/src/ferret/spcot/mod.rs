@@ -75,7 +75,7 @@ mod tests {
             .iter_mut()
             .zip(output_receiver.iter())
             .all(|(vs, (ws, alpha))| {
-                vs[*alpha] ^= delta;
+                vs[*alpha as usize] ^= delta;
                 vs == ws
             });
     }
