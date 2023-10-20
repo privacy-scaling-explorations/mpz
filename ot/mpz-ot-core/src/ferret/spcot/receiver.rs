@@ -195,7 +195,7 @@ impl Receiver<state::Extension> {
         let mut sum_chi_alpha = Block::ZERO;
 
         for (alpha, n) in &self.state.alphas_and_length {
-            let mut chis = vec![Block::ZERO; *n];
+            let mut chis = vec![Block::ZERO; *n as usize];
             prg.random_blocks(&mut chis);
             sum_chi_alpha ^= chis[*alpha as usize];
             self.state.chis.extend_from_slice(&chis);
@@ -252,7 +252,7 @@ impl Receiver<state::Extension> {
 
         let mut res = Vec::new();
         for (alpha, n) in &self.state.alphas_and_length {
-            let tmp: Vec<Block> = self.state.unchecked_ws.drain(..*n).collect();
+            let tmp: Vec<Block> = self.state.unchecked_ws.drain(..*n as usize).collect();
             res.push((tmp, *alpha));
         }
 
@@ -291,7 +291,7 @@ pub mod state {
         /// Receiver's random challenges chis.
         pub(super) chis: Vec<Block>,
         /// Stores the alpha and the length in each extend phase.
-        pub(super) alphas_and_length: Vec<(u32, usize)>,
+        pub(super) alphas_and_length: Vec<(u32, u32)>,
 
         /// Current COT counter
         pub(super) cot_counter: usize,
