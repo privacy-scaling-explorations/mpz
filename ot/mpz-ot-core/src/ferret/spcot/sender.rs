@@ -104,31 +104,19 @@ impl Sender<state::Extension> {
         let sum = tree.iter().fold(self.state.delta, |acc, &x| acc ^ x);
 
         // Computes M0 and M1.
-        let mut ms: Vec<[Block; 2]> = qs
-            .iter()
-            .zip(bs)
-            .map(|(&q, b)| {
-                if b {
-                    [q ^ self.state.delta, q]
-                } else {
-                    [q, q ^ self.state.delta]
-                }
-            })
-            .collect();
-
-        ms.iter_mut()
-            .enumerate()
-            .map(|(i, blks)| {
-                let tweak: Block = bytemuck::cast([i, self.state.exec_counter]);
-                let tweaks = [tweak, tweak];
-                FIXED_KEY_AES.tccr_many(&tweaks, blks);
-                blks
-            })
-            .zip(k0.iter().zip(k1.iter()))
-            .for_each(|([m0, m1], (k0, k1))| {
-                *m0 ^= *k0;
-                *m1 ^= *k1;
-            });
+        let mut ms: Vec<[Block; 2]> = Vec::with_capacity(qs.len());
+        for (((i, &q), b), (k0, k1)) in qs.iter().enumerate().zip(bs).zip(k0.into_iter().zip(k1)) {
+            let mut m = if b {
+                [q ^ self.state.delta, q]
+            } else {
+                [q, q ^ self.state.delta]
+            };
+            let tweak: Block = bytemuck::cast([i, self.state.exec_counter]);
+            FIXED_KEY_AES.tccr_many(&[tweak, tweak], &mut m);
+            m[0] ^= k0;
+            m[1] ^= k1;
+            ms.push(m);
+        }
 
         // Updates hasher
         self.state.hasher.update(&ms.to_bytes());
