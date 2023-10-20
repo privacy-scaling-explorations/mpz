@@ -16,5 +16,6 @@
 
 pub mod chou_orlandi;
 pub mod ferret;
+pub mod ideal;
 pub mod kos;
 pub mod msgs;
