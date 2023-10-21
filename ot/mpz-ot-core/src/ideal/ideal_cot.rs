@@ -91,11 +91,16 @@ impl IdealCOT {
     }
 }
 
-#[test]
-fn ideal_cot_test() {
-    let num = 100;
-    let mut ideal_cot = IdealCOT::init();
-    let (sender, receiver) = ideal_cot.extend(num);
+#[cfg(test)]
+mod tests {
+    use crate::ideal::ideal_cot::IdealCOT;
 
-    assert!(ideal_cot.check(sender, receiver));
+    #[test]
+    fn ideal_cot_test() {
+        let num = 100;
+        let mut ideal_cot = IdealCOT::init();
+        let (sender, receiver) = ideal_cot.extend(num);
+
+        assert!(ideal_cot.check(sender, receiver));
+    }
 }
