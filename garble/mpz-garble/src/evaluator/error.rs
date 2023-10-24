@@ -1,4 +1,4 @@
-use mpz_core::value::{ValueId, ValueRef};
+use crate::value::{ValueId, ValueRef};
 
 /// Errors that can occur while performing the role of an evaluator
 #[derive(Debug, thiserror::Error)]
@@ -18,7 +18,7 @@ pub enum EvaluatorError {
     #[error(transparent)]
     ValueError(#[from] mpz_garble_core::ValueError),
     #[error(transparent)]
-    EncodingRegistryError(#[from] crate::registry::EncodingRegistryError),
+    EncodingRegistryError(#[from] crate::memory::EncodingMemoryError),
     #[error("missing active encoding for value")]
     MissingEncoding(ValueRef),
     #[error("duplicate decoding for value: {0:?}")]

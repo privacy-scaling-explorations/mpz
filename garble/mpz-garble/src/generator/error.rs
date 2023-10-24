@@ -1,5 +1,6 @@
-use mpz_core::value::ValueRef;
 use mpz_garble_core::ValueError;
+
+use crate::value::ValueRef;
 
 /// Errors that can occur while performing the role of a generator
 #[derive(Debug, thiserror::Error)]
@@ -17,7 +18,7 @@ pub enum GeneratorError {
     #[error("missing encoding for value")]
     MissingEncoding(ValueRef),
     #[error(transparent)]
-    EncodingRegistryError(#[from] crate::registry::EncodingRegistryError),
+    EncodingRegistryError(#[from] crate::memory::EncodingMemoryError),
 }
 
 impl From<mpz_ot::OTError> for GeneratorError {

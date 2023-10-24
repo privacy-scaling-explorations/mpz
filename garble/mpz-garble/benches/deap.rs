@@ -16,13 +16,11 @@ async fn bench_deap() {
     let msg = [0u8; 16];
 
     let leader_fut = {
-        let key_ref = leader_thread
-            .new_private_input::<[u8; 16]>("key", Some(key))
-            .unwrap();
-        let msg_ref = leader_thread
-            .new_private_input::<[u8; 16]>("msg", None)
-            .unwrap();
+        let key_ref = leader_thread.new_private_input::<[u8; 16]>("key").unwrap();
+        let msg_ref = leader_thread.new_blind_input::<[u8; 16]>("msg").unwrap();
         let ciphertext_ref = leader_thread.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+        leader_thread.assign(&key_ref, key).unwrap();
 
         async {
             leader_thread
@@ -41,15 +39,15 @@ async fn bench_deap() {
     };
 
     let follower_fut = {
-        let key_ref = follower_thread
-            .new_private_input::<[u8; 16]>("key", None)
-            .unwrap();
+        let key_ref = follower_thread.new_blind_input::<[u8; 16]>("key").unwrap();
         let msg_ref = follower_thread
-            .new_private_input::<[u8; 16]>("msg", Some(msg))
+            .new_private_input::<[u8; 16]>("msg")
             .unwrap();
         let ciphertext_ref = follower_thread
             .new_output::<[u8; 16]>("ciphertext")
             .unwrap();
+
+        follower_thread.assign(&msg_ref, msg).unwrap();
 
         async {
             follower_thread
@@ -75,9 +73,12 @@ fn bench_aes_leader<T: Thread + Execute + Decode + Send>(
     block: usize,
 ) -> Pin<Box<dyn Future<Output = Result<[u8; 16], VmError>> + Send + '_>> {
     Box::pin(async move {
-        let key = thread.new_private_input(&format!("key/{block}"), Some([0u8; 16]))?;
-        let msg = thread.new_private_input(&format!("msg/{block}"), Some([0u8; 16]))?;
+        let key = thread.new_private_input::<[u8; 16]>(&format!("key/{block}"))?;
+        let msg = thread.new_private_input::<[u8; 16]>(&format!("msg/{block}"))?;
         let ciphertext = thread.new_output::<[u8; 16]>(&format!("ciphertext/{block}"))?;
+
+        thread.assign(&key, [0u8; 16])?;
+        thread.assign(&msg, [0u8; 16])?;
 
         thread
             .execute(AES128.clone(), &[key, msg], &[ciphertext.clone()])
@@ -94,8 +95,8 @@ fn bench_aes_follower<T: Thread + Execute + Decode + Send>(
     block: usize,
 ) -> Pin<Box<dyn Future<Output = Result<[u8; 16], VmError>> + Send + '_>> {
     Box::pin(async move {
-        let key = thread.new_private_input::<[u8; 16]>(&format!("key/{block}"), None)?;
-        let msg = thread.new_private_input::<[u8; 16]>(&format!("msg/{block}"), None)?;
+        let key = thread.new_blind_input::<[u8; 16]>(&format!("key/{block}"))?;
+        let msg = thread.new_blind_input::<[u8; 16]>(&format!("msg/{block}"))?;
         let ciphertext = thread.new_output::<[u8; 16]>(&format!("ciphertext/{block}"))?;
 
         thread

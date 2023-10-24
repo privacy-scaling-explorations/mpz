@@ -41,6 +41,11 @@ pub trait StaticValueType: Into<Value> {
     fn value_type() -> ValueType;
 }
 
+/// A primitive type.
+///
+/// For example, `u8` is a primitive type, but `[u8; 4]` is not.
+pub trait PrimitiveType: StaticValueType + BinaryLength {}
+
 /// A type that has a constant bit length.
 pub trait BinaryLength {
     /// The length of the type in bits.
@@ -219,6 +224,8 @@ macro_rules! define_binary_value {
         impl BinaryLength for $ty {
             const LEN: usize = $len;
         }
+
+        impl PrimitiveType for $ty {}
 
         impl<const N: usize> BinaryLength for [$ty; N] {
             const LEN: usize = $len * N;

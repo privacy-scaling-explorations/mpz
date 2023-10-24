@@ -14,10 +14,7 @@ use mpz_circuits::{
     types::{TypeError, Value, ValueType},
     Circuit,
 };
-use mpz_core::{
-    hash::Hash,
-    value::{ValueId, ValueRef},
-};
+use mpz_core::hash::Hash;
 use mpz_garble_core::{
     encoding_state, msg::GarbleMessage, Decoding, EncodedValue, Evaluator as EvaluatorCore,
 };
@@ -28,10 +25,10 @@ use utils_aio::{
 };
 
 use crate::{
-    config::ValueIdConfig,
+    memory::EncodingMemory,
     ot::{OTReceiveEncoding, OTVerifyEncoding},
-    registry::EncodingRegistry,
-    Generator, GeneratorConfigBuilder,
+    value::{ValueId, ValueRef},
+    AssignedValues, Generator, GeneratorConfigBuilder,
 };
 
 pub use config::{EvaluatorConfig, EvaluatorConfigBuilder};
@@ -58,7 +55,7 @@ impl Default for Evaluator {
 #[derive(Debug, Default)]
 struct State {
     /// Encodings of values
-    encoding_registry: EncodingRegistry<encoding_state::Active>,
+    memory: EncodingMemory<encoding_state::Active>,
     /// Encoded values which were received either directly or via OT
     received_values: HashMap<ValueId, ValueType>,
     /// Values which have been decoded
@@ -106,7 +103,7 @@ impl Evaluator {
 
     /// Returns the encoding for a value.
     pub fn get_encoding(&self, value: &ValueRef) -> Option<EncodedValue<encoding_state::Active>> {
-        self.state().encoding_registry.get_encoding(value)
+        self.state().memory.get_encoding(value)
     }
 
     /// Adds a decoding log entry.
@@ -114,56 +111,46 @@ impl Evaluator {
         self.state().decoding_logs.insert(value.clone(), decoding);
     }
 
-    /// Setup input values by receiving the encodings from the generator
-    /// either directly or via oblivious transfer.
+    /// Transfer encodings for the provided assigned values.
     ///
     /// # Arguments
     ///
-    /// * `id` - The id of this operation
-    /// * `input_configs` - The inputs to setup
-    /// * `stream` - The stream of messages from the generator
-    /// * `ot` - The oblivious transfer receiver
-    pub async fn setup_inputs<
+    /// - `id` - The id of this operation
+    /// - `values` - The assigned values
+    /// - `stream` - The stream to receive the encodings from the generator
+    /// - `ot` - The OT receiver
+    pub async fn setup_assigned_values<
         S: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
         OT: OTReceiveEncoding,
     >(
         &self,
         id: &str,
-        input_configs: &[ValueIdConfig],
+        values: &AssignedValues,
         stream: &mut S,
         ot: &OT,
     ) -> Result<(), EvaluatorError> {
-        let (ot_recv_values, direct_recv_values) = {
+        // Filter out any values that are already active.
+        let (mut ot_recv_values, mut direct_recv_values) = {
             let state = self.state();
-
-            // Filter out any values that are already active.
-            let mut input_configs: Vec<ValueIdConfig> = input_configs
+            let ot_recv_values = values
+                .private
                 .iter()
-                .filter(|config| !state.encoding_registry.contains(config.id()))
+                .filter(|(id, _)| !state.memory.contains(id))
                 .cloned()
-                .collect();
-
-            input_configs.sort_by_key(|config| config.id().clone());
-
-            let mut ot_recv_values = Vec::new();
-            let mut direct_recv_values = Vec::new();
-            for config in input_configs.into_iter() {
-                match config {
-                    ValueIdConfig::Public { id, ty, .. } => {
-                        direct_recv_values.push((id, ty));
-                    }
-                    ValueIdConfig::Private { id, ty, value } => {
-                        if let Some(value) = value {
-                            ot_recv_values.push((id, value));
-                        } else {
-                            direct_recv_values.push((id, ty));
-                        }
-                    }
-                }
-            }
+                .collect::<Vec<_>>();
+            let direct_recv_values = values
+                .public
+                .iter()
+                .map(|(id, value)| (id.clone(), value.value_type()))
+                .chain(values.blind.clone())
+                .filter(|(id, _)| !state.memory.contains(id))
+                .collect::<Vec<_>>();
 
             (ot_recv_values, direct_recv_values)
         };
+
+        ot_recv_values.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
+        direct_recv_values.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
         futures::try_join!(
             self.ot_receive_active_encodings(id, &ot_recv_values, ot),
@@ -179,7 +166,7 @@ impl Evaluator {
     /// - `id` - The id of this operation
     /// - `values` - The values to receive via oblivious transfer.
     /// - `ot` - The oblivious transfer receiver
-    async fn ot_receive_active_encodings<OT: OTReceiveEncoding>(
+    pub async fn ot_receive_active_encodings<OT: OTReceiveEncoding>(
         &self,
         id: &str,
         values: &[(ValueId, Value)],
@@ -218,10 +205,8 @@ impl Evaluator {
                     actual: active_encoding.value_type(),
                 })?;
             }
-            // Add the received values to the encoding registry.
-            state
-                .encoding_registry
-                .set_encoding_by_id(id, active_encoding)?;
+            // Add the received values to the memory.
+            state.memory.set_encoding_by_id(id, active_encoding)?;
             state.received_values.insert(id.clone(), expected_ty);
         }
 
@@ -233,7 +218,7 @@ impl Evaluator {
     /// # Arguments
     /// - `values` - The values and types expected to be received
     /// - `stream` - The stream of messages from the generator
-    async fn direct_receive_active_encodings<
+    pub async fn direct_receive_active_encodings<
         S: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
     >(
         &self,
@@ -263,10 +248,8 @@ impl Evaluator {
                     actual: active_encoding.value_type(),
                 })?;
             }
-            // Add the received values to the encoding registry.
-            state
-                .encoding_registry
-                .set_encoding_by_id(id, active_encoding)?;
+            // Add the received values to the memory.
+            state.memory.set_encoding_by_id(id, active_encoding)?;
             state
                 .received_values
                 .insert(id.clone(), expected_ty.clone());
@@ -298,7 +281,7 @@ impl Evaluator {
                 .iter()
                 .map(|value_ref| {
                     state
-                        .encoding_registry
+                        .memory
                         .get_encoding(value_ref)
                         .ok_or_else(|| EvaluatorError::MissingEncoding(value_ref.clone()))
                 })
@@ -345,12 +328,10 @@ impl Evaluator {
             }
         }
 
-        // Add the output encodings to the encoding registry.
+        // Add the output encodings to the memory.
         let mut state = self.state();
         for (output, encoding) in outputs.iter().zip(encoded_outputs.iter()) {
-            state
-                .encoding_registry
-                .set_encoding(output, encoding.clone())?;
+            state.memory.set_encoding(output, encoding.clone())?;
         }
 
         // If configured, log the circuit evaluation

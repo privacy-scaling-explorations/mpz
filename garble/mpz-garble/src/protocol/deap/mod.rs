@@ -14,23 +14,26 @@ use std::{
 };
 
 use futures::{Sink, SinkExt, Stream, StreamExt, TryFutureExt};
-use mpz_circuits::{types::Value, Circuit};
+use mpz_circuits::{
+    types::{Value, ValueType},
+    Circuit,
+};
 use mpz_core::{
     commit::{Decommitment, HashCommit},
     hash::{Hash, SecureHash},
-    value::{ValueId, ValueRef},
 };
 use mpz_garble_core::{msg::GarbleMessage, EqualityCheck};
 use rand::thread_rng;
 use utils_aio::expect_msg_or_err;
 
 use crate::{
-    config::{Role, ValueConfig, ValueIdConfig, Visibility},
+    config::{Role, Visibility},
     evaluator::{Evaluator, EvaluatorConfigBuilder},
     generator::{Generator, GeneratorConfigBuilder},
     internal_circuits::{build_otp_circuit, build_otp_shared_circuit},
+    memory::ValueMemory,
     ot::{OTReceiveEncoding, OTSendEncoding, OTVerifyEncoding},
-    registry::ValueRegistry,
+    value::ValueRef,
 };
 
 pub use error::{DEAPError, PeerEncodingsError};
@@ -50,11 +53,7 @@ pub struct DEAP {
 
 #[derive(Debug, Default)]
 struct State {
-    /// A registry of all values
-    value_registry: ValueRegistry,
-    /// An internal buffer for value configurations which get
-    /// drained and set up prior to execution.
-    input_buffer: HashMap<ValueId, ValueIdConfig>,
+    memory: ValueMemory,
 
     /// Equality check decommitments withheld by the leader
     /// prior to finalization
@@ -157,7 +156,7 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let input_configs = self.state().remove_input_configs(inputs);
+        let assigned_values = self.state().memory.drain_assigned(inputs);
 
         let id_0 = format!("{}/0", id);
         let id_1 = format!("{}/1", id);
@@ -170,10 +169,10 @@ impl DEAP {
         // Setup inputs concurrently.
         futures::try_join!(
             self.gen
-                .setup_inputs(&gen_id, &input_configs, sink, ot_send)
+                .setup_assigned_values(&gen_id, &assigned_values, sink, ot_send)
                 .map_err(DEAPError::from),
             self.ev
-                .setup_inputs(&ev_id, &input_configs, stream, ot_recv)
+                .setup_assigned_values(&ev_id, &assigned_values, stream, ot_recv)
                 .map_err(DEAPError::from)
         )?;
 
@@ -232,12 +231,12 @@ impl DEAP {
             ))?;
         }
 
-        let input_configs = self.state().remove_input_configs(inputs);
+        let assigned_values = self.state().memory.drain_assigned(inputs);
 
         // The prover only acts as the evaluator for ZKPs instead of
         // dual-execution.
         self.ev
-            .setup_inputs(id, &input_configs, stream, ot_recv)
+            .setup_assigned_values(id, &assigned_values, stream, ot_recv)
             .map_err(DEAPError::from)
             .await?;
 
@@ -303,12 +302,12 @@ impl DEAP {
             ))?;
         }
 
-        let input_configs = self.state().remove_input_configs(inputs);
+        let assigned_values = self.state().memory.drain_assigned(inputs);
 
         // The verifier only acts as the generator for ZKPs instead of
         // dual-execution.
         self.gen
-            .setup_inputs(id, &input_configs, sink, ot_send)
+            .setup_assigned_values(id, &assigned_values, sink, ot_send)
             .map_err(DEAPError::from)
             .await?;
 
@@ -454,49 +453,25 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let (otp_refs, masked_refs): (Vec<_>, Vec<_>) = values
-            .iter()
-            .map(|value| (value.append_id("otp"), value.append_id("masked")))
-            .unzip();
-
-        let (otp_tys, otp_values) = {
+        let (((otp_refs, otp_typs), otp_values), mask_refs): (((Vec<_>, Vec<_>), Vec<_>), Vec<_>) = {
             let mut state = self.state();
 
-            let otp_tys = values
+            values
                 .iter()
-                .map(|value| {
-                    state
-                        .value_registry
-                        .get_value_type_with_ref(value)
-                        .ok_or_else(|| DEAPError::ValueDoesNotExist(value.clone()))
+                .enumerate()
+                .map(|(idx, value)| {
+                    let (otp_ref, otp_value) =
+                        state.new_private_otp(&format!("{id}/{idx}/otp"), value);
+                    let otp_typ = otp_value.value_type();
+                    let mask_ref = state.new_output_mask(&format!("{id}/{idx}/mask"), value);
+
+                    (((otp_ref, otp_typ), otp_value), mask_ref)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let otp_values = otp_tys
-                .iter()
-                .map(|ty| Value::random(&mut thread_rng(), ty))
-                .collect::<Vec<_>>();
-
-            for ((otp_ref, otp_ty), otp_value) in
-                otp_refs.iter().zip(otp_tys.iter()).zip(otp_values.iter())
-            {
-                state.add_input_config(
-                    otp_ref,
-                    ValueConfig::new(
-                        otp_ref.clone(),
-                        otp_ty.clone(),
-                        Some(otp_value.clone()),
-                        Visibility::Private,
-                    )
-                    .expect("config is valid"),
-                );
-            }
-
-            (otp_tys, otp_values)
+                .unzip()
         };
 
         // Apply OTPs to values
-        let circ = build_otp_circuit(&otp_tys);
+        let circ = build_otp_circuit(&otp_typs);
 
         let inputs = values
             .iter()
@@ -506,19 +481,12 @@ impl DEAP {
             .collect::<Vec<_>>();
 
         self.execute(
-            id,
-            circ,
-            &inputs,
-            &masked_refs,
-            sink,
-            stream,
-            ot_send,
-            ot_recv,
+            id, circ, &inputs, &mask_refs, sink, stream, ot_send, ot_recv,
         )
         .await?;
 
         // Decode masked values
-        let masked_values = self.decode(id, &masked_refs, sink, stream).await?;
+        let masked_values = self.decode(id, &mask_refs, sink, stream).await?;
 
         // Remove OTPs, returning plaintext values
         Ok(masked_values
@@ -543,37 +511,23 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let (otp_refs, masked_refs): (Vec<_>, Vec<_>) = values
-            .iter()
-            .map(|value| (value.append_id("otp"), value.append_id("masked")))
-            .unzip();
-
-        let otp_tys = {
+        let ((otp_refs, otp_typs), mask_refs): ((Vec<_>, Vec<_>), Vec<_>) = {
             let mut state = self.state();
 
-            let otp_tys = values
+            values
                 .iter()
-                .map(|value| {
-                    state
-                        .value_registry
-                        .get_value_type_with_ref(value)
-                        .ok_or_else(|| DEAPError::ValueDoesNotExist(value.clone()))
+                .enumerate()
+                .map(|(idx, value)| {
+                    let (otp_ref, otp_typ) = state.new_blind_otp(&format!("{id}/{idx}/otp"), value);
+                    let mask_ref = state.new_output_mask(&format!("{id}/{idx}/mask"), value);
+
+                    ((otp_ref, otp_typ), mask_ref)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            for (otp_ref, otp_ty) in otp_refs.iter().zip(otp_tys.iter()) {
-                state.add_input_config(
-                    otp_ref,
-                    ValueConfig::new(otp_ref.clone(), otp_ty.clone(), None, Visibility::Private)
-                        .expect("config is valid"),
-                );
-            }
-
-            otp_tys
+                .unzip()
         };
 
         // Apply OTPs to values
-        let circ = build_otp_circuit(&otp_tys);
+        let circ = build_otp_circuit(&otp_typs);
 
         let inputs = values
             .iter()
@@ -583,19 +537,12 @@ impl DEAP {
             .collect::<Vec<_>>();
 
         self.execute(
-            id,
-            circ,
-            &inputs,
-            &masked_refs,
-            sink,
-            stream,
-            ot_send,
-            ot_recv,
+            id, circ, &inputs, &mask_refs, sink, stream, ot_send, ot_recv,
         )
         .await?;
 
         // Discard masked values
-        _ = self.decode(id, &masked_refs, sink, stream).await?;
+        _ = self.decode(id, &mask_refs, sink, stream).await?;
 
         Ok(())
     }
@@ -615,83 +562,41 @@ impl DEAP {
         OTS: OTSendEncoding,
         OTR: OTReceiveEncoding,
     {
-        let (otp_0_refs, (otp_1_refs, masked_refs)): (Vec<_>, (Vec<_>, Vec<_>)) = values
-            .iter()
-            .map(|value| {
-                (
-                    value.append_id("otp_0"),
-                    (value.append_id("otp_1"), value.append_id("masked")),
-                )
-            })
-            .unzip();
-
-        let (otp_tys, otp_values) = {
+        #[allow(clippy::type_complexity)]
+        let ((((otp_0_refs, otp_1_refs), otp_typs), otp_values), mask_refs): (
+            (((Vec<_>, Vec<_>), Vec<_>), Vec<_>),
+            Vec<_>,
+        ) = {
             let mut state = self.state();
 
-            let otp_tys = values
+            values
                 .iter()
-                .map(|value| {
-                    state
-                        .value_registry
-                        .get_value_type_with_ref(value)
-                        .ok_or_else(|| DEAPError::ValueDoesNotExist(value.clone()))
+                .enumerate()
+                .map(|(idx, value)| {
+                    let (otp_0_ref, otp_1_ref, otp_value, otp_typ) = match self.role {
+                        Role::Leader => {
+                            let (otp_0_ref, otp_value) =
+                                state.new_private_otp(&format!("{id}/{idx}/otp_0"), value);
+                            let (otp_1_ref, otp_typ) =
+                                state.new_blind_otp(&format!("{id}/{idx}/otp_1"), value);
+                            (otp_0_ref, otp_1_ref, otp_value, otp_typ)
+                        }
+                        Role::Follower => {
+                            let (otp_0_ref, otp_typ) =
+                                state.new_blind_otp(&format!("{id}/{idx}/otp_0"), value);
+                            let (otp_1_ref, otp_value) =
+                                state.new_private_otp(&format!("{id}/{idx}/otp_1"), value);
+                            (otp_0_ref, otp_1_ref, otp_value, otp_typ)
+                        }
+                    };
+                    let mask_ref = state.new_output_mask(&format!("{id}/{idx}/mask"), value);
+                    ((((otp_0_ref, otp_1_ref), otp_typ), otp_value), mask_ref)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-
-            let otp_values = otp_tys
-                .iter()
-                .map(|ty| Value::random(&mut thread_rng(), ty))
-                .collect::<Vec<_>>();
-
-            for (((otp_0_ref, opt_1_ref), otp_ty), otp_value) in otp_0_refs
-                .iter()
-                .zip(&otp_1_refs)
-                .zip(&otp_tys)
-                .zip(&otp_values)
-            {
-                let (otp_0_config, otp_1_config) = match self.role {
-                    Role::Leader => (
-                        ValueConfig::new(
-                            otp_0_ref.clone(),
-                            otp_ty.clone(),
-                            Some(otp_value.clone()),
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                        ValueConfig::new(
-                            opt_1_ref.clone(),
-                            otp_ty.clone(),
-                            None,
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                    ),
-                    Role::Follower => (
-                        ValueConfig::new(
-                            otp_0_ref.clone(),
-                            otp_ty.clone(),
-                            None,
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                        ValueConfig::new(
-                            opt_1_ref.clone(),
-                            otp_ty.clone(),
-                            Some(otp_value.clone()),
-                            Visibility::Private,
-                        )
-                        .expect("config is valid"),
-                    ),
-                };
-                state.add_input_config(otp_0_ref, otp_0_config);
-                state.add_input_config(opt_1_ref, otp_1_config);
-            }
-
-            (otp_tys, otp_values)
+                .unzip()
         };
 
         // Apply OTPs to values
-        let circ = build_otp_shared_circuit(&otp_tys);
+        let circ = build_otp_shared_circuit(&otp_typs);
 
         let inputs = values
             .iter()
@@ -702,19 +607,12 @@ impl DEAP {
             .collect::<Vec<_>>();
 
         self.execute(
-            id,
-            circ,
-            &inputs,
-            &masked_refs,
-            sink,
-            stream,
-            ot_send,
-            ot_recv,
+            id, circ, &inputs, &mask_refs, sink, stream, ot_send, ot_recv,
         )
         .await?;
 
         // Decode masked values
-        let masked_values = self.decode(id, &masked_refs, sink, stream).await?;
+        let masked_values = self.decode(id, &mask_refs, sink, stream).await?;
 
         match self.role {
             Role::Leader => {
@@ -861,21 +759,40 @@ impl DEAP {
 }
 
 impl State {
-    /// Adds input configs to the buffer.
-    fn add_input_config(&mut self, value: &ValueRef, config: ValueConfig) {
-        value
-            .iter()
-            .zip(config.flatten())
-            .for_each(|(id, config)| _ = self.input_buffer.insert(id.clone(), config));
+    pub(crate) fn new_private_otp(&mut self, id: &str, value_ref: &ValueRef) -> (ValueRef, Value) {
+        let typ = self.memory.get_value_type(value_ref);
+        let value = Value::random(&mut thread_rng(), &typ);
+
+        let value_ref = self
+            .memory
+            .new_input(id, typ, Visibility::Private)
+            .expect("otp id is unique");
+
+        self.memory
+            .assign(&value_ref, value.clone())
+            .expect("value should assign");
+
+        (value_ref, value)
     }
 
-    /// Returns input configs from the buffer.
-    fn remove_input_configs(&mut self, values: &[ValueRef]) -> Vec<ValueIdConfig> {
-        values
-            .iter()
-            .flat_map(|value| value.iter())
-            .filter_map(|id| self.input_buffer.remove(id))
-            .collect::<Vec<_>>()
+    pub(crate) fn new_blind_otp(
+        &mut self,
+        id: &str,
+        value_ref: &ValueRef,
+    ) -> (ValueRef, ValueType) {
+        let typ = self.memory.get_value_type(value_ref);
+
+        (
+            self.memory
+                .new_input(id, typ.clone(), Visibility::Blind)
+                .expect("otp id is unique"),
+            typ,
+        )
+    }
+
+    pub(crate) fn new_output_mask(&mut self, id: &str, value_ref: &ValueRef) -> ValueRef {
+        let typ = self.memory.get_value_type(value_ref);
+        self.memory.new_output(id, typ).expect("mask id is unique")
     }
 
     /// Drain the states to be finalized.
@@ -947,9 +864,11 @@ mod tests {
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
 
-            let key_ref = leader.new_private_input("key", Some(key)).unwrap();
-            let msg_ref = leader.new_private_input::<[u8; 16]>("msg", None).unwrap();
+            let key_ref = leader.new_private_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = leader.new_blind_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = leader.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            leader.assign(&key_ref, key).unwrap();
 
             async move {
                 leader
@@ -983,9 +902,11 @@ mod tests {
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
 
-            let key_ref = follower.new_private_input::<[u8; 16]>("key", None).unwrap();
-            let msg_ref = follower.new_private_input("msg", Some(msg)).unwrap();
+            let key_ref = follower.new_blind_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = follower.new_private_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = follower.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            follower.assign(&msg_ref, msg).unwrap();
 
             async move {
                 follower
@@ -1039,9 +960,11 @@ mod tests {
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
             let circ = circ.clone();
-            let a_ref = leader.new_private_input("a", Some(a)).unwrap();
-            let b_ref = leader.new_private_input::<u8>("b", None).unwrap();
+            let a_ref = leader.new_private_input::<u8>("a").unwrap();
+            let b_ref = leader.new_blind_input::<u8>("b").unwrap();
             let c_ref = leader.new_output::<u8>("c").unwrap();
+
+            leader.assign(&a_ref, a).unwrap();
 
             async move {
                 leader
@@ -1082,9 +1005,11 @@ mod tests {
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
 
-            let a_ref = follower.new_private_input::<u8>("a", None).unwrap();
-            let b_ref = follower.new_private_input("b", Some(b)).unwrap();
+            let a_ref = follower.new_blind_input::<u8>("a").unwrap();
+            let b_ref = follower.new_private_input::<u8>("b").unwrap();
             let c_ref = follower.new_output::<u8>("c").unwrap();
+
+            follower.assign(&b_ref, b).unwrap();
 
             async move {
                 follower
@@ -1143,9 +1068,11 @@ mod tests {
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
             let circ = circ.clone();
-            let a_ref = leader.new_private_input("a", Some(a)).unwrap();
-            let b_ref = leader.new_private_input::<u8>("b", None).unwrap();
+            let a_ref = leader.new_private_input::<u8>("a").unwrap();
+            let b_ref = leader.new_blind_input::<u8>("b").unwrap();
             let c_ref = leader.new_output::<u8>("c").unwrap();
+
+            leader.assign(&a_ref, a).unwrap();
 
             async move {
                 leader
@@ -1186,9 +1113,11 @@ mod tests {
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
 
-            let a_ref = follower.new_private_input::<u8>("a", None).unwrap();
-            let b_ref = follower.new_private_input("b", Some(b)).unwrap();
+            let a_ref = follower.new_blind_input::<u8>("a").unwrap();
+            let b_ref = follower.new_private_input::<u8>("b").unwrap();
             let c_ref = follower.new_output::<u8>("c").unwrap();
+
+            follower.assign(&b_ref, b).unwrap();
 
             async move {
                 follower
@@ -1270,11 +1199,11 @@ mod tests {
 
         let leader_fut = {
             let (mut sink, mut stream) = leader_channel.split();
-            let key_ref = leader
-                .new_private_input::<[u8; 16]>("key", Some(key))
-                .unwrap();
-            let msg_ref = leader.new_private_input::<[u8; 16]>("msg", None).unwrap();
+            let key_ref = leader.new_private_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = leader.new_blind_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = leader.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            leader.assign(&key_ref, key).unwrap();
 
             async move {
                 leader
@@ -1299,11 +1228,11 @@ mod tests {
 
         let follower_fut = {
             let (mut sink, mut stream) = follower_channel.split();
-            let key_ref = follower.new_private_input::<[u8; 16]>("key", None).unwrap();
-            let msg_ref = follower
-                .new_private_input::<[u8; 16]>("msg", Some(msg))
-                .unwrap();
+            let key_ref = follower.new_blind_input::<[u8; 16]>("key").unwrap();
+            let msg_ref = follower.new_private_input::<[u8; 16]>("msg").unwrap();
             let ciphertext_ref = follower.new_output::<[u8; 16]>("ciphertext").unwrap();
+
+            follower.assign(&msg_ref, msg).unwrap();
 
             async move {
                 follower

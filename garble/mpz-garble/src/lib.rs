@@ -8,27 +8,29 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use config::Visibility;
 use mpz_circuits::{
-    types::{StaticValueType, Value, ValueType},
+    types::{PrimitiveType, StaticValueType, Value, ValueType},
     Circuit,
 };
-pub use mpz_core::value::{ValueId, ValueRef};
 
 pub mod config;
 pub(crate) mod evaluator;
 pub(crate) mod generator;
 pub(crate) mod internal_circuits;
+pub(crate) mod memory;
 pub mod ot;
 pub mod protocol;
-pub(crate) mod registry;
 mod threadpool;
+pub mod value;
 
 pub use evaluator::{Evaluator, EvaluatorConfig, EvaluatorConfigBuilder, EvaluatorError};
 pub use generator::{Generator, GeneratorConfig, GeneratorConfigBuilder, GeneratorError};
-pub use registry::ValueRegistry;
+pub use memory::{AssignedValues, ValueMemory};
 pub use threadpool::ThreadPool;
 
 use utils::id::NestedId;
+use value::{ArrayRef, ValueId, ValueRef};
 
 /// Errors that can occur when using an implementation of [`Vm`].
 #[derive(Debug, thiserror::Error)]
@@ -64,10 +66,36 @@ pub enum MemoryError {
     DuplicateValueId(ValueId),
     #[error("duplicate value: {0:?}")]
     DuplicateValue(ValueRef),
+    #[error("value with id {0} has not been defined")]
+    Undefined(String),
+    #[error("attempted to create an invalid array: {0}")]
+    InvalidArray(String),
     #[error(transparent)]
-    TypeError(#[from] mpz_circuits::types::TypeError),
-    #[error("invalid value type {1:?} for {0:?}")]
-    InvalidType(ValueId, mpz_circuits::types::ValueType),
+    Assignment(#[from] AssignmentError),
+}
+
+/// Errors that can occur when assigning values.
+#[derive(Debug, thiserror::Error)]
+pub enum AssignmentError {
+    /// The value is already assigned.
+    #[error("value already assigned: {0:?}")]
+    Duplicate(ValueId),
+    /// Can not assign to a blind input value.
+    #[error("can not assign to a blind input value: {0:?}")]
+    BlindInput(ValueId),
+    /// Can not assign to an output value.
+    #[error("can not assign to an output value: {0:?}")]
+    Output(ValueId),
+    /// Attempted to assign a value with an invalid type.
+    #[error("invalid value type {actual:?} for {value:?}, expected {expected:?}")]
+    Type {
+        /// The value reference.
+        value: ValueRef,
+        /// The expected type.
+        expected: ValueType,
+        /// The actual type.
+        actual: ValueType,
+    },
 }
 
 /// Errors that can occur when executing a circuit.
@@ -144,70 +172,130 @@ pub trait Thread: Memory {}
 
 /// This trait provides methods for interacting with values in memory.
 pub trait Memory {
-    /// Adds a new public input value, returning a reference to it.
-    fn new_public_input<T: StaticValueType>(
+    /// Adds a new input value, returning a reference to it.
+    fn new_input_with_type(
         &self,
         id: &str,
-        value: T,
+        typ: ValueType,
+        visibility: Visibility,
     ) -> Result<ValueRef, MemoryError>;
+
+    /// Adds a new input value, returning a reference to it.
+    fn new_input<T: StaticValueType>(
+        &self,
+        id: &str,
+        visibility: Visibility,
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_input_with_type(id, T::value_type(), visibility)
+    }
+
+    /// Adds a new public input value, returning a reference to it.
+    fn new_public_input<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_input::<T>(id, Visibility::Public)
+    }
 
     /// Adds a new public array input value, returning a reference to it.
-    fn new_public_array_input<T: StaticValueType>(
+    fn new_public_array_input<T: PrimitiveType>(
         &self,
         id: &str,
-        value: Vec<T>,
-    ) -> Result<ValueRef, MemoryError>
-    where
-        Vec<T>: Into<Value>;
-
-    /// Adds a new public input value, returning a reference to it.
-    fn new_public_input_by_type(&self, id: &str, value: Value) -> Result<ValueRef, MemoryError>;
+        len: usize,
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_input_with_type(id, ValueType::new_array::<T>(len), Visibility::Public)
+    }
 
     /// Adds a new private input value, returning a reference to it.
-    fn new_private_input<T: StaticValueType>(
-        &self,
-        id: &str,
-        value: Option<T>,
-    ) -> Result<ValueRef, MemoryError>;
+    fn new_private_input<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_input::<T>(id, Visibility::Private)
+    }
 
     /// Adds a new private array input value, returning a reference to it.
-    fn new_private_array_input<T: StaticValueType>(
+    fn new_private_array_input<T: PrimitiveType>(
         &self,
         id: &str,
-        value: Option<Vec<T>>,
         len: usize,
-    ) -> Result<ValueRef, MemoryError>
-    where
-        Vec<T>: Into<Value>;
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_input_with_type(id, ValueType::new_array::<T>(len), Visibility::Private)
+    }
 
-    /// Adds a new private input value, returning a reference to it.
-    fn new_private_input_by_type(
+    /// Adds a new blind input value, returning a reference to it.
+    fn new_blind_input<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_input::<T>(id, Visibility::Blind)
+    }
+
+    /// Adds a new blind array input value, returning a reference to it.
+    fn new_blind_array_input<T: PrimitiveType>(
         &self,
         id: &str,
-        ty: &ValueType,
-        value: Option<Value>,
-    ) -> Result<ValueRef, MemoryError>;
+        len: usize,
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_input_with_type(id, ValueType::new_array::<T>(len), Visibility::Blind)
+    }
 
-    /// Creates a new output value, returning a reference to it.
-    fn new_output<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError>;
+    /// Adds a new output value, returning a reference to it.
+    fn new_output_with_type(&self, id: &str, typ: ValueType) -> Result<ValueRef, MemoryError>;
+
+    /// Adds a new output value, returning a reference to it.
+    fn new_output<T: StaticValueType>(&self, id: &str) -> Result<ValueRef, MemoryError> {
+        self.new_output_with_type(id, T::value_type())
+    }
 
     /// Creates a new array output value, returning a reference to it.
-    fn new_array_output<T: StaticValueType>(
+    fn new_array_output<T: PrimitiveType>(
         &self,
         id: &str,
         len: usize,
-    ) -> Result<ValueRef, MemoryError>
-    where
-        Vec<T>: Into<Value>;
+    ) -> Result<ValueRef, MemoryError> {
+        self.new_output_with_type(id, ValueType::new_array::<T>(len))
+    }
 
-    /// Creates a new output value, returning a reference to it.
-    fn new_output_by_type(&self, id: &str, ty: &ValueType) -> Result<ValueRef, MemoryError>;
+    /// Assigns a value.
+    fn assign(&self, value_ref: &ValueRef, value: impl Into<Value>) -> Result<(), MemoryError>;
+
+    /// Assigns a value.
+    fn assign_by_id(&self, id: &str, value: impl Into<Value>) -> Result<(), MemoryError>;
 
     /// Returns a value if it exists.
     fn get_value(&self, id: &str) -> Option<ValueRef>;
 
+    /// Returns the type of a value.
+    fn get_value_type(&self, value_ref: &ValueRef) -> ValueType;
+
     /// Returns the type of a value if it exists.
-    fn get_value_type(&self, id: &str) -> Option<ValueType>;
+    fn get_value_type_by_id(&self, id: &str) -> Option<ValueType>;
+
+    /// Creates an array from the provided values.
+    ///
+    /// All values must be of the same primitive type.
+    fn array_from_values(&self, values: &[ValueRef]) -> Result<ValueRef, MemoryError> {
+        if values.is_empty() {
+            return Err(MemoryError::InvalidArray(
+                "cannot create an array with no values".to_string(),
+            ));
+        }
+
+        let mut ids = Vec::with_capacity(values.len());
+        let elem_typ = self.get_value_type(&values[0]);
+        for value in values {
+            let ValueRef::Value { id } = value else {
+                return Err(MemoryError::InvalidArray(
+                    "an array can only contain primitive types".to_string(),
+                ));
+            };
+
+            let value_typ = self.get_value_type(value);
+
+            if value_typ != elem_typ {
+                return Err(MemoryError::InvalidArray(format!(
+                    "all values in an array must have the same type, expected {:?}, got {:?}",
+                    elem_typ, value_typ
+                )));
+            };
+
+            ids.push(id.clone());
+        }
+
+        Ok(ValueRef::Array(ArrayRef::new(ids)))
+    }
 }
 
 /// This trait provides methods for executing a circuit.
