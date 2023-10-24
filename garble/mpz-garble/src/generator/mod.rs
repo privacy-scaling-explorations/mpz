@@ -102,7 +102,7 @@ impl Generator {
         Ok(())
     }
 
-    /// Transfer encodings for the provided assigned values.
+    /// Transfer active encodings for the provided assigned values.
     ///
     /// # Arguments
     ///

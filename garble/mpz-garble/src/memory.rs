@@ -54,7 +54,7 @@ pub struct ValueMemory {
     ref_to_id: HashMap<ValueRef, String>,
     /// Details for each value
     details: HashMap<ValueId, ValueDetails>,
-    /// Values that have been assigned
+    /// Values that have been assigned and blind values
     assigned: HashSet<ValueId>,
     /// Buffer containing assigned values
     assigned_buffer: HashMap<ValueId, AssignedValue>,
@@ -412,7 +412,7 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if the value is an array and if the type of its elements are not consistent.
+    /// Panics if the value is an array and if the type of its elements is not consistent.
     pub(crate) fn get_encoding(&self, value: &ValueRef) -> Option<EncodedValue<T>> {
         match value {
             ValueRef::Value { id, .. } => self.encodings.get(&id.to_u64().into()).cloned(),
