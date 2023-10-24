@@ -314,7 +314,7 @@ pub trait Memory {
 /// Implementations may perform pre-processing prior to execution.
 #[async_trait]
 pub trait Load {
-    /// Loads a circuit with the provided inputs and output values.
+    /// Loads a circuit with the provided input and output values.
     async fn load(
         &mut self,
         circ: Arc<Circuit>,

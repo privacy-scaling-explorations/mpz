@@ -63,7 +63,7 @@ struct State {
     decoded_values: HashSet<ValueId>,
     /// Pre-transferred garbled circuits
     ///
-    /// (inputs, outputs) => garbled circuit
+    /// A map used to look up a garbled circuit by its unique (inputs, outputs) reference.
     garbled_circuits: HashMap<CircuitRefs, GarbledCircuit>,
     /// OT logs
     ot_log: HashMap<String, Vec<ValueId>>,

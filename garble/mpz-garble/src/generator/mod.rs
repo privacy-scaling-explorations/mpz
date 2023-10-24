@@ -45,6 +45,8 @@ struct State {
     /// Encodings of values
     memory: EncodingMemory<encoding_state::Full>,
     /// Transferred garbled circuits
+    ///
+    /// Each circuit is uniquely identified by its (input, output) references. Optionally, the garbled circuit may have been hashed.
     garbled: HashMap<CircuitRefs, Option<Hash>>,
     /// The set of values that are currently active.
     ///
@@ -370,10 +372,6 @@ impl State {
     /// Generates an encoding for a value
     ///
     /// If an encoding for the value already exists, it is returned instead.
-    ///
-    /// # Panics
-    ///
-    /// If the provided value type does not match the value reference.
     fn encode(&mut self, value: &ValueRef, ty: &ValueType) -> EncodedValue<encoding_state::Full> {
         match (value, ty) {
             (ValueRef::Value { id }, ty) if !ty.is_array() => self.encode_by_id(id, ty),
