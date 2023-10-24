@@ -1,6 +1,6 @@
 use mpz_garble_core::{msg::GarbleMessage, ValueError};
 
-use crate::{value::ValueRef, DecodeError, ExecutionError, ProveError, VerifyError};
+use crate::{value::ValueRef, DecodeError, ExecutionError, LoadError, ProveError, VerifyError};
 
 /// Errors that can occur during the DEAP protocol.
 #[derive(Debug, thiserror::Error)]
@@ -50,6 +50,15 @@ pub enum PeerEncodingsError {
     ValueIdNotFound(String),
     #[error("Encoding is not available for value: {0:?}")]
     EncodingNotAvailable(ValueRef),
+}
+
+impl From<DEAPError> for LoadError {
+    fn from(err: DEAPError) -> Self {
+        match err {
+            DEAPError::IOError(err) => LoadError::IOError(err),
+            err => LoadError::ProtocolError(Box::new(err)),
+        }
+    }
 }
 
 impl From<DEAPError> for ExecutionError {

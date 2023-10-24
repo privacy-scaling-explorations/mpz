@@ -12,9 +12,6 @@ pub struct EvaluatorConfig {
     /// Whether to log decodings.
     #[builder(default = "false", setter(custom))]
     pub(crate) log_decodings: bool,
-    /// The number of encrypted gates to evaluate per batch.
-    #[builder(default = "1024")]
-    pub(crate) batch_size: usize,
 }
 
 impl EvaluatorConfig {

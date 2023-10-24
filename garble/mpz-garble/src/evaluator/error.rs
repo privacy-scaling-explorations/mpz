@@ -21,6 +21,8 @@ pub enum EvaluatorError {
     EncodingRegistryError(#[from] crate::memory::EncodingMemoryError),
     #[error("missing active encoding for value")]
     MissingEncoding(ValueRef),
+    #[error("duplicate garbled circuit")]
+    DuplicateCircuit,
     #[error("duplicate decoding for value: {0:?}")]
     DuplicateDecoding(ValueId),
     #[error(transparent)]

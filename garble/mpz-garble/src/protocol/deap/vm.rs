@@ -21,8 +21,8 @@ use crate::{
     config::{Role, Visibility},
     ot::{VerifiableOTReceiveEncoding, VerifiableOTSendEncoding},
     value::ValueRef,
-    Decode, DecodeError, DecodePrivate, Execute, ExecutionError, Memory, MemoryError, Prove,
-    ProveError, Thread, Verify, VerifyError, Vm, VmError,
+    Decode, DecodeError, DecodePrivate, Execute, ExecutionError, Load, LoadError, Memory,
+    MemoryError, Prove, ProveError, Thread, Verify, VerifyError, Vm, VmError,
 };
 
 use super::{
@@ -234,6 +234,25 @@ impl<OTS, OTR> Memory for DEAPThread<OTS, OTR> {
 
     fn get_value_type_by_id(&self, id: &str) -> Option<ValueType> {
         self.deap().get_value_type_by_id(id)
+    }
+}
+
+#[async_trait]
+impl<OTS, OTR> Load for DEAPThread<OTS, OTR>
+where
+    OTS: VerifiableOTSendEncoding + Send + Sync,
+    OTR: VerifiableOTReceiveEncoding + Send + Sync,
+{
+    async fn load(
+        &mut self,
+        circ: Arc<Circuit>,
+        inputs: &[ValueRef],
+        outputs: &[ValueRef],
+    ) -> Result<(), LoadError> {
+        self.deap()
+            .load(circ, inputs, outputs, &mut self.sink, &mut self.stream)
+            .map_err(LoadError::from)
+            .await
     }
 }
 

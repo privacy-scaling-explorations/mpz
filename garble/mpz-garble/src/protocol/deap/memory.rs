@@ -11,7 +11,9 @@ impl Memory for DEAP {
         typ: ValueType,
         visibility: Visibility,
     ) -> Result<ValueRef, MemoryError> {
-        self.state().memory.new_input(id, typ, visibility)
+        let value_ref = self.state().memory.new_input(id, typ.clone(), visibility)?;
+        self.gen.generate_input_encoding(&value_ref, &typ);
+        Ok(value_ref)
     }
 
     fn new_output_with_type(&self, id: &str, typ: ValueType) -> Result<ValueRef, MemoryError> {
