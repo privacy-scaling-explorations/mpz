@@ -9,6 +9,7 @@ use crate::{
     Circuit, CircuitBuilder,
 };
 
+use circom_circom_algebra::num_traits::ToPrimitive;
 use itertools::Itertools;
 
 // use regex::{Captures, Regex};
@@ -17,7 +18,7 @@ use itertools::Itertools;
 
 const VERSION: &'static str = "2.0.0";
 
-use std::{path::PathBuf, collections::HashMap, hash::Hash, fmt::{Display, self}};
+use std::{path::PathBuf, collections::HashMap, hash::Hash, fmt::{Display, self, write}};
 use ansi_term::Colour;
 
 use circom_constraint_generation::FlagsExecution;
@@ -828,15 +829,15 @@ impl RuntimeContext {
         RuntimeContext { caller_id: _caller_id, context_id: _context_id, vars: HashMap::new() }
     }
 
-    pub fn init (&self, runtime: &CircomRuntime) {
+    pub fn init (&mut self, runtime: &CircomRuntime) {
         for context in runtime.call_stack.iter() {
             for (k, v) in context.vars.iter() {
-                self.vars.insert(*k, *v);
+                self.vars.insert(k.to_string(), v.to_u32().unwrap());
             }
         }
     }
 
-    pub fn assign_var (&self, var_name: String, runtime: &mut CircomRuntime) {
+    pub fn assign_var (&mut self, var_name: String, runtime: &mut CircomRuntime) {
         runtime.last_var_id +=1;
         self.vars.insert(var_name, runtime.last_var_id);
     }
@@ -859,29 +860,44 @@ impl CircomRuntime {
 
 pub struct ArithmeticVar {
     pub var_id: u32,
-    pub var_name: String
+    pub var_name: String,
+    pub is_const: bool,
+    pub const_value: u32
 }
 
 impl ArithmeticVar {
     pub fn new(_var_id: u32, _var_name: String) -> ArithmeticVar {
-        ArithmeticVar { var_id: _var_id, var_name: _var_name }
+        ArithmeticVar { var_id: _var_id, var_name: _var_name , is_const: false, const_value: 0}
+    }
+
+    pub fn set_const_value (&mut self, value: u32) {
+        self.is_const = true;
+        self.const_value = value;
     }
 }
 
+
+
 pub enum AGateType {
+    ANone,
     AAdd,
     ASub,
     AMul,
-    ADiv
+    ADiv,
+    AEq,
+    ANeq
 }
 
 impl fmt::Display for AGateType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            AGateType::ANone => write!(f, "None"),
             AGateType::AAdd => write!(f, "AAdd"),
             AGateType::ASub => write!(f, "ASub"),
             AGateType::AMul => write!(f, "AMul"),
             AGateType::ADiv => write!(f, "ADiv"),
+            AGateType::AEq => write!(f, "AEq"),
+            AGateType::ANeq => write!(f, "ANEq"),
         }
     }
 }
@@ -953,33 +969,39 @@ impl ArithmeticCircuit {
 fn traverse_infix_op (
     ac: &mut ArithmeticCircuit,
     runtime: &mut CircomRuntime,
-    var: &String,
-    varlop: &String,
-    varrop: &String,
-    infix: ExpressionInfixOpcode
+    output: &String,
+    input_lhs: &String,
+    input_rhs: &String,
+    infixop: ExpressionInfixOpcode
 ) {
-    // use ExpressionInfixOpcode::*;
+    let &mut current = runtime.call_stack.last();
+    let lhsvar_id = current.vars.get(input_lhs).unwrap();
+    let rhsvar_id = current.vars.get(input_rhs).unwrap();
+    current.assign_var(output.to_string(), runtime);
+    let var_id = current.vars.get(output).unwrap();
 
-    let current = runtime.call_stack.last();
-    
+    ac.add_var(*var_id, &output);
+    let var = ac.vars.get(var_id).unwrap();
+    let lvar = ac.vars.get(lhsvar_id).unwrap();
+    let rvar = ac.vars.get(rhsvar_id).unwrap();
 
-    let mut gate_type = 0;
-    match infix {
+    let mut gate_type = AGateType::AAdd;
+    match infixop {
         Mul => {
-            println!("Mul op {} = {} * {}", var, varlop, varrop);
-            gate_type = 1;               
+            println!("Mul op {} = {} * {}", output, input_lhs, input_rhs);
+            gate_type = AGateType::AAdd;               
         }
         Div => {
-            println!("Div op {} = {} / {}", var, varlop, varrop);
-            gate_type = 2;
+            println!("Div op {} = {} / {}", output, input_lhs, input_rhs);
+            gate_type = AGateType::ADiv;
         },
         Add => {
-            println!("Add op {} = {} + {}", var, varlop, varrop);
-            gate_type = 3; 
+            println!("Add op {} = {} + {}", output, input_lhs, input_rhs);
+            gate_type = AGateType::AMul; 
         },
         Sub => {
-            println!("Sub op {} = {} - {}", var, varlop, varrop);
-            gate_type = 4; 
+            println!("Sub op {} = {} - {}", output, input_lhs, input_rhs);
+            gate_type = AGateType::ASub; 
         },
         // Pow => {},
         // IntDiv => {},
@@ -991,12 +1013,12 @@ fn traverse_infix_op (
         // Lesser => {},
         // Greater => {},
         Eq => {
-            println!("Eq op {} = {} == {}", var, varlop, varrop);
-            gate_type = 5;  
+            println!("Eq op {} = {} == {}", output, input_lhs, input_rhs);
+            gate_type = AGateType::AEq;  
         },
         NotEq => {
-            println!("Neq op {} = {} != {}", var, varlop, varrop);
-            gate_type = 6; 
+            println!("Neq op {} = {} != {}", output, input_lhs, input_rhs);
+            gate_type = AGateType::ANeq; 
         },
         // BoolOr => {},
         // BoolAnd => {},
@@ -1007,26 +1029,36 @@ fn traverse_infix_op (
             unreachable!()
         }
     };
-    //ac.add_gate(var, varlop, varrop, infix);
+
+    ac.add_gate(var, lvar, rvar, gate_type);
+
 }
 
 fn traverse_expression (
     ac: &mut ArithmeticCircuit,
+    runtime: &mut CircomRuntime,
     var: &String,
     expr: &Expression,
     program_archive: &ProgramArchive
 ) -> String {
+
+    let current = runtime.call_stack.last().unwrap();
+
     use Expression::*;
     // let mut can_be_simplified = true;
     match expr {
         Number(_, value) => {
-            ac.add_var(&value.to_string(), SignalType::Intermediate);
+            current.assign_var(value.to_string(), runtime);
+            let var_id = current.vars.get(value.to_string().as_str()).unwrap();
+            ac.add_var(*var_id, value.to_string().as_str());
+            let mut var = ac.vars.get(var_id).unwrap();
+            var.set_const_value(value.to_u32().unwrap());
             value.to_string()
         },
         InfixOp { meta, lhe, infix_op, rhe, .. } => {
-            let varlop = traverse_expression(ac, var, lhe, program_archive);
-            let varrop = traverse_expression(ac, var, rhe, program_archive);
-            traverse_infix_op(ac, var, &varlop, &varrop, meta, *infix_op);
+            let varlop = traverse_expression(ac, runtime, var, lhe, program_archive);
+            let varrop = traverse_expression(ac, runtime, var, rhe, program_archive);
+            traverse_infix_op(ac, runtime, var, &varlop, &varrop, *infix_op);
             var.to_string()
         }
         PrefixOp { meta, prefix_op, rhe } => {
@@ -1036,9 +1068,14 @@ fn traverse_expression (
         InlineSwitchOp { meta, cond, if_true, if_false } => todo!(),
         ParallelOp { meta, rhe } => todo!(),
         Variable { meta, name, access } => {
+            println!("Variable found {}", name.to_string());
             name.to_string()
         },
-        Call { meta, id, args } => todo!(),
+        Call { meta, id, args } => {
+            println!("Call found {}", id.to_string());
+            // find the template and execute it
+            id.to_string()
+        },
         AnonymousComp { meta, id, is_parallel, params, signals, names } => todo!(),
         ArrayInLine { meta, values } => todo!(),
         Tuple { meta, values } => todo!(),
@@ -1048,22 +1085,27 @@ fn traverse_expression (
 
 fn traverse_signal_declaration (
     ac: &mut ArithmeticCircuit,
+    runtime: &mut CircomRuntime,
     signal_name: &str,
     signal_type: SignalType
 ) {
-    ac.add_var(signal_name, signal_type);
+    traverse_variable_declaration(ac, runtime, signal_name);
 }
 
 fn traverse_variable_declaration (
     ac: &mut ArithmeticCircuit,
+    runtime: &mut CircomRuntime,
     var_name: &str
 ) {
-    ac.add_var(var_name, SignalType::Intermediate);
-
+    let current = runtime.call_stack.last().unwrap();
+    current.assign_var(var_name.to_string(), runtime);
+    let var_id = current.vars.get(var_name.to_string().as_str()).unwrap();
+    ac.add_var(*var_id, var_name.to_string().as_str());
 }
 
 fn traverse_statement (
     ac: &mut ArithmeticCircuit,
+    runtime: &mut CircomRuntime,
     stmt: &Statement,
     program_archive: &ProgramArchive
 ) {
@@ -1078,7 +1120,7 @@ fn traverse_statement (
     match stmt {
         InitializationBlock { initializations, .. } => {
             for istmt in initializations.iter() {
-                traverse_statement(ac, istmt, program_archive);
+                traverse_statement(ac, runtime, istmt, program_archive);
             }
         }
         Declaration { meta, xtype, name, dimensions, .. } => {
@@ -1127,10 +1169,12 @@ fn traverse_statement (
                         // ),
                         VariableType::Var => traverse_variable_declaration(
                             ac,
+                            runtime,
                             name
                         ),
                         VariableType::Signal(signal_type, tag_list) => traverse_signal_declaration (
                             ac,
+                            runtime,
                             name,
                             *signal_type
                         ),
@@ -1144,12 +1188,12 @@ fn traverse_statement (
             // Option::None
         }
         IfThenElse { cond, if_case, else_case, .. } => {
-            let var = String::from("IFTHENELSE");
-            ac.add_var(&var, SignalType::Intermediate);
-            let lhs = traverse_expression(ac, &var, cond, program_archive);
-            traverse_statement(ac, &if_case, program_archive);
-            let else_case = else_case.as_ref().map(|e| e.as_ref());
-            traverse_statement(ac, else_case.unwrap(), program_archive);
+            // let var = String::from("IFTHENELSE");
+            // ac.add_var(&var, SignalType::Intermediate);
+            // let lhs = traverse_expression(ac, &var, cond, program_archive);
+            // traverse_statement(ac, &if_case, program_archive);
+            // let else_case = else_case.as_ref().map(|e| e.as_ref());
+            // traverse_statement(ac, else_case.unwrap(), program_archive);
         //     let else_case = else_case.as_ref().map(|e| e.as_ref());
         //     let (possible_return, can_simplify, _) = execute_conditional_statement(
         //         cond,
@@ -1192,11 +1236,11 @@ fn traverse_statement (
         //     }
         },
         While { cond, stmt, .. } => loop {
-            let var = String::from("while");
-            ac.add_var(&var, SignalType::Intermediate);
-            let lhs = traverse_expression(ac, &var, cond, program_archive);
-            println!("While cond {}", lhs);
-            traverse_statement(ac, stmt, program_archive);
+            // let var = String::from("while");
+            // ac.add_var(&var, SignalType::Intermediate);
+            // let lhs = traverse_expression(ac, &var, cond, program_archive);
+            // println!("While cond {}", lhs);
+            // traverse_statement(ac, stmt, program_archive);
         },
         ConstraintEquality { meta, lhe, rhe, .. } => {
             // debug_assert!(actual_node.is_some());
@@ -1258,11 +1302,11 @@ fn traverse_statement (
             
         }
         Substitution { meta, var, access, op, rhe, .. } => {
-            let rhs = traverse_expression(ac, var, rhe, program_archive);
+            let rhs = traverse_expression(ac, runtime, var, rhe, program_archive);
             println!("Assigning {} to {}", rhs, var);
         }
         Block { stmts, .. } => {
-            traverse_sequence_of_statements(ac, stmts, program_archive, true);
+            traverse_sequence_of_statements(ac, runtime, stmts, program_archive, true);
         }
         LogCall { args, .. } => {
         }
@@ -1277,12 +1321,13 @@ fn traverse_statement (
 
 fn traverse_sequence_of_statements (
     ac: &mut ArithmeticCircuit,
+    runtime: &mut CircomRuntime,
     stmts: &[Statement],
     program_archive: &ProgramArchive,
     is_complete_template: bool
 ) {
     for stmt in stmts.iter() {
-        traverse_statement(ac, stmt, program_archive);
+        traverse_statement(ac, runtime, stmt, program_archive);
     }
     if is_complete_template{
         //execute_delayed_declarations(program_archive, runtime, actual_node, flags)?;
@@ -1295,6 +1340,9 @@ pub fn traverse_program (
 ) -> ArithmeticCircuit {    
 
     let mut ac = ArithmeticCircuit::new();
+
+    let mut runtime = CircomRuntime::new();
+    runtime.init();
 
     let main_file_id = program_archive.get_file_id_main();
 
@@ -1314,7 +1362,7 @@ pub fn traverse_program (
 
         let template_body = program_archive.get_template_data(id).get_body_as_vec();
 
-        traverse_sequence_of_statements(&mut ac, template_body, program_archive, true);
+        traverse_sequence_of_statements(&mut ac, &mut runtime, template_body, program_archive, true);
         
         // let folded_value_result = 
         //     if let Call { id, args, .. } = &program_archive.get_main_expression() {
