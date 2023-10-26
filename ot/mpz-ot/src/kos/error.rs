@@ -1,4 +1,4 @@
-use mpz_ot_core::kos::msgs::Message;
+use mpz_ot_core::kos::msgs::MessageError;
 
 use crate::OTError;
 
@@ -14,7 +14,7 @@ pub enum SenderError {
     BaseOTError(#[from] crate::OTError),
     #[error(transparent)]
     CointossError(#[from] mpz_core::cointoss::CointossError),
-    #[error("invalid state: expected {0}")]
+    #[error("{0}")]
     StateError(String),
     #[error("configuration error: {0}")]
     ConfigError(String),
@@ -31,17 +31,23 @@ impl From<SenderError> for OTError {
     }
 }
 
+impl From<crate::kos::SenderStateError> for SenderError {
+    fn from(err: crate::kos::SenderStateError) -> Self {
+        SenderError::StateError(err.to_string())
+    }
+}
+
 impl From<mpz_ot_core::kos::SenderError> for OTError {
     fn from(err: mpz_ot_core::kos::SenderError) -> Self {
         SenderError::from(err).into()
     }
 }
 
-impl<BaseMsg> From<enum_try_as_inner::Error<Message<BaseMsg>>> for SenderError {
-    fn from(value: enum_try_as_inner::Error<Message<BaseMsg>>) -> Self {
+impl<BaseMsg> From<MessageError<BaseMsg>> for SenderError {
+    fn from(err: MessageError<BaseMsg>) -> Self {
         SenderError::from(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            value.to_string(),
+            err.to_string(),
         ))
     }
 }
@@ -58,7 +64,7 @@ pub enum ReceiverError {
     BaseOTError(#[from] crate::OTError),
     #[error(transparent)]
     CointossError(#[from] mpz_core::cointoss::CointossError),
-    #[error("invalid state: expected {0}")]
+    #[error("{0}")]
     StateError(String),
     #[error("configuration error: {0}")]
     ConfigError(String),
@@ -77,17 +83,23 @@ impl From<ReceiverError> for OTError {
     }
 }
 
+impl From<crate::kos::ReceiverStateError> for ReceiverError {
+    fn from(err: crate::kos::ReceiverStateError) -> Self {
+        ReceiverError::StateError(err.to_string())
+    }
+}
+
 impl From<mpz_ot_core::kos::ReceiverError> for OTError {
     fn from(err: mpz_ot_core::kos::ReceiverError) -> Self {
         ReceiverError::from(err).into()
     }
 }
 
-impl<BaseMsg> From<enum_try_as_inner::Error<Message<BaseMsg>>> for ReceiverError {
-    fn from(value: enum_try_as_inner::Error<Message<BaseMsg>>) -> Self {
+impl<BaseMsg> From<MessageError<BaseMsg>> for ReceiverError {
+    fn from(err: MessageError<BaseMsg>) -> Self {
         ReceiverError::from(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            value.to_string(),
+            err.to_string(),
         ))
     }
 }

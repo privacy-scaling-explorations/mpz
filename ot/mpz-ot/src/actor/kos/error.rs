@@ -1,5 +1,5 @@
 use crate::{
-    actor::kos::msgs::Message,
+    actor::kos::msgs::MessageError,
     kos::{ReceiverError, SenderError},
 };
 
@@ -33,9 +33,9 @@ impl From<crate::OTError> for SenderActorError {
     }
 }
 
-impl From<enum_try_as_inner::Error<crate::kos::SenderState>> for SenderActorError {
-    fn from(value: enum_try_as_inner::Error<crate::kos::SenderState>) -> Self {
-        SenderError::StateError(value.to_string()).into()
+impl From<crate::kos::SenderStateError> for SenderActorError {
+    fn from(err: crate::kos::SenderStateError) -> Self {
+        SenderError::from(err).into()
     }
 }
 
@@ -51,11 +51,11 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for SenderActorError {
     }
 }
 
-impl<T> From<enum_try_as_inner::Error<Message<T>>> for SenderActorError {
-    fn from(value: enum_try_as_inner::Error<Message<T>>) -> Self {
+impl<T> From<MessageError<T>> for SenderActorError {
+    fn from(err: MessageError<T>) -> Self {
         SenderActorError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            value.to_string(),
+            err.to_string(),
         ))
     }
 }
@@ -104,9 +104,9 @@ impl From<crate::OTError> for ReceiverActorError {
     }
 }
 
-impl From<enum_try_as_inner::Error<crate::kos::ReceiverState>> for ReceiverActorError {
-    fn from(value: enum_try_as_inner::Error<crate::kos::ReceiverState>) -> Self {
-        ReceiverError::StateError(value.to_string()).into()
+impl From<crate::kos::ReceiverStateError> for ReceiverActorError {
+    fn from(err: crate::kos::ReceiverStateError) -> Self {
+        ReceiverError::from(err).into()
     }
 }
 
@@ -122,11 +122,11 @@ impl<T> From<futures::channel::mpsc::TrySendError<T>> for ReceiverActorError {
     }
 }
 
-impl<T> From<enum_try_as_inner::Error<Message<T>>> for ReceiverActorError {
-    fn from(value: enum_try_as_inner::Error<Message<T>>) -> Self {
+impl<T> From<MessageError<T>> for ReceiverActorError {
+    fn from(err: MessageError<T>) -> Self {
         ReceiverActorError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            value.to_string(),
+            err.to_string(),
         ))
     }
 }

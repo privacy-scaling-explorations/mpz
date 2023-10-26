@@ -6,7 +6,7 @@ mod sender;
 use futures::{SinkExt, StreamExt};
 use utils_aio::{sink::IoSink, stream::IoStream};
 
-use crate::kos::{msgs::Message as KosMessage, ReceiverError, SenderError};
+use crate::kos::msgs::Message as KosMessage;
 
 pub use error::{ReceiverActorError, SenderActorError};
 pub use receiver::{ReceiverActor, SharedReceiver};
@@ -26,33 +26,9 @@ pub(crate) fn into_kos_stream<'a, St: IoStream<msgs::Message<T>> + Send + Unpin,
     stream: &'a mut St,
 ) -> impl IoStream<KosMessage<T>> + Send + Unpin + 'a {
     StreamExt::map(stream, |msg| match msg {
-        Ok(msg) => match msg.into_protocol() {
-            Ok(msg) => Ok(msg),
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                err.to_string(),
-            )),
-        },
+        Ok(msg) => msg.try_into_protocol().map_err(From::from),
         Err(err) => Err(err),
     })
-}
-
-impl<T> From<enum_try_as_inner::Error<msgs::Message<T>>> for SenderError {
-    fn from(value: enum_try_as_inner::Error<msgs::Message<T>>) -> Self {
-        SenderError::from(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            value.to_string(),
-        ))
-    }
-}
-
-impl<T> From<enum_try_as_inner::Error<msgs::Message<T>>> for ReceiverError {
-    fn from(value: enum_try_as_inner::Error<msgs::Message<T>>) -> Self {
-        ReceiverError::from(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            value.to_string(),
-        ))
-    }
 }
 
 #[cfg(test)]

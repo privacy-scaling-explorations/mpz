@@ -1,4 +1,4 @@
-use mpz_ot_core::chou_orlandi::msgs::Message;
+use mpz_ot_core::chou_orlandi::msgs::MessageError;
 
 use crate::OTError;
 
@@ -10,7 +10,7 @@ pub enum SenderError {
     IOError(#[from] std::io::Error),
     #[error(transparent)]
     CoreError(#[from] mpz_ot_core::chou_orlandi::SenderError),
-    #[error("invalid state: expected {0}")]
+    #[error("{0}")]
     StateError(String),
     #[error(transparent)]
     CointossError(#[from] mpz_core::cointoss::CointossError),
@@ -27,11 +27,17 @@ impl From<SenderError> for OTError {
     }
 }
 
-impl From<enum_try_as_inner::Error<Message>> for SenderError {
-    fn from(value: enum_try_as_inner::Error<Message>) -> Self {
+impl From<crate::chou_orlandi::sender::StateError> for SenderError {
+    fn from(err: crate::chou_orlandi::sender::StateError) -> Self {
+        SenderError::StateError(err.to_string())
+    }
+}
+
+impl From<MessageError> for SenderError {
+    fn from(err: MessageError) -> Self {
         SenderError::from(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            value.to_string(),
+            err.to_string(),
         ))
     }
 }
@@ -44,7 +50,7 @@ pub enum ReceiverError {
     IOError(#[from] std::io::Error),
     #[error(transparent)]
     CoreError(#[from] mpz_ot_core::chou_orlandi::ReceiverError),
-    #[error("invalid state: expected {0}")]
+    #[error("{0}")]
     StateError(String),
     #[error(transparent)]
     CointossError(#[from] mpz_core::cointoss::CointossError),
@@ -61,11 +67,17 @@ impl From<ReceiverError> for OTError {
     }
 }
 
-impl From<enum_try_as_inner::Error<Message>> for ReceiverError {
-    fn from(value: enum_try_as_inner::Error<Message>) -> Self {
+impl From<crate::chou_orlandi::receiver::StateError> for ReceiverError {
+    fn from(err: crate::chou_orlandi::receiver::StateError) -> Self {
+        ReceiverError::StateError(err.to_string())
+    }
+}
+
+impl From<MessageError> for ReceiverError {
+    fn from(err: MessageError) -> Self {
         ReceiverError::from(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            value.to_string(),
+            err.to_string(),
         ))
     }
 }

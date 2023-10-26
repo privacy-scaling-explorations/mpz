@@ -132,7 +132,7 @@ where
             futures::select! {
                 // Processes a message received from the Receiver.
                 msg = self.stream.select_next_some() => {
-                    self.handle_msg(msg?.into_actor_message()?)?;
+                    self.handle_msg(msg?.try_into_actor_message()?)?;
                 }
                 // Processes a command from a controller.
                 cmd = self.commands.select_next_some() => {
@@ -185,7 +185,7 @@ where
                 let keys = self
                     .sender
                     .state_mut()
-                    .as_extension_mut()
+                    .try_as_extension_mut()
                     .map_err(SenderError::from)
                     .and_then(|sender| {
                         sender
