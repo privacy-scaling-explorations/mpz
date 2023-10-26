@@ -7,24 +7,30 @@ template Multiplier2 () {
    // Declaration of signals 
    signal input garb_a;  
    signal input eval_b;  
-   signal i;
+   var i;
    signal output c;  
 
    // Computation  
-   i <== garb_a + eval_b;
+   // i <== garb_a + eval_b;
 
-   var j = 100;
+   // var j = 100;
 
-   var k = 0;
+   // var k = 0;
 
-   if (garb_a != 3) {
-      k = k + 1;
-   } else {
-      j = j + 1;
-   }
+   // if (garb_a != 3) {
+   //    k = k + 1;
+   // } else {
+   //    j = j + 1;
+   // }
 
-   var t = i * j;
-   c <== garb_a * t;
+   // var t = i * j;
+   // c <== garb_a * t;
+
+   i = garb_a + eval_b;
+   i = garb_a * eval_b;
+   i = garb_a + 100;
+   i = eval_b * 20;
+   c <== i * i;
 }
 
 component main = Multiplier2();

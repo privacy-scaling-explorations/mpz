@@ -36,6 +36,7 @@ circom-parser =  { git = "https://github.com/iden3/circom", package = "parser"}
 clap = "2.33.0"
 ansi_term = "0.12.1"
 wast = "39.0.0"
+itertools = "0.10.0"
 
 sha2 = { workspace = true, features = ["compress"], optional = true }
 
