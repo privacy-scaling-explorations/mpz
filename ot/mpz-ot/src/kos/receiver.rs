@@ -19,17 +19,12 @@ use crate::{OTError, OTReceiver, OTSender, OTSetup, VerifiableOTReceiver, Verifi
 use super::{into_base_sink, into_base_stream, ReceiverError, ReceiverVerifyError};
 
 #[derive(Debug, EnumTryAsInner)]
+#[derive_err(Debug)]
 pub(crate) enum State {
     Initialized(Box<ReceiverCore<state::Initialized>>),
     Extension(Box<ReceiverCore<state::Extension>>),
     Verify(ReceiverCore<state::Verify>),
     Error,
-}
-
-impl From<enum_try_as_inner::Error<State>> for ReceiverError {
-    fn from(value: enum_try_as_inner::Error<State>) -> Self {
-        ReceiverError::StateError(value.to_string())
-    }
 }
 
 /// KOS receiver.
@@ -60,7 +55,7 @@ where
 
     /// The number of remaining OTs which can be consumed.
     pub fn remaining(&self) -> Result<usize, ReceiverError> {
-        Ok(self.state.as_extension()?.remaining())
+        Ok(self.state.try_as_extension()?.remaining())
     }
 
     /// Returns a reference to the inner receiver state.
@@ -89,7 +84,8 @@ where
         stream: &mut St,
         count: usize,
     ) -> Result<(), ReceiverError> {
-        let mut ext_receiver = self.state.replace(State::Error).into_extension()?;
+        let mut ext_receiver =
+            std::mem::replace(&mut self.state, State::Error).try_into_extension()?;
 
         // Extend the OTs, adding padding for the consistency check.
         let (mut ext_receiver, extend) = Backend::spawn(move || {
@@ -115,7 +111,7 @@ where
         let cointoss_payload = stream
             .expect_next()
             .await?
-            .into_cointoss_receiver_payload()?;
+            .try_into_cointoss_receiver_payload()?;
 
         // Open commitment
         let (mut seeds, payload) = cointoss_sender.finalize(cointoss_payload)?;
@@ -154,13 +150,13 @@ where
         sink: &mut Si,
         stream: &mut St,
     ) -> Result<(), ReceiverError> {
-        let receiver = self.state.replace(State::Error).into_extension()?;
+        let receiver = std::mem::replace(&mut self.state, State::Error).try_into_extension()?;
 
         // Finalize coin toss to determine expected delta
         let cointoss_payload = stream
             .expect_next()
             .await?
-            .into_cointoss_sender_payload()
+            .try_into_cointoss_sender_payload()
             .map_err(ReceiverError::from)?;
 
         let Some(cointoss_receiver) = self.cointoss_receiver.take() else {
@@ -215,10 +211,8 @@ where
             return Ok(());
         }
 
-        let ext_receiver = self
-            .state
-            .replace(State::Error)
-            .into_initialized()
+        let ext_receiver = std::mem::replace(&mut self.state, State::Error)
+            .try_into_initialized()
             .map_err(ReceiverError::from)?;
 
         // If the sender is committed, we run a coin toss
@@ -226,7 +220,7 @@ where
             let commitment = stream
                 .expect_next()
                 .await?
-                .into_cointoss_commit()
+                .try_into_cointoss_commit()
                 .map_err(ReceiverError::from)?;
 
             let (cointoss_receiver, payload) = cointoss::Receiver::new(vec![thread_rng().gen()])
@@ -276,7 +270,10 @@ where
         stream: &mut St,
         choices: &[bool],
     ) -> Result<Vec<Block>, OTError> {
-        let receiver = self.state.as_extension_mut().map_err(ReceiverError::from)?;
+        let receiver = self
+            .state
+            .try_as_extension_mut()
+            .map_err(ReceiverError::from)?;
 
         let mut receiver_keys = receiver.keys(choices.len()).map_err(ReceiverError::from)?;
 
@@ -292,7 +289,7 @@ where
         let payload = stream
             .expect_next()
             .await?
-            .into_sender_payload()
+            .try_into_sender_payload()
             .map_err(ReceiverError::from)?;
 
         let received = Backend::spawn(move || {
@@ -320,7 +317,10 @@ where
         stream: &mut St,
         choices: &[bool],
     ) -> Result<Vec<[u8; N]>, OTError> {
-        let receiver = self.state.as_extension_mut().map_err(ReceiverError::from)?;
+        let receiver = self
+            .state
+            .try_as_extension_mut()
+            .map_err(ReceiverError::from)?;
 
         let mut receiver_keys = receiver.keys(choices.len()).map_err(ReceiverError::from)?;
 
@@ -336,7 +336,7 @@ where
         let payload = stream
             .expect_next()
             .await?
-            .into_sender_payload()
+            .try_into_sender_payload()
             .map_err(ReceiverError::from)?;
 
         let received = Backend::spawn(move || {
@@ -370,7 +370,7 @@ where
             self.verify_delta(sink, stream).await?;
         }
 
-        let receiver = self.state.as_verify().map_err(ReceiverError::from)?;
+        let receiver = self.state.try_as_verify().map_err(ReceiverError::from)?;
 
         let record = receiver
             .remove_record(id as u32)

@@ -22,17 +22,12 @@ use enum_try_as_inner::EnumTryAsInner;
 use super::{into_base_sink, into_base_stream};
 
 #[derive(Debug, EnumTryAsInner)]
+#[derive_err(Debug)]
 pub(crate) enum State {
     Initialized(SenderCore<state::Initialized>),
     Extension(SenderCore<state::Extension>),
     Complete,
     Error,
-}
-
-impl From<enum_try_as_inner::Error<State>> for SenderError {
-    fn from(value: enum_try_as_inner::Error<State>) -> Self {
-        SenderError::StateError(value.to_string())
-    }
 }
 
 /// KOS sender.
@@ -63,7 +58,7 @@ where
 
     /// The number of remaining OTs which can be consumed.
     pub fn remaining(&self) -> Result<usize, SenderError> {
-        Ok(self.state.as_extension()?.remaining())
+        Ok(self.state.try_as_extension()?.remaining())
     }
 
     /// Returns a mutable reference to the inner sender state.
@@ -87,7 +82,7 @@ where
         stream: &mut St,
         delta: Block,
     ) -> Result<(), SenderError> {
-        if self.state.as_initialized()?.config().sender_commit() {
+        if self.state.try_as_initialized()?.config().sender_commit() {
             return Err(SenderError::ConfigError(
                 "committed sender can not choose delta".to_string(),
             ));
@@ -105,7 +100,7 @@ where
         stream: &mut St,
         delta: Block,
     ) -> Result<(), SenderError> {
-        let ext_sender = self.state.replace(State::Error).into_initialized()?;
+        let ext_sender = std::mem::replace(&mut self.state, State::Error).try_into_initialized()?;
 
         let choices = delta.into_lsb0_vec();
         let seeds = self
@@ -141,17 +136,18 @@ where
         stream: &mut St,
         count: usize,
     ) -> Result<(), SenderError> {
-        let mut ext_sender = self.state.replace(State::Error).into_extension()?;
+        let mut ext_sender =
+            std::mem::replace(&mut self.state, State::Error).try_into_extension()?;
 
         // Receive extend message from the receiver.
         let extend = stream
             .expect_next()
             .await?
-            .into_extend()
+            .try_into_extend()
             .map_err(SenderError::from)?;
 
         // Receive coin toss commitments from the receiver.
-        let commitment = stream.expect_next().await?.into_cointoss_commit()?;
+        let commitment = stream.expect_next().await?.try_into_cointoss_commit()?;
 
         // Extend the OTs, adding padding for the consistency check.
         let mut ext_sender = Backend::spawn(move || {
@@ -172,10 +168,13 @@ where
             .await?;
 
         // Receive coin toss sender payload from the receiver.
-        let cointoss_sender_payload = stream.expect_next().await?.into_cointoss_sender_payload()?;
+        let cointoss_sender_payload = stream
+            .expect_next()
+            .await?
+            .try_into_cointoss_sender_payload()?;
 
         // Receive consistency check from the receiver.
-        let receiver_check = stream.expect_next().await?.into_check()?;
+        let receiver_check = stream.expect_next().await?.try_into_check()?;
 
         // Derive chi seed for the consistency check.
         let chi_seed = cointoss_receiver.finalize(cointoss_sender_payload)?[0];
@@ -206,11 +205,7 @@ where
         sink: &mut Si,
         stream: &mut St,
     ) -> Result<(), SenderError> {
-        let _ = self
-            .state
-            .replace(State::Error)
-            .into_extension()
-            .map_err(SenderError::from)?;
+        std::mem::replace(&mut self.state, State::Error).try_into_extension()?;
 
         // Reveal coin toss payload
         let Some(payload) = self.cointoss_payload.take() else {
@@ -259,10 +254,8 @@ where
             return Ok(());
         }
 
-        let sender = self
-            .state
-            .replace(State::Error)
-            .into_initialized()
+        let sender = std::mem::replace(&mut self.state, State::Error)
+            .try_into_initialized()
             .map_err(SenderError::from)?;
 
         // If the sender is committed, we sample delta using a coin toss.
@@ -274,7 +267,7 @@ where
             let payload = stream
                 .expect_next()
                 .await?
-                .into_cointoss_receiver_payload()
+                .try_into_cointoss_receiver_payload()
                 .map_err(SenderError::from)?;
 
             let (seeds, payload) = cointoss_sender
@@ -316,12 +309,15 @@ where
         stream: &mut St,
         msgs: &[[Block; 2]],
     ) -> Result<(), OTError> {
-        let sender = self.state.as_extension_mut().map_err(SenderError::from)?;
+        let sender = self
+            .state
+            .try_as_extension_mut()
+            .map_err(SenderError::from)?;
 
         let derandomize = stream
             .expect_next()
             .await?
-            .into_derandomize()
+            .try_into_derandomize()
             .map_err(SenderError::from)?;
 
         let mut sender_keys = sender.keys(msgs.len()).map_err(SenderError::from)?;
@@ -354,12 +350,15 @@ where
         stream: &mut St,
         msgs: &[[[u8; N]; 2]],
     ) -> Result<(), OTError> {
-        let sender = self.state.as_extension_mut().map_err(SenderError::from)?;
+        let sender = self
+            .state
+            .try_as_extension_mut()
+            .map_err(SenderError::from)?;
 
         let derandomize = stream
             .expect_next()
             .await?
-            .into_derandomize()
+            .try_into_derandomize()
             .map_err(SenderError::from)?;
 
         let mut sender_keys = sender.keys(msgs.len()).map_err(SenderError::from)?;

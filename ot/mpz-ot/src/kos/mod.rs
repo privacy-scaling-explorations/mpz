@@ -9,8 +9,8 @@ use futures_util::{SinkExt, StreamExt};
 pub use receiver::Receiver;
 pub use sender::Sender;
 
-pub(crate) use receiver::State as ReceiverState;
-pub(crate) use sender::State as SenderState;
+pub(crate) use receiver::StateError as ReceiverStateError;
+pub(crate) use sender::StateError as SenderStateError;
 
 pub use mpz_ot_core::kos::{
     msgs, PayloadRecord, ReceiverConfig, ReceiverConfigBuilder, ReceiverConfigBuilderError,
@@ -32,13 +32,7 @@ pub(crate) fn into_base_stream<'a, St: IoStream<msgs::Message<T>> + Send + Unpin
     stream: &'a mut St,
 ) -> impl IoStream<T> + Send + Unpin + 'a {
     StreamExt::map(stream, |msg| match msg {
-        Ok(msg) => match msg.into_base_msg() {
-            Ok(msg) => Ok(msg),
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                err.to_string(),
-            )),
-        },
+        Ok(msg) => msg.try_into_base_msg().map_err(From::from),
         Err(err) => Err(err),
     })
 }

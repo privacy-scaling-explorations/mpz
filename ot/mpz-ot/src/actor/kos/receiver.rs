@@ -153,7 +153,7 @@ where
         let mut keys = self
             .receiver
             .state_mut()
-            .as_extension_mut()?
+            .try_as_extension_mut()?
             .keys(choices.len())?;
 
         let derandomize = keys.derandomize(choices)?;
@@ -205,7 +205,7 @@ where
                 _ = caller_response.send(
                     self.receiver
                         .state_mut()
-                        .as_verify_mut()
+                        .try_as_verify_mut()
                         .map_err(ReceiverError::from)
                         .and_then(|receiver| {
                             receiver.remove_record(*id).map_err(ReceiverError::from)
@@ -262,7 +262,7 @@ where
 
     /// Handles a message from the KOS sender actor.
     async fn handle_msg(&mut self, msg: Message<BaseOT::Msg>) -> Result<(), ReceiverActorError> {
-        let msg = msg.into_actor_message()?;
+        let msg = msg.try_into_actor_message()?;
 
         match msg {
             ActorMessage::TransferPayload(TransferPayload { id, payload }) => {

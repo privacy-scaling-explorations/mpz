@@ -20,7 +20,8 @@ use crate::{CommittedOTReceiver, OTError, OTReceiver, OTSetup};
 use super::ReceiverError;
 
 #[derive(Debug, EnumTryAsInner)]
-enum State {
+#[derive_err(Debug)]
+pub(crate) enum State {
     Initialized {
         config: ReceiverConfig,
         seed: Option<[u8; 32]>,
@@ -28,12 +29,6 @@ enum State {
     Setup(Box<ReceiverCore<state::Setup>>),
     Complete,
     Error,
-}
-
-impl From<enum_try_as_inner::Error<State>> for ReceiverError {
-    fn from(value: enum_try_as_inner::Error<State>) -> Self {
-        ReceiverError::StateError(value.to_string())
-    }
 }
 
 /// Chou-Orlandi receiver.
@@ -84,10 +79,8 @@ impl OTSetup for Receiver {
             return Ok(());
         }
 
-        let (config, seed) = self
-            .state
-            .replace(State::Error)
-            .into_initialized()
+        let (config, seed) = std::mem::replace(&mut self.state, State::Error)
+            .try_into_initialized()
             .map_err(ReceiverError::from)?;
 
         // If the receiver is committed, we generate the seed using a cointoss.
@@ -110,7 +103,7 @@ impl OTSetup for Receiver {
         let sender_setup = stream
             .expect_next()
             .await?
-            .into_sender_setup()
+            .try_into_sender_setup()
             .map_err(ReceiverError::from)?;
 
         let receiver = Backend::spawn(move || receiver.setup(sender_setup)).await;
@@ -138,7 +131,7 @@ async fn execute_cointoss<
     let payload = stream
         .expect_next()
         .await?
-        .into_cointoss_receiver_payload()?;
+        .try_into_cointoss_receiver_payload()?;
 
     let (seeds, payload) = sender.finalize(payload)?;
 
@@ -167,10 +160,8 @@ where
         stream: &mut St,
         choices: &[T],
     ) -> Result<Vec<Block>, OTError> {
-        let mut receiver = self
-            .state
-            .replace(State::Error)
-            .into_setup()
+        let mut receiver = std::mem::replace(&mut self.state, State::Error)
+            .try_into_setup()
             .map_err(ReceiverError::from)?;
 
         let choices = choices.to_vec();
@@ -186,7 +177,7 @@ where
         let sender_payload = stream
             .expect_next()
             .await?
-            .into_sender_payload()
+            .try_into_sender_payload()
             .map_err(ReceiverError::from)?;
 
         let (receiver, data) = Backend::spawn(move || {
@@ -213,10 +204,8 @@ impl CommittedOTReceiver<bool, Block> for Receiver {
         sink: &mut Si,
         _stream: &mut St,
     ) -> Result<(), OTError> {
-        let receiver = self
-            .state
-            .replace(State::Error)
-            .into_setup()
+        let receiver = std::mem::replace(&mut self.state, State::Error)
+            .try_into_setup()
             .map_err(ReceiverError::from)?;
 
         let Some(cointoss_payload) = self.cointoss_payload.take() else {

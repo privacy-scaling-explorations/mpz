@@ -32,8 +32,8 @@ derive_builder.workspace = true
 itybity.workspace = true
 opaque-debug.workspace = true
 cfg-if.workspace = true
-enum-try-as-inner = { tag = "0.1.0", git = "https://github.com/sinui0/enum-try-as-inner" }
 bytemuck = { workspace = true, features = ["derive"] }
+enum-try-as-inner.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
