@@ -825,6 +825,19 @@ pub struct RuntimeContext {
 }
 
 impl RuntimeContext {
+
+    pub fn caller_id (&self) -> u32 {
+        self.caller_id
+    }
+
+    pub fn context_id (&self) -> u32 {
+        self.context_id
+    }
+
+    pub fn vars (&self) -> &HashMap<String, u32> {
+        &self.vars
+    }
+
     pub fn new (_caller_id: u32, _context_id: u32) -> RuntimeContext {
         RuntimeContext { caller_id: _caller_id, context_id: _context_id, vars: HashMap::new() }
     }
@@ -842,7 +855,7 @@ impl RuntimeContext {
         last_var_id
     }
 
-    pub fn get_var(&mut self, var_name: &String) -> u32 {
+    pub fn get_var(&self, var_name: &String) -> u32 {
         *self.vars.get(var_name).unwrap()
     }
 }
@@ -868,9 +881,10 @@ impl CircomRuntime {
         current.get_var(var)
     }
     pub fn assign_var_to_current_context (&mut self, var: &String) -> u32 {
-        let current = self.get_current_runtime_context();
         self.last_var_id += 1;
-        current.assign_var(var, self.last_var_id)
+        let var_id = self.last_var_id;
+        let current = self.get_current_runtime_context();
+        current.assign_var(var, var_id)
     }
 }
 
@@ -941,6 +955,14 @@ pub struct ArithmeticCircuit {
 
 impl ArithmeticCircuit {
 
+    pub fn gate_count(&self) -> u32 {
+        self.gate_count
+    }
+
+    pub fn var_count(&self) -> u32 {
+        self.var_count
+    }
+
     pub fn new () -> ArithmeticCircuit {
         ArithmeticCircuit { gate_count: 0, var_count: 0, vars: HashMap::new(), gates: HashMap::new() }
     }
@@ -958,7 +980,22 @@ impl ArithmeticCircuit {
         self.vars.get(&var_id).unwrap()
     } 
 
-    pub fn get_var(&mut self, var_id: u32) -> &ArithmeticVar {
+    pub fn add_const_var(
+        &mut self, 
+        var_id: u32,
+        var_val: u32) -> &ArithmeticVar {
+
+        // Not sure if var_count is needed
+        self.var_count += 1;
+
+        let mut var = ArithmeticVar::new(var_id, var_val.to_string());
+        var.is_const = true;
+        var.const_value = var_val;
+        self.vars.insert(var_id, var);
+        self.vars.get(&var_id).unwrap()
+    } 
+
+    pub fn get_var(&self, var_id: u32) -> &ArithmeticVar {
         self.vars.get(&var_id).unwrap()
     }
 
@@ -1001,8 +1038,11 @@ fn traverse_infix_op (
     let var_id = runtime.assign_var_to_current_context(output);
 
     let var = ac.add_var(var_id, &output);
+    let var2 = ac.add_var(var_id, &output);
+
     let lvar = ac.get_var(lhsvar_id);
     let rvar = ac.get_var(rhsvar_id);
+    
 
     let mut gate_type = AGateType::AAdd;
     match infixop {
@@ -1066,8 +1106,7 @@ fn traverse_expression (
     match expr {
         Number(_, value) => {
             let var_id = runtime.assign_var_to_current_context(&value.to_string());
-            let var = ac.add_var(var_id, value.to_string().as_str());
-            var.set_const_value(value.to_u32().unwrap());
+            ac.add_const_var(var_id, value.to_u32().unwrap());
             value.to_string()
         },
         InfixOp { meta, lhe, infix_op, rhe, .. } => {
