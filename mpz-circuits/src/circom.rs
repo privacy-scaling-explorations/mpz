@@ -837,9 +837,13 @@ impl RuntimeContext {
         }
     }
 
-    pub fn assign_var (&mut self, var_name: String, runtime: &mut CircomRuntime) {
-        runtime.last_var_id +=1;
-        self.vars.insert(var_name, runtime.last_var_id);
+    pub fn assign_var (&mut self, var_name: &String, last_var_id: u32) -> u32 {
+        self.vars.insert(var_name.to_string(), last_var_id);
+        last_var_id
+    }
+
+    pub fn get_var(&mut self, var_name: &String) -> u32 {
+        *self.vars.get(var_name).unwrap()
     }
 }
 
@@ -855,6 +859,18 @@ impl CircomRuntime {
     }
     pub fn init (&self) {
 
+    }
+    pub fn get_current_runtime_context (&mut self) -> &mut RuntimeContext {
+        self.call_stack.last_mut().unwrap()
+    }
+    pub fn get_var_from_current_context (&mut self, var: &String) -> u32 {
+        let current = self.get_current_runtime_context();
+        current.get_var(var)
+    }
+    pub fn assign_var_to_current_context (&mut self, var: &String) -> u32 {
+        let current = self.get_current_runtime_context();
+        self.last_var_id += 1;
+        current.assign_var(var, self.last_var_id)
     }
 }
 
@@ -929,17 +945,22 @@ impl ArithmeticCircuit {
         ArithmeticCircuit { gate_count: 0, var_count: 0, vars: HashMap::new(), gates: HashMap::new() }
     }
 
-    pub fn add_var (
+    pub fn add_var(
         &mut self, 
         var_id: u32,
-        var_name: &str) {
+        var_name: &str) -> &ArithmeticVar {
 
         // Not sure if var_count is needed
         self.var_count += 1;
 
         let var = ArithmeticVar::new(var_id, var_name.to_string());
         self.vars.insert(var_id, var);
+        self.vars.get(&var_id).unwrap()
     } 
+
+    pub fn get_var(&mut self, var_id: u32) -> &ArithmeticVar {
+        self.vars.get(&var_id).unwrap()
+    }
 
     //We support ADD, MUL, CADD, CMUL, DIV, CDIV, CINVERT, IFTHENELSE, FOR
 
@@ -974,16 +995,14 @@ fn traverse_infix_op (
     input_rhs: &String,
     infixop: ExpressionInfixOpcode
 ) {
-    let &mut current = runtime.call_stack.last();
-    let lhsvar_id = current.vars.get(input_lhs).unwrap();
-    let rhsvar_id = current.vars.get(input_rhs).unwrap();
-    current.assign_var(output.to_string(), runtime);
-    let var_id = current.vars.get(output).unwrap();
+    // let current = runtime.get_current_runtime_context();
+    let lhsvar_id = runtime.get_var_from_current_context(input_lhs);
+    let rhsvar_id = runtime.get_var_from_current_context(input_rhs);
+    let var_id = runtime.assign_var_to_current_context(output);
 
-    ac.add_var(*var_id, &output);
-    let var = ac.vars.get(var_id).unwrap();
-    let lvar = ac.vars.get(lhsvar_id).unwrap();
-    let rvar = ac.vars.get(rhsvar_id).unwrap();
+    let var = ac.add_var(var_id, &output);
+    let lvar = ac.get_var(lhsvar_id);
+    let rvar = ac.get_var(rhsvar_id);
 
     let mut gate_type = AGateType::AAdd;
     match infixop {
@@ -1042,16 +1061,12 @@ fn traverse_expression (
     program_archive: &ProgramArchive
 ) -> String {
 
-    let current = runtime.call_stack.last().unwrap();
-
     use Expression::*;
     // let mut can_be_simplified = true;
     match expr {
         Number(_, value) => {
-            current.assign_var(value.to_string(), runtime);
-            let var_id = current.vars.get(value.to_string().as_str()).unwrap();
-            ac.add_var(*var_id, value.to_string().as_str());
-            let mut var = ac.vars.get(var_id).unwrap();
+            let var_id = runtime.assign_var_to_current_context(&value.to_string());
+            let var = ac.add_var(var_id, value.to_string().as_str());
             var.set_const_value(value.to_u32().unwrap());
             value.to_string()
         },
@@ -1097,10 +1112,8 @@ fn traverse_variable_declaration (
     runtime: &mut CircomRuntime,
     var_name: &str
 ) {
-    let current = runtime.call_stack.last().unwrap();
-    current.assign_var(var_name.to_string(), runtime);
-    let var_id = current.vars.get(var_name.to_string().as_str()).unwrap();
-    ac.add_var(*var_id, var_name.to_string().as_str());
+    let var_id = runtime.assign_var_to_current_context(&var_name.to_string());
+    ac.add_var(var_id, var_name.to_string().as_str());
 }
 
 fn traverse_statement (
