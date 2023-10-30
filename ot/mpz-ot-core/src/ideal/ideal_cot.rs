@@ -73,8 +73,8 @@ impl IdealCOT {
     ///
     /// # Arguments
     ///
-    /// `sender_msg` - The message that the ideal COT sends to the sender.
-    /// `receiver_msg` - The message that the ideal COT sends to the receiver.
+    /// * `sender_msg` - The message that the ideal COT sends to the sender.
+    /// * `receiver_msg` - The message that the ideal COT sends to the receiver.
     pub fn check(self, sender_msg: CotMsgForSender, receiver_msg: CotMsgForReceiver) -> bool {
         let CotMsgForSender { qs } = sender_msg;
         let CotMsgForReceiver { rs, ts } = receiver_msg;
