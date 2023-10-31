@@ -185,13 +185,14 @@ impl Sender<state::Extension> {
         // Computes H'(V)
         let hashed_v = Hash::from(blake3(&v.to_bytes()));
 
+        self.state.cot_counter += self.state.unchecked_vs.len();
+
         let mut res = Vec::new();
         for n in &self.state.vs_length {
             let tmp: Vec<Block> = self.state.unchecked_vs.drain(..*n as usize).collect();
             res.push(tmp);
         }
 
-        self.state.cot_counter += self.state.unchecked_vs.len();
         self.state.extended = true;
 
         Ok((res, CheckFromSender { hashed_v }))
