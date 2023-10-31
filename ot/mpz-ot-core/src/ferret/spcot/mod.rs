@@ -71,12 +71,12 @@ mod tests {
 
         let output_receiver = receiver.check(&z_star, check).unwrap();
 
-        output_sender
+        assert!(output_sender
             .iter_mut()
             .zip(output_receiver.iter())
             .all(|(vs, (ws, alpha))| {
                 vs[*alpha as usize] ^= delta;
                 vs == ws
-            });
+            }));
     }
 }
