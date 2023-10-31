@@ -64,15 +64,15 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        if alpha > (1 << h) {
+        if alpha >= (1 << h) {
             return Err(ReceiverError::InvalidInput(
-                "the input pos should be no more than 2^h".to_string(),
+                "the input pos should be no more than 2^h-1".to_string(),
             ));
         }
 
         if rs.len() != h {
             return Err(ReceiverError::InvalidLength(
-                "the length of b should be h".to_string(),
+                "the length of r should be h".to_string(),
             ));
         }
 
@@ -115,9 +115,9 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        if alpha > (1 << h) {
+        if alpha >= (1 << h) {
             return Err(ReceiverError::InvalidInput(
-                "the input pos should be no more than 2^h".to_string(),
+                "the input pos should be no more than 2^h-1".to_string(),
             ));
         }
 
