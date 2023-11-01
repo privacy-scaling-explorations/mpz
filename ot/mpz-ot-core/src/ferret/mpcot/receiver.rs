@@ -1,0 +1,1 @@
+//! MPCOT receiver for general indices.

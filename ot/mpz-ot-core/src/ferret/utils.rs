@@ -60,7 +60,7 @@ impl<'a> CuckooHash<'a> {
     /// * `alphas` - A sorted and non-repeated u32 vector.
     pub fn insert(&mut self, alphas: &[u32]) -> Result<(), CuckooHashError> {
         // Always sets m = 1.5 * t. t is the length of `alphas`.
-        self.m = (1.5 * (alphas.len() as f32)).ceil() as usize;
+        self.m = compute_table_length(alphas.len() as u32);
 
         // Allocates table.
         self.table = vec![None; self.m];
@@ -84,7 +84,7 @@ impl<'a> CuckooHash<'a> {
 
         for _ in 0..CUCKOO_TRIAL_NUM {
             // Computes the position of the value.
-            let pos = _hash(&self.hashes[item.hash_index], self.m, item.value);
+            let pos = hash_to_index(&self.hashes[item.hash_index], self.m, item.value);
 
             // Insert the value to position `pos`.
             let opt_item = self.table[pos].replace(item);
@@ -134,7 +134,7 @@ impl<'a> Bucket<'a> {
         self.buckets = vec![Vec::default(); self.m];
         for i in 0..n {
             for hash in self.hashes {
-                let pos = _hash(&hash, self.m, i);
+                let pos = hash_to_index(&hash, self.m, i);
                 self.buckets[pos].push(i);
             }
         }
@@ -145,7 +145,13 @@ impl<'a> Bucket<'a> {
 }
 
 #[inline(always)]
-fn _hash(hash: &AesEncryptor, range: usize, value: u32) -> usize {
+// Always sets m = 1.5 * t. t is the length of `alphas`.
+pub(crate) fn compute_table_length(t: u32) -> usize {
+    (1.5 * (t as f32)).ceil() as usize
+}
+
+#[inline(always)]
+pub(crate)fn hash_to_index(hash: &AesEncryptor, range: usize, value: u32) -> usize {
     let mut blk = bytemuck::cast::<_, Block>(value as u128);
     blk = hash.encrypt_block(blk);
     let res = u128::from_le_bytes(blk.to_bytes());
@@ -153,7 +159,7 @@ fn _hash(hash: &AesEncryptor, range: usize, value: u32) -> usize {
 }
 
 // Finds the position of the value in each Bucket.
-#[inline]
+#[inline(always)]
 pub(crate) fn pos(bucket: &[u32], value: u32) -> Result<usize, BucketError> {
     let pos = bucket.iter().position(|&x| value == x);
     pos.ok_or(BucketError::NotInBucket("not in the bucket".to_string()))
