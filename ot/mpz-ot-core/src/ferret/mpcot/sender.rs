@@ -53,7 +53,7 @@ impl Sender<state::Extension> {
     ///
     /// * `t` - The number of queried indices.
     /// * `n` - The total number of indices.
-    pub fn extend_hash(&mut self, t: u32, n: u32) -> Result<Vec<u32>, SenderError> {
+    pub fn extend_hash(&mut self, t: u32, n: u32) -> Result<Vec<usize>, SenderError> {
         if t > n {
             return Err(SenderError::InvalidInput(
                 "t should not exceed n".to_string(),
@@ -69,11 +69,7 @@ impl Sender<state::Extension> {
         bucket.insert(n);
 
         // Computes `length + 1` of each bucket.
-        let bs = bucket
-            .buckets
-            .iter()
-            .map(|bin| (bin.len() + 1) as u32)
-            .collect();
+        let bs = bucket.buckets.iter().map(|bin| bin.len() + 1).collect();
 
         // Stores the buckets.
         self.state.buckets = bucket.buckets;
@@ -161,7 +157,7 @@ pub mod state {
         pub(super) delta: Block,
         /// Current MPCOT counter
         pub(super) counter: usize,
-        
+
         /// Current length of Cuckoo hash table, will possibly be changed in each extension.
         pub(super) m: usize,
         /// The hashes to generate Cuckoo hash table.
