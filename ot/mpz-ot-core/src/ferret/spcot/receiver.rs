@@ -64,15 +64,15 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        if alpha > (1 << h) {
+        if alpha >= (1 << h) {
             return Err(ReceiverError::InvalidInput(
-                "the input pos should be no more than 2^h".to_string(),
+                "the input pos should be no more than 2^h-1".to_string(),
             ));
         }
 
         if rs.len() != h {
             return Err(ReceiverError::InvalidLength(
-                "the length of b should be h".to_string(),
+                "the length of r should be h".to_string(),
             ));
         }
 
@@ -101,7 +101,7 @@ impl Receiver<state::Extension> {
     /// * `h` - The depth of the GGM tree.
     /// * `alpha` - The chosen position.
     /// * `ts` - The message from COT ideal functionality for the receiver. Only the chosen blocks are used.
-    /// * `extendfr` - The message sent from the sender.
+    /// * `extendfs` - The message sent by the sender.
     pub fn extend(
         &mut self,
         h: usize,
@@ -115,9 +115,9 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        if alpha > (1 << h) {
+        if alpha >= (1 << h) {
             return Err(ReceiverError::InvalidInput(
-                "the input pos should be no more than 2^h".to_string(),
+                "the input pos should be no more than 2^h-1".to_string(),
             ));
         }
 
@@ -140,7 +140,7 @@ impl Receiver<state::Extension> {
 
         let alpha_bar_vec: Vec<bool> = alpha.iter_msb0().skip(32 - h).map(|a| !a).collect();
 
-        // Setp 5 in Figure 6.
+        // Step 5 in Figure 6.
         let k: Vec<Block> = ms
             .into_iter()
             .zip(ts)
@@ -210,14 +210,14 @@ impl Receiver<state::Extension> {
         Ok(CheckFromReceiver { x_prime })
     }
 
-    /// Performs the final consistency check.
+    /// Performs the final step of the consistency check.
     ///
     /// See step 9 in Figure 6.
     ///
     /// # Arguments
     ///
     /// * `z_star` - The message from COT ideal functionality for the receiver. Only the chosen blocks are used.
-    /// * `check` - The hashed value sent from the Sender.
+    /// * `check` - The hashed value sent by the Sender.
     pub fn check(
         &mut self,
         z_star: &[Block],
@@ -300,7 +300,7 @@ pub mod state {
         /// This is to prevent the receiver from extending twice
         pub(super) extended: bool,
 
-        /// A hasher to generate chi seed.
+        /// A hasher to generate chi seed from the protocol transcript.
         pub(super) hasher: blake3::Hasher,
     }
 

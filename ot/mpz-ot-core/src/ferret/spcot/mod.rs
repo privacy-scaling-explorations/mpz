@@ -10,8 +10,10 @@ mod tests {
     use mpz_core::prg::Prg;
 
     use super::{receiver::Receiver as SpcotReceiver, sender::Sender as SpcotSender};
-    use crate::ferret::CSP;
-    use crate::ideal::ideal_cot::{CotMsgForReceiver, CotMsgForSender, IdealCOT};
+    use crate::{
+        ferret::CSP,
+        ideal::ideal_cot::{CotMsgForReceiver, CotMsgForSender, IdealCOT},
+    };
 
     #[test]
     fn spcot_test() {
@@ -71,12 +73,12 @@ mod tests {
 
         let output_receiver = receiver.check(&z_star, check).unwrap();
 
-        output_sender
+        assert!(output_sender
             .iter_mut()
             .zip(output_receiver.iter())
             .all(|(vs, (ws, alpha))| {
                 vs[*alpha as usize] ^= delta;
                 vs == ws
-            });
+            }));
     }
 }
