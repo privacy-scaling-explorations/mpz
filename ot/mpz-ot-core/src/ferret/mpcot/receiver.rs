@@ -101,9 +101,21 @@ impl Receiver<state::Extension> {
         for (value, bin) in table.iter().zip(bucket.buckets.iter()) {
             if let Some(x) = value {
                 let pos = pos(bin, *x)?;
-                p.push((bin.len() + 1, pos as u32));
+                if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
+                    p.push((power.ilog2() as usize, pos as u32));
+                } else {
+                    return Err(ReceiverError::InvalidBucketSize(
+                        "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
+                    ));
+                }
             } else {
-                p.push((bin.len() + 1, (bin.len() + 1) as u32));
+                if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
+                    p.push((power.ilog2() as usize, (bin.len() + 1) as u32));
+                } else {
+                    return Err(ReceiverError::InvalidBucketSize(
+                        "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
+                    ));
+                }
             }
         }
 

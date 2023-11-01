@@ -9,6 +9,8 @@ pub enum SenderError {
     InvalidInput(String),
     #[error(transparent)]
     BucketError(#[from] BucketError),
+    #[error("invalid bucket size: expected {0}")]
+    InvalidBucketSize(String)
 }
 
 /// Errors that can occur when using the MPCOT sender.
@@ -21,4 +23,6 @@ pub enum ReceiverError {
     CuckooHashError(#[from] CuckooHashError),
     #[error(transparent)]
     BucketError(#[from] BucketError),
+    #[error("invalid bucket size: expected {0}")]
+    InvalidBucketSize(String)
 }

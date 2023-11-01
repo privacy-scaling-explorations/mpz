@@ -151,7 +151,7 @@ pub(crate) fn compute_table_length(t: u32) -> usize {
 }
 
 #[inline(always)]
-pub(crate)fn hash_to_index(hash: &AesEncryptor, range: usize, value: u32) -> usize {
+pub(crate) fn hash_to_index(hash: &AesEncryptor, range: usize, value: u32) -> usize {
     let mut blk = bytemuck::cast::<_, Block>(value as u128);
     blk = hash.encrypt_block(blk);
     let res = u128::from_le_bytes(blk.to_bytes());
