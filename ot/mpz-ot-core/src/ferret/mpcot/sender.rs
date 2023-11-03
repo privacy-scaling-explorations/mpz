@@ -57,7 +57,7 @@ impl Sender<state::Extension> {
     ///
     /// * `t` - The number of queried indices.
     /// * `n` - The total number of indices.
-    pub fn extend_hash(&mut self, t: u32, n: u32) -> Result<Vec<usize>, SenderError> {
+    pub fn extend_pre(&mut self, t: u32, n: u32) -> Result<Vec<usize>, SenderError> {
         if t > n {
             return Err(SenderError::InvalidInput(
                 "t should not exceed n".to_string(),

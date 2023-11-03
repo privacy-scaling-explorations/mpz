@@ -60,7 +60,7 @@ impl Receiver<state::Extension> {
     ///
     /// * `alphas` - The queried indices.
     /// * `n` - The total number of indices.
-    pub fn extend_hash(
+    pub fn extend_pre(
         &mut self,
         alphas: &[u32],
         n: u32,

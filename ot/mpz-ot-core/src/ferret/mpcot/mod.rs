@@ -33,9 +33,9 @@ mod tests {
         let t = alphas.len();
         let n = 10;
         // sender generates the messages to invoke ideal spcot.
-        let sender_queries = sender.extend_hash(t as u32, n).unwrap();
+        let sender_queries = sender.extend_pre(t as u32, n).unwrap();
 
-        let mut queries = receiver.extend_hash(&alphas, n).unwrap();
+        let mut queries = receiver.extend_pre(&alphas, n).unwrap();
 
         assert!(sender_queries
             .iter()
@@ -63,9 +63,9 @@ mod tests {
         let t = alphas.len();
         let n = 16;
         // sender generates the messages to invoke ideal spcot.
-        let sender_queries = sender.extend_hash(t as u32, n).unwrap();
+        let sender_queries = sender.extend_pre(t as u32, n).unwrap();
 
-        let mut queries = receiver.extend_hash(&alphas, n).unwrap();
+        let mut queries = receiver.extend_pre(&alphas, n).unwrap();
 
         assert!(sender_queries
             .iter()
