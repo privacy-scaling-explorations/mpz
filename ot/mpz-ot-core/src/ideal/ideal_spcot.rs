@@ -6,13 +6,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 /// The message that sender receivers from the SPCOT functionality.
 pub struct SpcotMsgForSender {
-    v: Vec<Vec<Block>>,
+    /// The random blocks that sender receives from the SPCOT functionality.
+    pub v: Vec<Vec<Block>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 /// The message that receiver receives from the SPCOT functionality.
-pub struct SpctoMsgForReceiver {
-    w: Vec<(Vec<Block>, u32)>,
+pub struct SpcotMsgForReceiver {
+    /// The random blocks that receiver receives from the SPCOT functionality.
+    pub w: Vec<Vec<Block>>,
 }
 
 #[allow(missing_docs)]
@@ -20,6 +22,7 @@ pub struct IdealSpcot {
     pub delta: Block,
     pub counter: usize,
     pub prg: Prg,
+    pub alphas: Vec<u32>,
 }
 
 impl IdealSpcot {
@@ -31,6 +34,7 @@ impl IdealSpcot {
             delta,
             counter: 0,
             prg,
+            alphas: Vec::default(),
         }
     }
 
@@ -41,6 +45,7 @@ impl IdealSpcot {
             delta,
             counter: 0,
             prg,
+            alphas: Vec::default(),
         }
     }
 
@@ -49,7 +54,7 @@ impl IdealSpcot {
     /// # Argument
     ///
     /// * `pos` - The positions in each extension.
-    pub fn extend(&mut self, pos: &[(usize, u32)]) -> (SpcotMsgForSender, SpctoMsgForReceiver) {
+    pub fn extend(&mut self, pos: &[(usize, u32)]) -> (SpcotMsgForSender, SpcotMsgForReceiver) {
         let mut v = vec![];
         let mut w = vec![];
 
@@ -61,10 +66,11 @@ impl IdealSpcot {
             w_tmp[*alpha as usize] ^= self.delta;
 
             v.push(v_tmp);
-            w.push((w_tmp, *alpha));
+            w.push(w_tmp);
+            self.alphas.push(*alpha);
             self.counter += n;
         }
-        (SpcotMsgForSender { v }, SpctoMsgForReceiver { w })
+        (SpcotMsgForSender { v }, SpcotMsgForReceiver { w })
     }
 
     /// Performs the checks.
@@ -73,14 +79,26 @@ impl IdealSpcot {
     ///
     /// * `sender_msg` - The message that the ideal SPCOT sends to the sender.
     /// * `receiver_msg` - The message that the ideal SPCOT sends to the receiver.
-    pub fn check(self, sender_msg: SpcotMsgForSender, receiver_msg: SpctoMsgForReceiver) -> bool {
+    pub fn check(
+        &mut self,
+        sender_msg: SpcotMsgForSender,
+        receiver_msg: SpcotMsgForReceiver,
+    ) -> bool {
         let SpcotMsgForSender { mut v } = sender_msg;
-        let SpctoMsgForReceiver { w } = receiver_msg;
+        let SpcotMsgForReceiver { w } = receiver_msg;
 
-        v.iter_mut().zip(w.iter()).all(|(vs, (ws, alpha))| {
-            vs[*alpha as usize] ^= self.delta;
-            vs == ws
-        })
+        let res = v
+            .iter_mut()
+            .zip(w.iter())
+            .zip(self.alphas.iter())
+            .all(|((vs, ws), alpha)| {
+                vs[*alpha as usize] ^= self.delta;
+                vs == ws
+            });
+
+        self.alphas.clear();
+
+        res
     }
 }
 

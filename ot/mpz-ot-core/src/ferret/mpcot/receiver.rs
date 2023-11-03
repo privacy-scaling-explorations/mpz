@@ -2,7 +2,7 @@
 
 use crate::ferret::{
     mpcot::error::ReceiverError,
-    utils::{hash_to_index, pos, Bucket, CuckooHash},
+    utils::{find_pos, hash_to_index, Bucket, CuckooHash, Item},
     CUCKOO_HASH_NUM,
 };
 use mpz_core::{aes::AesEncryptor, prg::Prg, Block};
@@ -40,6 +40,7 @@ impl Receiver {
                 m: 0,
                 hashes,
                 buckets: Vec::default(),
+                buckets_length: Vec::default(),
             },
         };
 
@@ -77,19 +78,6 @@ impl Receiver<state::Extension> {
 
         self.state.m = cuckoo.m;
 
-        // Removes the hash indices in the Cuckoo hash table.
-        let table: Vec<Option<u32>> = cuckoo
-            .table
-            .into_iter()
-            .map(|item| {
-                if let Some(x) = item {
-                    Some(x.value)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
         let mut bucket = Bucket::new(&self.state.hashes, self.state.m);
 
         // Geneates the buckets.
@@ -98,11 +86,12 @@ impl Receiver<state::Extension> {
         // Generates queries for SPCOT.
         // See Step 4 in Figure 7.
         let mut p = vec![];
-        for (value, bin) in table.iter().zip(bucket.buckets.iter()) {
-            if let Some(x) = value {
-                let pos = pos(bin, *x)?;
+        for (alpha, bin) in cuckoo.table.iter().zip(bucket.buckets.iter()) {
+            if let Some(x) = alpha {
+                let pos = find_pos(bin, x)?;
                 if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
                     p.push((power.ilog2() as usize, pos as u32));
+                    self.state.buckets_length.push(power);
                 } else {
                     return Err(ReceiverError::InvalidBucketSize(
                         "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
@@ -110,7 +99,8 @@ impl Receiver<state::Extension> {
                 }
             } else {
                 if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
-                    p.push((power.ilog2() as usize, (bin.len() + 1) as u32));
+                    p.push((power.ilog2() as usize, bin.len() as u32));
+                    self.state.buckets_length.push(power);
                 } else {
                     return Err(ReceiverError::InvalidBucketSize(
                         "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
@@ -142,32 +132,37 @@ impl Receiver<state::Extension> {
 
         if rt
             .iter()
-            .zip(self.state.buckets.iter())
-            .any(|(s, b)| s.len() != b.len() + 1)
+            .zip(self.state.buckets_length.iter())
+            .any(|(s, b)| s.len() != *b)
         {
             return Err(ReceiverError::InvalidInput(
-                "the length of st[i] should be self.state.buckets.len() + 1".to_string(),
+                "the length of st[i] should be self.state.buckets_length".to_string(),
             ));
         }
 
-        let mut res = Vec::<Block>::with_capacity(n as usize);
+        let mut res = vec![Block::ZERO; n as usize];
 
         for (value, x) in res.iter_mut().enumerate() {
-            let mut s = Block::ZERO;
             for tau in 0..CUCKOO_HASH_NUM {
                 // Computes the index of `value`.
                 let bucket_index =
                     hash_to_index(&self.state.hashes[tau], self.state.m, value as u32);
-                let pos = pos(&self.state.buckets[bucket_index], value as u32)?;
+                let pos = find_pos(
+                    &self.state.buckets[bucket_index],
+                    &Item {
+                        value: value as u32,
+                        hash_index: tau,
+                    },
+                )?;
 
-                s ^= rt[bucket_index][pos];
+                *x ^= rt[bucket_index][pos];
             }
-            *x = s;
         }
         self.state.counter += 1;
 
         // Clears the buckets.
         self.state.buckets.clear();
+        self.state.buckets_length.clear();
 
         Ok(res)
     }
@@ -205,7 +200,9 @@ pub mod state {
         /// The hashes to generate Cuckoo hash table.
         pub(super) hashes: [AesEncryptor; CUCKOO_HASH_NUM],
         /// The buckets contains all the hash values, will be cleared after each extension.
-        pub(super) buckets: Vec<Vec<u32>>,
+        pub(super) buckets: Vec<Vec<Item>>,
+        /// The padded buckets length (power of 2).
+        pub(super) buckets_length: Vec<usize>,
     }
 
     impl State for Extension {}

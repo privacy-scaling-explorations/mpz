@@ -2,11 +2,13 @@
 
 use crate::ferret::{
     mpcot::error::SenderError,
-    utils::{compute_table_length, hash_to_index, pos, Bucket},
+    utils::{compute_table_length, find_pos, hash_to_index, Bucket, Item},
     CUCKOO_HASH_NUM,
 };
 use mpz_core::{aes::AesEncryptor, prg::Prg, Block};
 use rand_core::SeedableRng;
+
+use super::msgs::HashSeed;
 
 /// MPCOT sender.
 #[derive(Debug, Default)]
@@ -28,7 +30,8 @@ impl Sender {
     ///
     /// * `delta` - The sender's global secret.
     /// * `hash_seed` - The seed for Cuckoo hash sent by the receiver.
-    pub fn setup(self, delta: Block, hash_seed: Block) -> Sender<state::Extension> {
+    pub fn setup(self, delta: Block, hash_seed: HashSeed) -> Sender<state::Extension> {
+        let HashSeed { seed: hash_seed } = hash_seed;
         let mut prg = Prg::from_seed(hash_seed);
         let hashes = std::array::from_fn(|_| AesEncryptor::new(prg.random_block()));
         Sender {
@@ -38,6 +41,7 @@ impl Sender {
                 m: 0,
                 hashes,
                 buckets: Vec::default(),
+                buckets_length: Vec::default(),
             },
         }
     }
@@ -73,8 +77,11 @@ impl Sender<state::Extension> {
         for bin in bucket.buckets.iter() {
             if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
                 bs.push(power.ilog2() as usize);
+                self.state.buckets_length.push(power);
             } else {
-                return Err(SenderError::InvalidBucketSize("The next power of 2 of the bucket size exceeds the MAX number".to_string()));
+                return Err(SenderError::InvalidBucketSize(
+                    "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
+                ));
             }
         }
 
@@ -101,33 +108,38 @@ impl Sender<state::Extension> {
 
         if st
             .iter()
-            .zip(self.state.buckets.iter())
-            .any(|(s, b)| s.len() != b.len() + 1)
+            .zip(self.state.buckets_length.iter())
+            .any(|(s, b)| s.len() != *b)
         {
             return Err(SenderError::InvalidInput(
-                "the length of st[i] should be self.state.buckets.len() + 1".to_string(),
+                "the length of st[i] should be self.state.buckets_length".to_string(),
             ));
         }
 
-        let mut res = Vec::<Block>::with_capacity(n as usize);
+        let mut res = vec![Block::ZERO; n as usize];
 
         for (value, x) in res.iter_mut().enumerate() {
-            let mut s = Block::ZERO;
             for tau in 0..CUCKOO_HASH_NUM {
                 // Computes the index of `value`.
                 let bucket_index =
                     hash_to_index(&self.state.hashes[tau], self.state.m, value as u32);
-                let pos = pos(&self.state.buckets[bucket_index], value as u32)?;
+                let pos = find_pos(
+                    &self.state.buckets[bucket_index],
+                    &Item {
+                        value: value as u32,
+                        hash_index: tau,
+                    },
+                )?;
 
-                s ^= st[bucket_index][pos];
+                *x ^= st[bucket_index][pos];
             }
-            *x = s;
         }
 
         self.state.counter += 1;
 
         // Clears the buckets.
         self.state.buckets.clear();
+        self.state.buckets_length.clear();
 
         Ok(res)
     }
@@ -170,7 +182,9 @@ pub mod state {
         /// The hashes to generate Cuckoo hash table.
         pub(super) hashes: [AesEncryptor; CUCKOO_HASH_NUM],
         /// The buckets contains all the hash values.
-        pub(super) buckets: Vec<Vec<u32>>,
+        pub(super) buckets: Vec<Vec<Item>>,
+        /// The padded buckets length (power of 2).
+        pub(super) buckets_length: Vec<usize>,
     }
 
     impl State for Extension {}

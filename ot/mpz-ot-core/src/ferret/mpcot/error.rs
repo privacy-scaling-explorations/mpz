@@ -10,7 +10,7 @@ pub enum SenderError {
     #[error(transparent)]
     BucketError(#[from] BucketError),
     #[error("invalid bucket size: expected {0}")]
-    InvalidBucketSize(String)
+    InvalidBucketSize(String),
 }
 
 /// Errors that can occur when using the MPCOT sender.
@@ -24,5 +24,5 @@ pub enum ReceiverError {
     #[error(transparent)]
     BucketError(#[from] BucketError),
     #[error("invalid bucket size: expected {0}")]
-    InvalidBucketSize(String)
+    InvalidBucketSize(String),
 }

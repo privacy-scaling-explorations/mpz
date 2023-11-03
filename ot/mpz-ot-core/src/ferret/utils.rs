@@ -23,7 +23,7 @@ pub enum BucketError {
 }
 
 /// Item in Cuckoo hash table.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Item {
     /// Value in the table.
     pub value: u32,
@@ -111,7 +111,7 @@ pub struct Bucket<'a> {
     // The number of buckets.
     m: usize,
     /// The buckets contain all the elements.
-    pub buckets: Vec<Vec<u32>>,
+    pub buckets: Vec<Vec<Item>>,
 }
 
 impl<'a> Bucket<'a> {
@@ -133,14 +133,17 @@ impl<'a> Bucket<'a> {
     pub fn insert(&mut self, n: u32) {
         self.buckets = vec![Vec::default(); self.m];
         for i in 0..n {
-            for hash in self.hashes {
+            for (index, hash) in self.hashes.iter().enumerate() {
                 let pos = hash_to_index(&hash, self.m, i);
-                self.buckets[pos].push(i);
+                self.buckets[pos].push(Item {
+                    value: i,
+                    hash_index: index,
+                });
             }
         }
 
         // Sorts the value in each bucket.
-        self.buckets.iter_mut().for_each(|v| v.sort());
+        //self.buckets.iter_mut().for_each(|v| v.sort());
     }
 }
 
@@ -152,7 +155,7 @@ pub(crate) fn compute_table_length(t: u32) -> usize {
 
 #[inline(always)]
 pub(crate) fn hash_to_index(hash: &AesEncryptor, range: usize, value: u32) -> usize {
-    let mut blk = bytemuck::cast::<_, Block>(value as u128);
+    let mut blk: Block = bytemuck::cast::<_, Block>(value as u128);
     blk = hash.encrypt_block(blk);
     let res = u128::from_le_bytes(blk.to_bytes());
     (res as usize) % range
@@ -160,14 +163,14 @@ pub(crate) fn hash_to_index(hash: &AesEncryptor, range: usize, value: u32) -> us
 
 // Finds the position of the value in each Bucket.
 #[inline(always)]
-pub(crate) fn pos(bucket: &[u32], value: u32) -> Result<usize, BucketError> {
-    let pos = bucket.iter().position(|&x| value == x);
+pub(crate) fn find_pos(bucket: &[Item], value: &Item) -> Result<usize, BucketError> {
+    let pos = bucket.iter().position(|&x| *value == x);
     pos.ok_or(BucketError::NotInBucket("not in the bucket".to_string()))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ferret::utils::pos;
+    use crate::ferret::utils::find_pos;
 
     use super::{Bucket, CuckooHash};
     use mpz_core::{aes::AesEncryptor, prg::Prg};
@@ -185,14 +188,14 @@ mod tests {
         let mut bucket = Bucket::new(&hashes, cuckoo.m);
         bucket.insert((2 * NUM) as u32);
 
-        cuckoo
+        assert!(cuckoo
             .table
             .iter()
             .zip(bucket.buckets.iter())
             .all(|(value, bin)| match value {
-                Some(x) => bin.contains(&(*x).value),
+                Some(x) => bin.contains(x),
                 None => true,
-            });
+            }));
 
         let _: Vec<usize> = cuckoo
             .table
@@ -200,7 +203,7 @@ mod tests {
             .zip(bucket.buckets.iter())
             .map(|(value, bin)| {
                 if let Some(x) = value {
-                    pos(bin, x.value).unwrap()
+                    find_pos(bin, x).unwrap()
                 } else {
                     bin.len() + 1
                 }
