@@ -43,6 +43,7 @@ pub struct CuckooHash<'a> {
 
 impl<'a> CuckooHash<'a> {
     /// Creates a new instance.
+    #[inline]
     pub fn new(hashes: &'a [AesEncryptor; CUCKOO_HASH_NUM]) -> Self {
         let table = Vec::default();
 
@@ -58,6 +59,7 @@ impl<'a> CuckooHash<'a> {
     /// * Argument
     ///
     /// * `alphas` - A sorted and non-repeated u32 vector.
+    #[inline]
     pub fn insert(&mut self, alphas: &[u32]) -> Result<(), CuckooHashError> {
         // Always sets m = 1.5 * t. t is the length of `alphas`.
         self.m = compute_table_length(alphas.len() as u32);
@@ -116,6 +118,7 @@ pub struct Bucket<'a> {
 
 impl<'a> Bucket<'a> {
     /// Creates a new instance.
+    #[inline]
     pub fn new(hashes: &'a [AesEncryptor; CUCKOO_HASH_NUM], m: usize) -> Self {
         Self {
             hashes,
@@ -129,7 +132,7 @@ impl<'a> Bucket<'a> {
     /// # Argument
     ///
     /// * `n` - The length of the vector [0..n-1].
-    #[inline(always)]
+    #[inline]
     pub fn insert(&mut self, n: u32) {
         self.buckets = vec![Vec::default(); self.m];
         for i in 0..n {
@@ -147,12 +150,13 @@ impl<'a> Bucket<'a> {
     }
 }
 
-#[inline(always)]
 // Always sets m = 1.5 * t. t is the length of `alphas`.
+#[inline(always)]
 pub(crate) fn compute_table_length(t: u32) -> usize {
     (1.5 * (t as f32)).ceil() as usize
 }
 
+// Hash the value into index using AES.
 #[inline(always)]
 pub(crate) fn hash_to_index(hash: &AesEncryptor, range: usize, value: u32) -> usize {
     let mut blk: Block = bytemuck::cast::<_, Block>(value as u128);
