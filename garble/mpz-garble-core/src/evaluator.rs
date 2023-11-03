@@ -54,6 +54,35 @@ pub(crate) fn and_gate(
     Label::new(w_g ^ w_e)
 }
 
+/// Evaluates half-gate privacy-free garbled AND gate
+#[inline]
+pub(crate) fn and_gate_pf(
+    cipher: &FixedKeyAes,
+    x: &Label,
+    y: &Label,
+    encrypted_gate: &Block,
+    gid: usize,
+) -> Label {
+    let x = x.to_inner();
+    let y = y.to_inner();
+
+    let s_a = x.lsb() != 0;
+
+    let j = Block::new((gid as u128).to_be_bytes());
+
+    let mut hx = cipher.tccr(j, x);
+
+    let z = if s_a {
+        hx.set_lsb();
+        hx ^ *encrypted_gate ^ y
+    } else {
+        hx.clear_lsb();
+        hx
+    };
+
+    Label::new(z)
+}
+
 /// Core evaluator type for evaluating a garbled circuit.
 pub struct Evaluator {
     /// Cipher to use to encrypt the gates

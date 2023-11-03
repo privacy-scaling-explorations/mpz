@@ -63,6 +63,36 @@ pub(crate) fn and_gate(
     (z_0, EncryptedGate::new([t_g, t_e]))
 }
 
+/// Computes half-gate privacy-free garbled AND gate
+#[inline]
+pub(crate) fn and_gate_pf(
+    cipher: &FixedKeyAes,
+    x_0: &Label,
+    y_0: &Label,
+    delta: &Delta,
+    gid: usize,
+) -> (Label, Block) {
+    let delta = delta.into_inner();
+    let x_0 = x_0.to_inner();
+    let x_1 = x_0 ^ delta;
+    let y_0 = y_0.to_inner();
+
+    let j = Block::new((gid as u128).to_be_bytes());
+
+    let mut h = [x_0, x_1];
+    cipher.tccr_many(&[j, j], &mut h);
+
+    let [mut hx_0, mut hx_1] = h;
+    hx_0.clear_lsb();
+    hx_1.set_lsb();
+
+    // Garbled row of evaluator half-gate
+    let t_e = hx_0 ^ hx_1 ^ y_0;
+    let z_0 = Label::new(hx_0);
+
+    (z_0, t_e)
+}
+
 /// Core generator type used to generate garbled circuits.
 ///
 /// A generator is to be used as an iterator of encrypted gates. Each

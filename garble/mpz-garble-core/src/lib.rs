@@ -50,6 +50,9 @@
 //! println!("'{plaintext:?} AES encrypted with key '{key:?}' is '{ciphertext:?}'");
 //! ```
 
+// [EMP-toolkit](https://github.com/emp-toolkit/emp-tool) was frequently used as a reference implementation during
+// the development of this library.
+
 #![deny(missing_docs, unreachable_pub, unused_must_use)]
 #![deny(clippy::all)]
 
@@ -101,6 +104,41 @@ mod tests {
         assert_eq!(ev::and_gate(cipher, &x_0, &y_1, &encrypted_gate, gid), z_0);
         assert_eq!(ev::and_gate(cipher, &x_1, &y_0, &encrypted_gate, gid), z_0);
         assert_eq!(ev::and_gate(cipher, &x_1, &y_1, &encrypted_gate, gid), z_1);
+    }
+
+    #[test]
+    fn test_and_gate_privacy_free() {
+        use crate::{evaluator as ev, generator as gen};
+
+        let mut rng = ChaCha12Rng::seed_from_u64(0);
+        let cipher = &(*FIXED_KEY_AES);
+
+        let delta = Delta::random(&mut rng);
+        let x_0 = Label::random(&mut rng);
+        let x_1 = x_0 ^ delta;
+        let y_0 = Label::random(&mut rng);
+        let y_1 = y_0 ^ delta;
+        let gid: usize = 1;
+
+        let (z_0, encrypted_gate) = gen::and_gate_pf(cipher, &x_0, &y_0, &delta, gid);
+        let z_1 = z_0 ^ delta;
+
+        assert_eq!(
+            ev::and_gate_pf(cipher, &x_0, &y_1, &encrypted_gate, gid),
+            z_0
+        );
+        assert_eq!(
+            ev::and_gate_pf(cipher, &x_0, &y_1, &encrypted_gate, gid),
+            z_0
+        );
+        assert_eq!(
+            ev::and_gate_pf(cipher, &x_1, &y_0, &encrypted_gate, gid),
+            z_0
+        );
+        assert_eq!(
+            ev::and_gate_pf(cipher, &x_1, &y_1, &encrypted_gate, gid),
+            z_1
+        );
     }
 
     #[test]

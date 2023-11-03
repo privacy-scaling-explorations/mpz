@@ -101,6 +101,12 @@ impl Block {
         Self(u128::from_le_bytes(self.0).reverse_bits().to_le_bytes())
     }
 
+    /// Clears the least significant bit of the block
+    #[inline]
+    pub fn clear_lsb(&mut self) {
+        self.0[0] &= 0xfe;
+    }
+
     /// Sets the least significant bit of the block
     #[inline]
     pub fn set_lsb(&mut self) {
