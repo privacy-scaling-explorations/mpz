@@ -58,7 +58,7 @@ impl<'a> CuckooHash<'a> {
     ///
     /// * Argument
     ///
-    /// * `alphas` - A sorted and non-repeated u32 vector.
+    /// * `alphas` - A u32 vector being inserted.
     #[inline]
     pub fn insert(&mut self, alphas: &[u32]) -> Result<(), CuckooHashError> {
         // Always sets m = 1.5 * t. t is the length of `alphas`.
@@ -67,18 +67,17 @@ impl<'a> CuckooHash<'a> {
         // Allocates table.
         self.table = vec![None; self.m];
 
-        // Insert each alpha.
+        // Inserts each alpha.
         for &value in alphas {
             self.hash(value)?
         }
         Ok(())
     }
 
-    // Hash the element to a position with the current hash function.
-    // The only requirement of hash is to ensure random output.
+    // Hash an element to a position with the current hash function.
     #[inline]
     fn hash(&mut self, value: u32) -> Result<(), CuckooHashError> {
-        // item consists of the value and hash index, starting from 0.
+        // The item consists of the value and hash index, starting from 0.
         let mut item = Item {
             value,
             hash_index: 0,
@@ -88,10 +87,10 @@ impl<'a> CuckooHash<'a> {
             // Computes the position of the value.
             let pos = hash_to_index(&self.hashes[item.hash_index], self.m, item.value);
 
-            // Insert the value to position `pos`.
+            // Inserts the value to position `pos`.
             let opt_item = self.table[pos].replace(item);
 
-            // If position `pos` is not empty before the above insertion, iteratively insert the obtained value.
+            // If position `pos` is not empty before the above insertion, iteratively inserts the obtained value.
             if let Some(x) = opt_item {
                 item = x;
                 item.hash_index = (item.hash_index + 1) % CUCKOO_HASH_NUM;
@@ -144,9 +143,6 @@ impl<'a> Bucket<'a> {
                 });
             }
         }
-
-        // Sorts the value in each bucket.
-        //self.buckets.iter_mut().for_each(|v| v.sort());
     }
 }
 

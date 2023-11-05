@@ -3,7 +3,7 @@
 use mpz_core::Block;
 use serde::{Deserialize, Serialize};
 
-/// A MPCOT message.
+/// An MPCOT message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(missing_docs)]
 pub enum Message<SpcotMsg> {

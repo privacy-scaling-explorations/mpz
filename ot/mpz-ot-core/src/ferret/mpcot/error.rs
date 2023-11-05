@@ -13,7 +13,7 @@ pub enum SenderError {
     InvalidBucketSize(String),
 }
 
-/// Errors that can occur when using the MPCOT sender.
+/// Errors that can occur when using the MPCOT receiver.
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum ReceiverError {
