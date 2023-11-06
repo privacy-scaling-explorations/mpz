@@ -1,10 +1,10 @@
-use std::sync::Arc;
+use std::{sync::Arc, marker::PhantomData};
 
 use blake3::Hasher;
 
 use crate::{
     circuit::EncryptedGate,
-    encoding::{state, EncodedValue, Label},
+    encoding::{state, EncodedValue, Label}, EncryptedRow, mode::GarbleMode, Normal,
 };
 use mpz_circuits::{types::TypeError, Circuit, CircuitError, Gate};
 use mpz_core::{
@@ -23,6 +23,8 @@ pub enum EvaluatorError {
     CircuitError(#[from] CircuitError),
     #[error("evaluator not finished")]
     NotFinished,
+    #[error("invalid row count, must be a multiple of {0}")]
+    InvalidRowCount(usize),
 }
 
 /// Evaluates half-gate garbled AND gate
@@ -31,8 +33,8 @@ pub(crate) fn and_gate(
     cipher: &FixedKeyAes,
     x: &Label,
     y: &Label,
-    encrypted_gate: &EncryptedGate,
     gid: usize,
+    rows: &mut impl Iterator<Item=EncryptedRow>,
 ) -> Label {
     let x = x.to_inner();
     let y = y.to_inner();
@@ -48,8 +50,11 @@ pub(crate) fn and_gate(
 
     let [hx, hy] = h;
 
-    let w_g = hx ^ (encrypted_gate[0] & Block::SELECT_MASK[s_a]);
-    let w_e = hy ^ (Block::SELECT_MASK[s_b] & (encrypted_gate[1] ^ x));
+    let t_g = rows.next().expect("row should be present");
+    let t_e = rows.next().expect("row should be present");
+
+    let w_g = hx ^ (t_g.0 & Block::SELECT_MASK[s_a]);
+    let w_e = hy ^ (Block::SELECT_MASK[s_b] & (t_e.0 ^ x));
 
     Label::new(w_g ^ w_e)
 }
@@ -60,8 +65,8 @@ pub(crate) fn and_gate_pf(
     cipher: &FixedKeyAes,
     x: &Label,
     y: &Label,
-    encrypted_gate: &Block,
     gid: usize,
+    rows: &mut impl Iterator<Item=EncryptedRow>,
 ) -> Label {
     let x = x.to_inner();
     let y = y.to_inner();
@@ -72,9 +77,11 @@ pub(crate) fn and_gate_pf(
 
     let mut hx = cipher.tccr(j, x);
 
+    let t_e = rows.next().expect("row should be present");
+
     let z = if s_a {
         hx.set_lsb();
-        hx ^ *encrypted_gate ^ y
+        hx ^ t_e.0 ^ y
     } else {
         hx.clear_lsb();
         hx
@@ -84,7 +91,7 @@ pub(crate) fn and_gate_pf(
 }
 
 /// Core evaluator type for evaluating a garbled circuit.
-pub struct Evaluator {
+pub struct Evaluator<M: GarbleMode = Normal> {
     /// Cipher to use to encrypt the gates
     cipher: &'static FixedKeyAes,
     /// Circuit to evaluate
@@ -95,13 +102,12 @@ pub struct Evaluator {
     pos: usize,
     /// Current gate id
     gid: usize,
-    /// Whether the evaluator is finished
-    complete: bool,
     /// Hasher to use to hash the encrypted gates
     hasher: Option<Hasher>,
+    _mode: PhantomData<M>
 }
 
-impl Evaluator {
+impl<M: GarbleMode> Evaluator<M> {
     /// Creates a new evaluator for the given circuit.
     ///
     /// # Arguments
@@ -161,26 +167,40 @@ impl Evaluator {
             active_labels,
             pos: 0,
             gid: 1,
-            complete: false,
             hasher,
+            _mode: PhantomData
         };
 
         // If circuit has no AND gates we can evaluate it immediately for cheap
         if ev.circ.and_count() == 0 {
-            ev.evaluate(std::iter::empty());
+            ev.evaluate(vec![])?;
         }
 
         Ok(ev)
     }
 
-    /// Evaluates the next batch of encrypted gates.
+    /// Evaluates the next batch of encrypted rows.
     #[inline]
-    pub fn evaluate<'a>(&mut self, mut encrypted_gates: impl Iterator<Item = &'a EncryptedGate>) {
-        let labels = &mut self.active_labels;
+    pub fn evaluate(&mut self, mut rows: Vec<EncryptedRow>) -> Result<(), EvaluatorError> {
+        let row_count = rows.len();
+        let and_count = row_count / M::ROWS_PER_AND_GATE;
 
+        if row_count % M::ROWS_PER_AND_GATE != 0 {
+            return Err(EvaluatorError::InvalidRowCount(M::ROWS_PER_AND_GATE));
+        }
+
+        if let Some(hasher) = &mut self.hasher {
+            for row in &rows {
+                hasher.update(&row.0.to_bytes());
+            }
+        }
+
+        let labels = &mut self.active_labels;
+        let mut rows = rows.into_iter();
+        let mut i = 0;
         // Process gates until we run out of encrypted gates
-        while self.pos < self.circ.gates().len() {
-            match &self.circ.gates()[self.pos] {
+        for gate in &self.circ.gates()[self.pos..] {
+            match gate {
                 Gate::Inv {
                     x: node_x,
                     z: node_z,
@@ -202,31 +222,27 @@ impl Evaluator {
                     y: node_y,
                     z: node_z,
                 } => {
-                    if let Some(encrypted_gate) = encrypted_gates.next() {
-                        if let Some(hasher) = &mut self.hasher {
-                            hasher.update(&encrypted_gate.to_bytes());
-                        }
-
-                        let x = labels[node_x.id()].expect("feed should be initialized");
-                        let y = labels[node_y.id()].expect("feed should be initialized");
-                        let z = and_gate(self.cipher, &x, &y, encrypted_gate, self.gid);
-                        labels[node_z.id()] = Some(z);
-                        self.gid += 2;
-                    } else {
-                        // We ran out of encrypted gates, so we return until we get more
-                        return;
+                    if i >= and_count {
+                        break;
                     }
+
+                    let x = labels[node_x.id()].expect("feed should be initialized");
+                    let y = labels[node_y.id()].expect("feed should be initialized");
+                    let z = M::evaluate_and_gate(self.cipher, &x, &y,  self.gid, &mut rows);
+                    labels[node_z.id()] = Some(z);
+                    self.gid += 2;
+                    i += 1;
                 }
             }
             self.pos += 1;
         }
 
-        self.complete = true;
+        Ok(())
     }
 
     /// Returns whether the evaluator has finished evaluating the circuit.
     pub fn is_complete(&self) -> bool {
-        self.complete
+        self.pos >= self.circ.gates().len()
     }
 
     /// Returns the active encoded outputs of the circuit.

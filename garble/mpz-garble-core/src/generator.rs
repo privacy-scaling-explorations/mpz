@@ -1,10 +1,10 @@
-use std::sync::Arc;
+use std::{sync::Arc, marker::PhantomData};
 
 use blake3::Hasher;
 
 use crate::{
-    circuit::EncryptedGate,
-    encoding::{state, Delta, EncodedValue, Label},
+    encoding::{state, Delta, EncodedValue, Label}, EncryptedRow,
+    mode::GarbleMode, Normal
 };
 use mpz_circuits::{types::TypeError, Circuit, CircuitError, Gate};
 use mpz_core::{
@@ -26,6 +26,8 @@ pub enum GeneratorError {
 }
 
 /// Computes half-gate garbled AND gate
+/// 
+/// Returns the output label and the encrypted of the generator and evaluator respectively.
 #[inline]
 pub(crate) fn and_gate(
     cipher: &FixedKeyAes,
@@ -33,7 +35,8 @@ pub(crate) fn and_gate(
     y_0: &Label,
     delta: &Delta,
     gid: usize,
-) -> (Label, EncryptedGate) {
+    rows: &mut Vec<EncryptedRow>,
+) -> Label {
     let delta = delta.into_inner();
     let x_0 = x_0.to_inner();
     let x_1 = x_0 ^ delta;
@@ -58,9 +61,10 @@ pub(crate) fn and_gate(
     let t_e = hy_0 ^ hy_1 ^ x_0;
     let w_e = hy_0 ^ (Block::SELECT_MASK[p_b] & (t_e ^ x_0));
 
-    let z_0 = Label::new(w_g ^ w_e);
+    rows.push(EncryptedRow(t_g));
+    rows.push(EncryptedRow(t_e));
 
-    (z_0, EncryptedGate::new([t_g, t_e]))
+    Label::new(w_g ^ w_e)
 }
 
 /// Computes half-gate privacy-free garbled AND gate
@@ -71,7 +75,8 @@ pub(crate) fn and_gate_pf(
     y_0: &Label,
     delta: &Delta,
     gid: usize,
-) -> (Label, Block) {
+    rows: &mut Vec<EncryptedRow>,
+) -> Label {
     let delta = delta.into_inner();
     let x_0 = x_0.to_inner();
     let x_1 = x_0 ^ delta;
@@ -90,7 +95,9 @@ pub(crate) fn and_gate_pf(
     let t_e = hx_0 ^ hx_1 ^ y_0;
     let z_0 = Label::new(hx_0);
 
-    (z_0, t_e)
+    rows.push(EncryptedRow(t_e));
+
+    z_0
 }
 
 /// Core generator type used to generate garbled circuits.
@@ -98,7 +105,7 @@ pub(crate) fn and_gate_pf(
 /// A generator is to be used as an iterator of encrypted gates. Each
 /// iteration will return the next encrypted gate in the circuit until the
 /// entire garbled circuit has been yielded.
-pub struct Generator {
+pub struct Generator<M: GarbleMode = Normal> {
     /// Cipher to use to encrypt the gates
     cipher: &'static FixedKeyAes,
     /// Circuit to generate a garbled circuit for
@@ -113,9 +120,10 @@ pub struct Generator {
     gid: usize,
     /// Hasher to use to hash the encrypted gates
     hasher: Option<Hasher>,
+    _mode: PhantomData<M>
 }
 
-impl Generator {
+impl<M: GarbleMode> Generator<M> {
     /// Creates a new generator for the given circuit.
     ///
     /// # Arguments
@@ -182,6 +190,7 @@ impl Generator {
             pos: 0,
             gid: 1,
             hasher,
+            _mode: PhantomData
         })
     }
 
@@ -219,16 +228,28 @@ impl Generator {
             Hash::from(hash)
         })
     }
-}
 
-impl Iterator for Generator {
-    type Item = EncryptedGate;
+    /// Garbles the circuit and returns the encrypted rows.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `limit` - The maximum number of encrypted rows to generate (rounded up to the nearest multiple of 2).
+    ///             If set to 0, the generator will generate all the encrypted rows.
+    pub fn generate(&mut self, limit: usize) -> Vec<EncryptedRow> {
+        if self.is_complete() {
+            return Vec::new();
+        }
 
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
+        let limit = if limit == 0 {
+            self.circ.and_count() * M::ROWS_PER_AND_GATE
+        } else {
+            limit.next_power_of_two()
+        };
+
         let low_labels = &mut self.low_labels;
-        while let Some(gate) = self.circ.gates().get(self.pos) {
-            self.pos += 1;
+        let mut encrypted_rows = Vec::with_capacity(limit);
+
+        for gate in &self.circ.gates()[self.pos..] {
             match gate {
                 Gate::Inv {
                     x: node_x,
@@ -251,23 +272,27 @@ impl Iterator for Generator {
                     y: node_y,
                     z: node_z,
                 } => {
-                    let x_0 = low_labels[node_x.id()].expect("feed should be initialized");
-                    let y_0 = low_labels[node_y.id()].expect("feed should be initialized");
-                    let (z_0, encrypted_gate) =
-                        and_gate(self.cipher, &x_0, &y_0, &self.delta, self.gid);
-                    low_labels[node_z.id()] = Some(z_0);
-                    self.gid += 2;
-
-                    if let Some(hasher) = &mut self.hasher {
-                        hasher.update(&encrypted_gate.to_bytes());
+                    if encrypted_rows.len() >= limit {
+                        break;
                     }
 
-                    return Some(encrypted_gate);
+                    let x_0 = &low_labels[node_x.id()].expect("feed should be initialized");
+                    let y_0 = &low_labels[node_y.id()].expect("feed should be initialized");
+                    let z_0 = M::garble_and_gate(self.cipher, x_0, y_0, &self.delta, self.gid, &mut encrypted_rows);
+                    low_labels[node_z.id()] = Some(z_0);
+                    self.gid += 2;
                 }
+            }
+            self.pos += 1;
+        }
+
+        if let Some(hasher) = &mut self.hasher {
+            for row in &encrypted_rows {
+                hasher.update(&row.0.to_bytes());
             }
         }
 
-        None
+        encrypted_rows
     }
 }
 
@@ -287,12 +312,12 @@ mod tests {
             .map(|input| encoder.encode_by_type(0, &input.value_type()))
             .collect();
 
-        let mut gen = Generator::new_with_hasher(AES128.clone(), encoder.delta(), &inputs).unwrap();
+        let mut gen = Generator::<Normal>::new_with_hasher(AES128.clone(), encoder.delta(), &inputs).unwrap();
 
-        let enc_gates: Vec<EncryptedGate> = gen.by_ref().collect();
+        let rows = gen.generate(0);
 
         assert!(gen.is_complete());
-        assert_eq!(enc_gates.len(), AES128.and_count());
+        assert_eq!(rows.len(), AES128.and_count() * Normal::ROWS_PER_AND_GATE);
 
         let _ = gen.outputs().unwrap();
         let _ = gen.hash().unwrap();

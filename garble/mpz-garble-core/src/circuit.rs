@@ -35,6 +35,10 @@ impl Index<usize> for EncryptedGate {
     }
 }
 
+/// An encrypted row of an AND gate truth table
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct EncryptedRow(pub(crate) Block);
+
 /// A garbled circuit
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GarbledCircuit {

@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mpz_circuits::circuits::AES128;
-use mpz_garble_core::{ChaChaEncoder, Encoder, Generator};
+use mpz_garble_core::{ChaChaEncoder, Encoder, Generator, Normal};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("garble_circuits");
@@ -13,12 +13,9 @@ fn criterion_benchmark(c: &mut Criterion) {
         .collect::<Vec<_>>();
     group.bench_function("aes128", |b| {
         b.iter(|| {
-            let mut gen = Generator::new(AES128.clone(), encoder.delta(), &inputs).unwrap();
+            let mut gen = Generator::<Normal>::new(AES128.clone(), encoder.delta(), &inputs).unwrap();
 
-            let mut enc_gates = Vec::with_capacity(AES128.and_count());
-            for gate in gen.by_ref() {
-                enc_gates.push(gate);
-            }
+            _ = gen.generate(0);
 
             black_box(gen.outputs().unwrap())
         })
@@ -26,12 +23,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("aes128_with_hash", |b| {
         b.iter(|| {
             let mut gen =
-                Generator::new_with_hasher(AES128.clone(), encoder.delta(), &inputs).unwrap();
+                Generator::<Normal>::new_with_hasher(AES128.clone(), encoder.delta(), &inputs).unwrap();
 
-            let mut enc_gates = Vec::with_capacity(AES128.and_count());
-            for gate in gen.by_ref() {
-                enc_gates.push(gate);
-            }
+            _ = gen.generate(0);
 
             black_box(gen.outputs().unwrap())
         })
