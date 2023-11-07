@@ -338,25 +338,34 @@ pub trait Execute {
 /// This trait provides methods for proving the output of a circuit.
 #[async_trait]
 pub trait Prove {
-    /// Proves the output of the circuit with the provided inputs, assigning to the provided output values
-    async fn prove(
+    /// Executes the provided circuit as the prover, assigning to the provided output values.
+    async fn execute_prove(
         &mut self,
         circ: Arc<Circuit>,
         inputs: &[ValueRef],
         outputs: &[ValueRef],
     ) -> Result<(), ProveError>;
+
+    /// Proves the provided values.
+    async fn prove(&mut self, values: &[ValueRef]) -> Result<(), ProveError>;
 }
 
 /// This trait provides methods for verifying the output of a circuit.
 #[async_trait]
 pub trait Verify {
-    /// Verifies the output of the circuit with the provided inputs, assigning to the provided output values
-    async fn verify(
+    /// Executes the provided circuit as the verifier, assigning to the provided output values.
+    async fn execute_verify(
         &mut self,
         circ: Arc<Circuit>,
         inputs: &[ValueRef],
         outputs: &[ValueRef],
-        expected_outputs: &[Value],
+    ) -> Result<(), VerifyError>;
+
+    /// Verifies the provided values against the expected values.
+    async fn verify(
+        &mut self,
+        values: &[ValueRef],
+        expected_values: &[Value],
     ) -> Result<(), VerifyError>;
 }
 

@@ -388,6 +388,7 @@ where
         value: &ValueRef,
         encoding: EncodedValue<T>,
     ) -> Result<(), EncodingMemoryError> {
+        let encoding_type = encoding.value_type();
         match (value, encoding) {
             (ValueRef::Value { id }, encoding) => self.set_encoding_by_id(id, encoding)?,
             (ValueRef::Array(array), EncodedValue::Array(encodings))
@@ -397,7 +398,10 @@ where
                     self.set_encoding_by_id(id, encoding)?
                 }
             }
-            _ => panic!("value type {:?} does not match encoding type", value),
+            _ => panic!(
+                "value type {:?} does not match encoding type: {:?}",
+                value, encoding_type
+            ),
         }
 
         Ok(())
