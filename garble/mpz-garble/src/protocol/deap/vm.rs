@@ -309,6 +309,8 @@ where
             .await
     }
 
+    // Note: we do _not_ prove the output right away, instead the proof is committed to
+    // and decommitted later when the DEAP instance is finalized.
     async fn prove(&mut self, values: &[ValueRef]) -> Result<(), ProveError> {
         self.deap()
             .defer_prove(
@@ -346,6 +348,8 @@ where
             .await
     }
 
+    // Note: we do _not_ verify the output right away, instead a commitment from the prover is stored
+    // and verified later when the DEAP instance is finalized.
     async fn verify(
         &mut self,
         values: &[ValueRef],

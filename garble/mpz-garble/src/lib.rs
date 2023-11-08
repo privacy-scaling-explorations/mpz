@@ -335,7 +335,8 @@ pub trait Execute {
     ) -> Result<(), ExecutionError>;
 }
 
-/// This trait provides methods for proving the output of a circuit.
+/// This trait provides methods for the evaluator to prove the authenticity of the evaluated garbled
+/// circuit's output.
 #[async_trait]
 pub trait Prove {
     /// Executes the provided circuit as the prover, assigning to the provided output values.
@@ -346,11 +347,11 @@ pub trait Prove {
         outputs: &[ValueRef],
     ) -> Result<(), ProveError>;
 
-    /// Proves the provided values.
+    /// Proves the authenticity of the provided output values.
     async fn prove(&mut self, values: &[ValueRef]) -> Result<(), ProveError>;
 }
 
-/// This trait provides methods for verifying the output of a circuit.
+/// This trait provides methods for the garbler to verify the authenticity of the evaluator's output.
 #[async_trait]
 pub trait Verify {
     /// Executes the provided circuit as the verifier, assigning to the provided output values.
@@ -361,7 +362,7 @@ pub trait Verify {
         outputs: &[ValueRef],
     ) -> Result<(), VerifyError>;
 
-    /// Verifies the provided values against the expected values.
+    /// Verifies the provided output values against the expected values.
     async fn verify(
         &mut self,
         values: &[ValueRef],
@@ -369,22 +370,22 @@ pub trait Verify {
     ) -> Result<(), VerifyError>;
 }
 
-/// This trait provides methods for decoding values.
+/// This trait provides methods for decoding output values.
 #[async_trait]
 pub trait Decode {
-    /// Decodes the provided values, returning the plaintext values to all parties.
+    /// Decodes the provided output values, returning the plaintext values to all parties.
     async fn decode(&mut self, values: &[ValueRef]) -> Result<Vec<Value>, DecodeError>;
 }
 
-/// This trait provides methods for decoding values with different privacy configurations.
+/// This trait provides methods for decoding output values with different privacy configurations.
 #[async_trait]
 pub trait DecodePrivate {
-    /// Decodes the provided values, returning the plaintext values to only this party.
+    /// Decodes the provided output values, returning the plaintext values to only this party.
     async fn decode_private(&mut self, values: &[ValueRef]) -> Result<Vec<Value>, DecodeError>;
 
-    /// Decodes the provided values, returning the plaintext values to the other party(s).
+    /// Decodes the provided output values, returning the plaintext values to the other party(s).
     async fn decode_blind(&mut self, values: &[ValueRef]) -> Result<(), DecodeError>;
 
-    /// Decodes the provided values, returning additive shares of plaintext values to all parties.
+    /// Decodes the provided output values, returning additive shares of plaintext values to all parties.
     async fn decode_shared(&mut self, values: &[ValueRef]) -> Result<Vec<Value>, DecodeError>;
 }
