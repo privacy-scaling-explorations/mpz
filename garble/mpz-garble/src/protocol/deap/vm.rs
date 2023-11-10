@@ -290,21 +290,31 @@ where
     OTS: VerifiableOTSendEncoding + Send + Sync,
     OTR: VerifiableOTReceiveEncoding + Send + Sync,
 {
-    async fn prove(
+    async fn execute_prove(
         &mut self,
         circ: Arc<Circuit>,
         inputs: &[ValueRef],
         outputs: &[ValueRef],
     ) -> Result<(), ProveError> {
         self.deap()
-            .defer_prove(
+            .execute_prove(
                 &self.op_id.increment_in_place().to_string(),
                 circ,
                 inputs,
                 outputs,
-                &mut self.sink,
                 &mut self.stream,
                 &*self.ot_recv,
+            )
+            .map_err(ProveError::from)
+            .await
+    }
+
+    async fn prove(&mut self, values: &[ValueRef]) -> Result<(), ProveError> {
+        self.deap()
+            .defer_prove(
+                &self.op_id.increment_in_place().to_string(),
+                values,
+                &mut self.sink,
             )
             .map_err(ProveError::from)
             .await
@@ -317,23 +327,36 @@ where
     OTS: VerifiableOTSendEncoding + Send + Sync,
     OTR: VerifiableOTReceiveEncoding + Send + Sync,
 {
-    async fn verify(
+    async fn execute_verify(
         &mut self,
         circ: Arc<Circuit>,
         inputs: &[ValueRef],
         outputs: &[ValueRef],
-        expected_outputs: &[Value],
     ) -> Result<(), VerifyError> {
         self.deap()
-            .defer_verify(
+            .execute_verify(
                 &self.op_id.increment_in_place().to_string(),
                 circ,
                 inputs,
                 outputs,
-                expected_outputs,
                 &mut self.sink,
-                &mut self.stream,
                 &*self.ot_send,
+            )
+            .map_err(VerifyError::from)
+            .await
+    }
+
+    async fn verify(
+        &mut self,
+        values: &[ValueRef],
+        expected_values: &[Value],
+    ) -> Result<(), VerifyError> {
+        self.deap()
+            .defer_verify(
+                &self.op_id.increment_in_place().to_string(),
+                values,
+                expected_values,
+                &mut self.stream,
             )
             .map_err(VerifyError::from)
             .await
