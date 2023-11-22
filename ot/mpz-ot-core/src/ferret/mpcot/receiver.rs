@@ -97,15 +97,13 @@ impl Receiver<state::Extension> {
                         "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
                     ));
                 }
+            } else if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
+                p.push((power.ilog2() as usize, bin.len() as u32));
+                self.state.buckets_length.push(power);
             } else {
-                if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
-                    p.push((power.ilog2() as usize, bin.len() as u32));
-                    self.state.buckets_length.push(power);
-                } else {
-                    return Err(ReceiverError::InvalidBucketSize(
-                        "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
-                    ));
-                }
+                return Err(ReceiverError::InvalidBucketSize(
+                    "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
+                ));
             }
         }
 

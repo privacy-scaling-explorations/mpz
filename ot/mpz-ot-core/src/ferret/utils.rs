@@ -136,7 +136,7 @@ impl<'a> Bucket<'a> {
         self.buckets = vec![Vec::default(); self.m];
         for i in 0..n {
             for (index, hash) in self.hashes.iter().enumerate() {
-                let pos = hash_to_index(&hash, self.m, i);
+                let pos = hash_to_index(hash, self.m, i);
                 self.buckets[pos].push(Item {
                     value: i,
                     hash_index: index,
