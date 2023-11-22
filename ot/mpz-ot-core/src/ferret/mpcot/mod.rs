@@ -9,7 +9,10 @@ pub mod sender_regular;
 
 #[cfg(test)]
 mod tests {
-    use super::{receiver::Receiver as MpcotReceiver, sender::Sender as MpcotSender};
+    use super::{
+        receiver::Receiver as MpcotReceiver, receiver_regular::Receiver as RegularReceiver,
+        sender::Sender as MpcotSender, sender_regular::Sender as RegularSender,
+    };
     use crate::ideal::ideal_spcot::{IdealSpcot, SpcotMsgForReceiver, SpcotMsgForSender};
     use mpz_core::prg::Prg;
 
@@ -65,6 +68,79 @@ mod tests {
         // sender generates the messages to invoke ideal spcot.
         let sender_queries = sender.extend_pre(t as u32, n).unwrap();
 
+        let mut queries = receiver.extend_pre(&alphas, n).unwrap();
+
+        assert!(sender_queries
+            .iter()
+            .zip(queries.iter())
+            .all(|(x, (y, _))| *x == *y));
+
+        queries.iter_mut().for_each(|(x, _)| *x = 1 << (*x));
+
+        let (sender_spcot_msg, receiver_spcot_msg) = ideal_spcot.extend(&queries);
+
+        let SpcotMsgForSender { v: st } = sender_spcot_msg;
+        let SpcotMsgForReceiver { w: rt } = receiver_spcot_msg;
+
+        let mut output_sender = sender.extend(&st, n).unwrap();
+        let output_receiver = receiver.extend(&rt, n).unwrap();
+
+        for i in alphas {
+            output_sender[i as usize] ^= delta;
+        }
+
+        assert_eq!(output_sender, output_receiver);
+    }
+
+    #[test]
+    fn mpcot_regular_test() {
+        let mut prg = Prg::new();
+        let delta = prg.random_block();
+        let mut ideal_spcot = IdealSpcot::init_with_delta(delta);
+
+        let sender = RegularSender::new();
+        let receiver = RegularReceiver::new();
+
+        let mut sender = sender.setup(delta);
+        let mut receiver = receiver.setup();
+
+        // extend once.
+        let alphas = [0, 3, 4, 7, 9];
+        let t = alphas.len();
+        let n = 10;
+
+        // sender generates the messages to invoke ideal spcot.
+        let sender_queries = sender.extend_pre(t as u32, n).unwrap();
+        let mut queries = receiver.extend_pre(&alphas, n).unwrap();
+
+        assert!(sender_queries
+            .iter()
+            .zip(queries.iter())
+            .all(|(x, (y, _))| *x == *y));
+
+        queries.iter_mut().for_each(|(x, _)| *x = 1 << (*x));
+
+        let (sender_spcot_msg, receiver_spcot_msg) = ideal_spcot.extend(&queries);
+
+        let SpcotMsgForSender { v: st } = sender_spcot_msg;
+        let SpcotMsgForReceiver { w: rt } = receiver_spcot_msg;
+
+        let mut output_sender = sender.extend(&st, n).unwrap();
+        let output_receiver = receiver.extend(&rt, n).unwrap();
+
+        for i in alphas {
+            output_sender[i as usize] ^= delta;
+        }
+
+        assert_eq!(output_sender, output_receiver);
+
+        // extend twice.
+        let alphas = [0, 3, 7, 9, 14, 15];
+        let t = alphas.len();
+        let n = 16;
+
+        // sender generates the messages to invoke ideal spcot.
+        let sender_queries = sender.extend_pre(t as u32, n).unwrap();
         let mut queries = receiver.extend_pre(&alphas, n).unwrap();
 
         assert!(sender_queries

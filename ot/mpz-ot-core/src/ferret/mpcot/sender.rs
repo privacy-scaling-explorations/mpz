@@ -112,7 +112,7 @@ impl Sender<state::Extension> {
             .any(|(s, b)| s.len() != *b)
         {
             return Err(SenderError::InvalidInput(
-                "the length of st[i] should be self.state.buckets_length".to_string(),
+                "the length of st[i] should be self.state.buckets_length[i]".to_string(),
             ));
         }
 
