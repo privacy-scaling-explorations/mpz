@@ -1,4 +1,4 @@
-use std::ops::BitXor;
+use std::ops::{BitXor, BitAnd, Not, BitOr};
 
 use crate::{
     components::{Feed, Node},
@@ -212,7 +212,7 @@ pub(crate) fn inv_nbit<const N: usize>(
     std::array::from_fn(|n| state.add_inv_gate(a[n]))
 }
 
-impl<'a> BitXor<Tracer<'a, Bit>> for Tracer<'a, Bit> {
+impl<'a> BitXor for Tracer<'a, Bit> {
     type Output = Tracer<'a, Bit>;
 
     fn bitxor(self, rhs: Tracer<'a, Bit>) -> Self::Output {
@@ -225,6 +225,46 @@ impl<'a> BitXor<Tracer<'a, Bit>> for Tracer<'a, Bit> {
         drop(state);
 
         Tracer::new(self.state, value)
+    }
+}
+
+impl<'a> BitAnd for Tracer<'a, Bit> {
+    type Output = Tracer<'a, Bit>;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let mut state = self.state.borrow_mut();
+
+        let out = state.add_and_gate(self.to_inner().nodes()[0], rhs.to_inner().nodes()[0]);
+
+        let value = Bit::new([out]);
+
+        drop(state);
+
+        Tracer::new(self.state, value)
+    }
+}
+
+impl<'a> Not for Tracer<'a, Bit> {
+    type Output = Tracer<'a, Bit>;
+
+    fn not(self) -> Self::Output {
+        let mut state = self.state.borrow_mut();
+
+        let out = state.add_inv_gate(self.to_inner().nodes()[0]);
+
+        let value = Bit::new([out]);
+
+        drop(state);
+
+        Tracer::new(self.state, value)
+    }
+}
+
+impl<'a> BitOr for Tracer<'a, Bit> {
+    type Output = Tracer<'a, Bit>;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        !(!self & !rhs)
     }
 }
 
