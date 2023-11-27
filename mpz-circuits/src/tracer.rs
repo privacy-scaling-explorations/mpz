@@ -1,6 +1,10 @@
 use std::cell::RefCell;
 
-use crate::{builder::BuilderState, types::BinaryRepr};
+use crate::{
+    builder::BuilderState,
+    types::{BinaryRepr, Bit},
+    Feed, Node,
+};
 
 /// A wrapper type for tracing operations applied to a value.
 ///
@@ -48,5 +52,12 @@ where
 {
     fn from(tracer: Vec<Tracer<'a, T>>) -> Self {
         BinaryRepr::Array(tracer.into_iter().map(|tracer| tracer.into()).collect())
+    }
+}
+
+impl<'a> Tracer<'a, Bit> {
+    /// Returns the single node associated with the bit.
+    pub fn node(&self) -> Node<Feed> {
+        self.to_inner().nodes()[0]
     }
 }
