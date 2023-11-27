@@ -1,6 +1,10 @@
 use std::cell::RefCell;
 
-use crate::{builder::BuilderState, types::{BinaryRepr, Bit}, Node, Feed};
+use crate::{
+    builder::BuilderState,
+    types::{BinaryRepr, Bit},
+    Feed, Node,
+};
 
 /// A wrapper type for tracing operations applied to a value.
 ///
