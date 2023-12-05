@@ -55,6 +55,7 @@ impl Sender<state::Extension> {
     ///
     /// * `h` - The depth of the GGM tree.
     /// * `qs`- The blocks received by calling the COT functionality.
+    /// * `mask`- The mask bits sent by the receiver.
     pub fn extend(
         &mut self,
         h: usize,
@@ -134,7 +135,7 @@ impl Sender<state::Extension> {
     /// # Arguments
     ///
     /// * `y_star` - The blocks received from the ideal functionality for the check.
-    /// * `checkfr` - The blocks received from the receiver for the check.
+    /// * `checkfr` - The bits received from the receiver for the check.
     pub fn check(
         &mut self,
         y_star: &[Block],
@@ -156,7 +157,7 @@ impl Sender<state::Extension> {
 
         // Step 8 in Figure 6.
 
-        // Computes y = y^star + x' * Delta
+        // Computes y = y_star + x' * Delta
         let y: Vec<Block> = y_star
             .iter()
             .zip(x_prime.iter())
@@ -170,7 +171,6 @@ impl Sender<state::Extension> {
         let mut v = Block::inn_prdt_red(&y, &base);
 
         // Computes V
-        // let mut prg = Prg::from_seed(chis_seed);
         let seed = *self.state.hasher.finalize().as_bytes();
         let mut prg = Prg::from_seed(Block::try_from(&seed[0..16]).unwrap());
 
@@ -185,13 +185,14 @@ impl Sender<state::Extension> {
         // Computes H'(V)
         let hashed_v = Hash::from(blake3(&v.to_bytes()));
 
+        self.state.cot_counter += self.state.unchecked_vs.len();
+
         let mut res = Vec::new();
         for n in &self.state.vs_length {
             let tmp: Vec<Block> = self.state.unchecked_vs.drain(..*n as usize).collect();
             res.push(tmp);
         }
 
-        self.state.cot_counter += self.state.unchecked_vs.len();
         self.state.extended = true;
 
         Ok((res, CheckFromSender { hashed_v }))

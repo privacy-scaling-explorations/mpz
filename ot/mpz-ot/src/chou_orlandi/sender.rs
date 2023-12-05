@@ -16,17 +16,12 @@ use utils_aio::{
 use enum_try_as_inner::EnumTryAsInner;
 
 #[derive(Debug, EnumTryAsInner)]
-enum State {
+#[derive_err(Debug)]
+pub(crate) enum State {
     Initialized(SenderCore<state::Initialized>),
     Setup(SenderCore<state::Setup>),
     Complete,
     Error,
-}
-
-impl From<enum_try_as_inner::Error<State>> for SenderError {
-    fn from(value: enum_try_as_inner::Error<State>) -> Self {
-        SenderError::StateError(value.to_string())
-    }
 }
 
 /// Chou-Orlandi sender.
@@ -76,10 +71,8 @@ impl OTSetup for Sender {
             return Ok(());
         }
 
-        let sender = self
-            .state
-            .replace(State::Error)
-            .into_initialized()
+        let sender = std::mem::replace(&mut self.state, State::Error)
+            .try_into_initialized()
             .map_err(SenderError::from)?;
 
         // If the receiver is committed, we run the cointoss protocol
@@ -111,7 +104,7 @@ async fn execute_cointoss<
     let commitment = stream
         .expect_next()
         .await?
-        .into_cointoss_sender_commitment()?;
+        .try_into_cointoss_sender_commitment()?;
 
     let (receiver, payload) = receiver.reveal(commitment)?;
 
@@ -132,16 +125,14 @@ impl OTSender<[Block; 2]> for Sender {
         stream: &mut St,
         input: &[[Block; 2]],
     ) -> Result<(), OTError> {
-        let mut sender = self
-            .state
-            .replace(State::Error)
-            .into_setup()
+        let mut sender = std::mem::replace(&mut self.state, State::Error)
+            .try_into_setup()
             .map_err(SenderError::from)?;
 
         let receiver_payload = stream
             .expect_next()
             .await?
-            .into_receiver_payload()
+            .try_into_receiver_payload()
             .map_err(SenderError::from)?;
 
         let input = input.to_vec();
@@ -171,10 +162,8 @@ impl VerifiableOTSender<bool, [Block; 2]> for Sender {
         _sink: &mut Si,
         stream: &mut St,
     ) -> Result<Vec<bool>, OTError> {
-        let sender = self
-            .state
-            .replace(State::Error)
-            .into_setup()
+        let sender = std::mem::replace(&mut self.state, State::Error)
+            .try_into_setup()
             .map_err(SenderError::from)?;
 
         let Some(cointoss_receiver) = self.cointoss_receiver.take() else {
@@ -186,13 +175,13 @@ impl VerifiableOTSender<bool, [Block; 2]> for Sender {
         let cointoss_payload = stream
             .expect_next()
             .await?
-            .into_cointoss_sender_payload()
+            .try_into_cointoss_sender_payload()
             .map_err(SenderError::from)?;
 
         let receiver_reveal = stream
             .expect_next()
             .await?
-            .into_receiver_reveal()
+            .try_into_receiver_reveal()
             .map_err(SenderError::from)?;
 
         let cointoss_seed = cointoss_receiver

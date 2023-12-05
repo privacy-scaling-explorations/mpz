@@ -1,4 +1,4 @@
-//! Define ideal functionality of COT with random choise bit.
+//! Define ideal functionality of COT with random choice bit.
 
 use mpz_core::{prg::Prg, Block};
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ pub struct CotMsgForSender {
 pub struct CotMsgForReceiver {
     /// The random bits that receiver receives from the COT functionality.
     pub rs: Vec<bool>,
-    /// The chosen blocks that receiver receivers from the COT functionality.
+    /// The chosen blocks that receiver receives from the COT functionality.
     pub ts: Vec<Block>,
 }
 #[allow(missing_docs)]

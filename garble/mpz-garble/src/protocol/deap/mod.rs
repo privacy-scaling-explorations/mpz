@@ -245,19 +245,17 @@ impl DEAP {
     /// * `stream` - The stream to receive messages from.
     /// * `ot_recv` - The OT receiver.
     #[allow(clippy::too_many_arguments)]
-    pub async fn defer_prove<T, U, OTR>(
+    pub async fn execute_prove<S, OTR>(
         &self,
         id: &str,
         circ: Arc<Circuit>,
         inputs: &[ValueRef],
         outputs: &[ValueRef],
-        sink: &mut T,
-        stream: &mut U,
+        stream: &mut S,
         ot_recv: &OTR,
     ) -> Result<(), DEAPError>
     where
-        T: Sink<GarbleMessage, Error = std::io::Error> + Unpin,
-        U: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
+        S: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
         OTR: OTReceiveEncoding,
     {
         if matches!(self.role, Role::Follower) {
@@ -275,34 +273,19 @@ impl DEAP {
             .map_err(DEAPError::from)
             .await?;
 
-        let outputs = self
-            .ev
+        self.ev
             .evaluate(circ, inputs, outputs, stream)
             .map_err(DEAPError::from)
             .await?;
 
-        let output_digest = outputs.hash();
-        let (decommitment, commitment) = output_digest.hash_commit();
-
-        // Store output proof decommitment until finalization
-        self.state()
-            .proof_decommitments
-            .insert(id.to_string(), decommitment);
-
-        sink.send(GarbleMessage::HashCommitment(commitment)).await?;
-
         Ok(())
     }
 
-    /// Verifies the output of a circuit.
+    /// Executes the circuit where only the follower is the generator.
     ///
     /// # Notes
     ///
     /// This function can only be called by the follower.
-    ///
-    /// This function does _not_ verify the output right away,
-    /// instead the leader commits to the proof and later it is checked
-    /// during the call to [`finalize`](Self::finalize).
     ///
     /// # Arguments
     ///
@@ -310,25 +293,20 @@ impl DEAP {
     /// * `circ` - The circuit to execute.
     /// * `inputs` - The inputs to the circuit.
     /// * `outputs` - The outputs to the circuit.
-    /// * `expected_outputs` - The expected outputs of the circuit.
     /// * `sink` - The sink to send messages to.
-    /// * `stream` - The stream to receive messages from.
     /// * `ot_send` - The OT sender.
     #[allow(clippy::too_many_arguments)]
-    pub async fn defer_verify<T, U, OTS>(
+    pub async fn execute_verify<T, OTS>(
         &self,
         id: &str,
         circ: Arc<Circuit>,
         inputs: &[ValueRef],
         outputs: &[ValueRef],
-        expected_outputs: &[Value],
         sink: &mut T,
-        stream: &mut U,
         ot_send: &OTS,
     ) -> Result<(), DEAPError>
     where
         T: Sink<GarbleMessage, Error = std::io::Error> + Unpin,
-        U: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin,
         OTS: OTSendEncoding,
     {
         if matches!(self.role, Role::Leader) {
@@ -346,19 +324,64 @@ impl DEAP {
             .map_err(DEAPError::from)
             .await?;
 
-        let (encoded_outputs, _) = self
-            .gen
+        self.gen
             .generate(circ.clone(), inputs, outputs, sink, false)
             .map_err(DEAPError::from)
             .await?;
 
-        let expected_outputs = expected_outputs
-            .iter()
-            .zip(encoded_outputs)
-            .map(|(expected, encoded)| encoded.select(expected.clone()).unwrap())
-            .collect::<Vec<_>>();
+        Ok(())
+    }
 
-        let expected_digest = expected_outputs.hash();
+    /// Sends a commitment to the provided values, proving them to the follower upon finalization.
+    pub async fn defer_prove<S: Sink<GarbleMessage, Error = std::io::Error> + Unpin>(
+        &self,
+        id: &str,
+        values: &[ValueRef],
+        sink: &mut S,
+    ) -> Result<(), DEAPError> {
+        let encoded_values = self.ev.get_encodings(values)?;
+
+        let encoding_digest = encoded_values.hash();
+        let (decommitment, commitment) = encoding_digest.hash_commit();
+
+        // Store output proof decommitment until finalization
+        self.state()
+            .proof_decommitments
+            .insert(id.to_string(), decommitment);
+
+        sink.send(GarbleMessage::HashCommitment(commitment)).await?;
+
+        Ok(())
+    }
+
+    /// Receives a commitment to the provided values, and stores it until finalization.
+    ///
+    /// # Notes
+    ///
+    /// This function does not verify the values until [`finalize`](Self::finalize).
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The ID of the operation
+    /// * `values` - The values to receive a commitment to
+    /// * `expected_values` - The expected values which will be verified against the commitment
+    /// * `stream` - The stream to receive messages from
+    pub async fn defer_verify<S: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin>(
+        &self,
+        id: &str,
+        values: &[ValueRef],
+        expected_values: &[Value],
+        stream: &mut S,
+    ) -> Result<(), DEAPError> {
+        let encoded_values = self.gen.get_encodings(values)?;
+
+        let expected_values = expected_values
+            .iter()
+            .zip(encoded_values)
+            .map(|(expected, encoded)| encoded.select(expected.clone()))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let expected_digest = expected_values.hash();
 
         let commitment = expect_msg_or_err!(stream, GarbleMessage::HashCommitment)?;
 
@@ -1359,15 +1382,19 @@ mod tests {
 
             async move {
                 leader
-                    .defer_prove(
-                        "test",
+                    .execute_prove(
+                        "test0",
                         AES128.clone(),
                         &[key_ref, msg_ref],
-                        &[ciphertext_ref],
-                        &mut sink,
+                        &[ciphertext_ref.clone()],
                         &mut stream,
                         &leader_ot_recv,
                     )
+                    .await
+                    .unwrap();
+
+                leader
+                    .defer_prove("test1", &[ciphertext_ref], &mut sink)
                     .await
                     .unwrap();
 
@@ -1388,15 +1415,23 @@ mod tests {
 
             async move {
                 follower
-                    .defer_verify(
-                        "test",
+                    .execute_verify(
+                        "test0",
                         AES128.clone(),
                         &[key_ref, msg_ref],
+                        &[ciphertext_ref.clone()],
+                        &mut sink,
+                        &follower_ot_send,
+                    )
+                    .await
+                    .unwrap();
+
+                follower
+                    .defer_verify(
+                        "test1",
                         &[ciphertext_ref],
                         &[expected_ciphertext.into()],
-                        &mut sink,
                         &mut stream,
-                        &follower_ot_send,
                     )
                     .await
                     .unwrap();

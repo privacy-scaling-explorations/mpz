@@ -111,6 +111,24 @@ impl Evaluator {
         self.state().memory.get_encoding(value)
     }
 
+    /// Returns the encodings for a slice of values.
+    pub fn get_encodings(
+        &self,
+        values: &[ValueRef],
+    ) -> Result<Vec<EncodedValue<encoding_state::Active>>, EvaluatorError> {
+        let state = self.state();
+
+        values
+            .iter()
+            .map(|value| {
+                state
+                    .memory
+                    .get_encoding(value)
+                    .ok_or_else(|| EvaluatorError::MissingEncoding(value.clone()))
+            })
+            .collect()
+    }
+
     /// Adds a decoding log entry.
     pub(crate) fn add_decoding_log(&self, value: &ValueRef, decoding: Decoding) {
         self.state().decoding_logs.insert(value.clone(), decoding);

@@ -81,6 +81,23 @@ impl Generator {
         self.state().memory.get_encoding(value)
     }
 
+    /// Returns the encodings for a slice of values.
+    pub fn get_encodings(
+        &self,
+        values: &[ValueRef],
+    ) -> Result<Vec<EncodedValue<encoding_state::Full>>, GeneratorError> {
+        let state = self.state();
+        values
+            .iter()
+            .map(|value| {
+                state
+                    .memory
+                    .get_encoding(value)
+                    .ok_or_else(|| GeneratorError::MissingEncoding(value.clone()))
+            })
+            .collect()
+    }
+
     pub(crate) fn get_encodings_by_id(
         &self,
         ids: &[ValueId],

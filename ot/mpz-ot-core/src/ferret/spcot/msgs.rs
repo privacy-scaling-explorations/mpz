@@ -3,7 +3,7 @@
 use mpz_core::{hash::Hash, Block};
 use serde::{Deserialize, Serialize};
 
-/// A SPCOT message.
+/// An SPCOT message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(missing_docs)]
 pub enum Message<CotMsg> {
@@ -15,14 +15,14 @@ pub enum Message<CotMsg> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/// The mask bits sent from the receiver.
+/// The mask bits sent by the receiver.
 pub struct MaskBits {
-    /// The mask bits sent from the receiver.
+    /// The mask bits sent by the receiver.
     pub bs: Vec<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/// The extend messages that sent from the sender.
+/// The extend messages sent by the sender.
 pub struct ExtendFromSender {
     /// The mask `m0` and `m1`.
     pub ms: Vec<[Block; 2]>,

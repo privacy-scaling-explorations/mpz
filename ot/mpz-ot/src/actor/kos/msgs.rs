@@ -10,10 +10,17 @@ use mpz_ot_core::{
 
 /// KOS actor message
 #[derive(Debug, Clone, EnumTryAsInner, Serialize, Deserialize)]
+#[derive_err(Debug)]
 #[allow(missing_docs)]
 pub enum Message<BaseOT> {
     ActorMessage(ActorMessage),
     Protocol(KosMessage<BaseOT>),
+}
+
+impl<BaseOT> From<MessageError<BaseOT>> for std::io::Error {
+    fn from(err: MessageError<BaseOT>) -> Self {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string())
+    }
 }
 
 impl<T> From<ActorMessage> for Message<T> {
