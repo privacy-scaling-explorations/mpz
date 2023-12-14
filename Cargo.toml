@@ -1,14 +1,5 @@
 [workspace]
-members = [
-    "mpz-core",
-    "garble/*",
-    "ot/*",
-    "mpz-circuits",
-    "mpz-circuits-macros",
-    "share-conversion/*",
-    "matrix-transpose",
-    "clmul",
-]
+members = ["mpz-vm-core"]
 
 [workspace.dependencies]
 mpz-core = { path = "mpz-core" }
