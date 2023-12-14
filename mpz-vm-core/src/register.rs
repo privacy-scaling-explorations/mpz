@@ -6,6 +6,8 @@ pub(crate) const REGISTER_CAPACITY: usize = 1024;
 pub(crate) const REGISTER_WINDOW: usize = 256;
 /// The return register, which is always register 0.
 pub(crate) const RETURN_REGISTER: RegisterId = 0;
+/// The first argument register.
+pub(crate) const ARGUMENT_REGISTER: RegisterId = 1;
 
 /// A register id.
 pub type RegisterId = u16;

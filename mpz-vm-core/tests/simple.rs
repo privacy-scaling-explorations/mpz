@@ -43,14 +43,6 @@ async fn main() {
     let mut thread = Thread::<DataInstr, Value>::new(Arc::new(globals));
 
     let instr = [
-        Instr::Memory(MemoryInstr::LoadLiteral {
-            value: Value::U8(1),
-            dest: 1,
-        }),
-        Instr::Memory(MemoryInstr::LoadLiteral {
-            value: Value::U8(2),
-            dest: 2,
-        }),
         Instr::Memory(MemoryInstr::Copy { src: 1, dest: 3 }),
         Instr::Memory(MemoryInstr::Copy { src: 2, dest: 4 }),
         Instr::ControlFlow(ControlFlowInstr::Call {
@@ -60,7 +52,7 @@ async fn main() {
         }),
         Instr::Memory(MemoryInstr::Copy { src: 2, dest: 3 }),
         Instr::Memory(MemoryInstr::LoadLiteral {
-            value: Value::U8(3),
+            value: Value::U8(5),
             dest: 4,
         }),
         Instr::Data(DataInstr::Eq {
@@ -88,7 +80,7 @@ async fn main() {
         instr: Arc::new(instr),
     };
 
-    thread.call(main_func);
+    thread.call_with_args(main_func, [Value::U8(1), Value::U8(4)]);
 
     let result = exec.execute(&mut thread).await.unwrap();
 
