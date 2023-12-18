@@ -79,8 +79,6 @@ pub enum DataInstr {
     },
 }
 
-impl DataInstruction<Value> for DataInstr {}
-
 #[derive(Default)]
 pub struct SimpleLocalExecutor;
 

@@ -1,7 +1,14 @@
-use crate::{call_stack::JumpOffset, register::RegisterId, table::FunctionId};
+use crate::{call_stack::JumpOffset, register::RegisterId, table::FunctionId, Value};
 
 /// An instruction which operates on data, such as performing arithmetic.
 pub trait DataInstruction<V>: Clone + Send + Sync {}
+
+impl<V, T> DataInstruction<V> for T
+where
+    V: Value,
+    T: Clone + Send + Sync,
+{
+}
 
 /// An instruction.
 ///

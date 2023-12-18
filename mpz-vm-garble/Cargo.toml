@@ -1,0 +1,15 @@
+[package]
+name = "mpz-vm-garble"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mpz-vm-core = { path = "../mpz-vm-core" }
+mpz-garble-core = { path = "../garble/mpz-garble-core" }
+
+tlsn-utils-aio.workspace = true
+mpz-circuits.workspace = true
+futures.workspace = true
+
+[[test]]
+name = "test"

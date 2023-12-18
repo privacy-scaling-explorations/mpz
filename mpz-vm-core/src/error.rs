@@ -1,5 +1,7 @@
 use std::{error::Error, fmt::Display};
 
+use crate::value::ValueError;
+
 /// An error that can occur while executing a data instruction.
 #[derive(Debug, thiserror::Error)]
 #[error("data instruction error: kind {kind}, {err}")]
@@ -37,13 +39,22 @@ impl DataInstructionError {
 pub enum DataInstructionErrorKind {
     /// An error occurred in the executor.
     Executor,
+    /// An error occurred while operating on values.
+    Value,
 }
 
 impl Display for DataInstructionErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DataInstructionErrorKind::Executor => write!(f, "executor error"),
+            DataInstructionErrorKind::Value => write!(f, "value error"),
         }
+    }
+}
+
+impl From<ValueError> for DataInstructionError {
+    fn from(err: ValueError) -> Self {
+        Self::new(DataInstructionErrorKind::Value, err)
     }
 }
 

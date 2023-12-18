@@ -94,8 +94,6 @@ where
             return Ok(ExecStatus::Return(None));
         };
 
-        println!("registers: {:?}", &thread.registers.get_mut()[..10]);
-
         match instr {
             Instr::Data(instr) => {
                 self.data.execute(instr, &mut thread.registers).await?;

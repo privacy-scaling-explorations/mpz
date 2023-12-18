@@ -73,6 +73,7 @@ impl<I, V> CallStack<I, V> {
     ///
     /// This pops the current call frame from the stack and returns to the previous call frame.
     pub fn return_call(&mut self) -> Result<(), CallStackError> {
+        println!("returning call");
         let old_frame = self.stack.pop().ok_or(CallStackError::StackEmpty)?;
         if let Some(frame) = self.stack.last() {
             self.current

@@ -43,6 +43,7 @@ impl<V> Default for Registers<V> {
 
 impl<V> Registers<V> {
     pub fn set_base(&mut self, base: RegisterId) {
+        println!("set register base to {}", base);
         self.base = base;
     }
 

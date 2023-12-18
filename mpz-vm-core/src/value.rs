@@ -9,13 +9,37 @@ pub struct ValueError {
     msg: String,
 }
 
-#[derive(Debug)]
-pub enum ValueErrorKind {}
+impl ValueError {
+    /// Creates a new value error.
+    pub fn new(kind: ValueErrorKind, msg: impl Into<String>) -> Self {
+        Self {
+            kind,
+            msg: msg.into(),
+        }
+    }
+
+    /// Returns the corresponding [`ValueErrorKind`] for this error.
+    pub fn kind(&self) -> ValueErrorKind {
+        self.kind
+    }
+
+    /// Returns the inner error.
+    pub fn into_inner(self) -> String {
+        self.msg
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[non_exhaustive]
+pub enum ValueErrorKind {
+    /// Attempted to perform an operation on an unsupported type.
+    UnsupportedOperation,
+}
 
 impl Display for ValueErrorKind {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            _ => Ok(()),
+            ValueErrorKind::UnsupportedOperation => write!(f, "unsupported operation"),
         }
     }
 }

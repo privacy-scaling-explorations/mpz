@@ -13,6 +13,7 @@ pub mod value;
 pub use function::Function;
 pub use globals::Globals;
 pub use instruction::{ControlFlowInstr, DataInstruction, Instr, MemoryInstr};
+pub use register::Registers;
 pub use thread::Thread;
 pub use value::Value;
 

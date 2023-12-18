@@ -1,5 +1,5 @@
 [workspace]
-members = ["mpz-vm-core"]
+members = ["mpz-vm-core", "mpz-vm-garble"]
 
 [workspace.dependencies]
 mpz-core = { path = "mpz-core" }
