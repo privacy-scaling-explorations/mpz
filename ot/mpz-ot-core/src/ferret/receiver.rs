@@ -65,7 +65,7 @@ impl Receiver<state::Extension> {
     /// # Arguments.
     ///
     /// * `lpn_type` - The type of LPN parameters.
-    pub fn extend_pre(&mut self, lpn_type: LpnType) -> (Vec<u32>, u32) {
+    pub fn extend_pre(&mut self, lpn_type: LpnType) -> (Vec<u32>, usize, usize) {
         match lpn_type {
             LpnType::Uniform => {
                 self.state.e = self.state.lpn_parameters.sample_uniform_error_vector();
@@ -81,7 +81,11 @@ impl Receiver<state::Extension> {
                 alphas.push(i as u32);
             }
         }
-        (alphas, self.state.lpn_parameters.n as u32)
+        (
+            alphas,
+            self.state.lpn_parameters.t,
+            self.state.lpn_parameters.n,
+        )
     }
 
     /// Performs the Ferret extension.
@@ -99,11 +103,11 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        // Compute z = w * A + r.
+        // Compute z = A * w + r.
         let mut z = r.to_vec();
         self.state.lpn_encoder.compute(&mut z, &self.state.w);
 
-        // Compute x = u * A + e.
+        // Compute x = A * u + e.
         let u_block = self
             .state
             .u
@@ -119,10 +123,7 @@ impl Receiver<state::Extension> {
         let mut x = self.state.e.to_vec();
         self.state.lpn_encoder.compute(&mut x, &u_block);
 
-        let x = x
-            .iter()
-            .map(|a| if a.lsb() == 1 { true } else { false })
-            .collect::<Vec<bool>>();
+        let x = x.iter().map(|a| a.lsb() == 1).collect::<Vec<bool>>();
 
         // Update u, w
         self.state.u = x[0..self.state.lpn_parameters.k].to_vec();

@@ -60,7 +60,7 @@ impl Sender<state::Extension> {
     /// Outputs the information for MPCOT.
     ///
     /// See step 3 and 4.
-    pub fn extend_pre(self) -> (u32, u32) {
+    pub fn extend_pre(&self) -> (u32, u32) {
         (
             self.state.lpn_parameters.t as u32,
             self.state.lpn_parameters.n as u32,
@@ -82,13 +82,13 @@ impl Sender<state::Extension> {
             ));
         }
 
-        // Compute y = v * A + s
+        // Compute y = A * v + s
         let mut y = s.to_vec();
         self.state.lpn_encoder.compute(&mut y, &self.state.v);
 
         // Update v
         self.state.v = y[0..self.state.lpn_parameters.k].to_vec();
-        
+
         // Update counter
         self.state.counter += 1;
 
