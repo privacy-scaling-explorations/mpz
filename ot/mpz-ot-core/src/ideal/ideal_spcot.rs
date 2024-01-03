@@ -22,7 +22,6 @@ pub struct IdealSpcot {
     pub delta: Block,
     pub counter: usize,
     pub prg: Prg,
-    pub alphas: Vec<u32>,
 }
 
 impl IdealSpcot {
@@ -34,7 +33,6 @@ impl IdealSpcot {
             delta,
             counter: 0,
             prg,
-            alphas: Vec::default(),
         }
     }
 
@@ -45,7 +43,6 @@ impl IdealSpcot {
             delta,
             counter: 0,
             prg,
-            alphas: Vec::default(),
         }
     }
 
@@ -67,7 +64,6 @@ impl IdealSpcot {
 
             v.push(v_tmp);
             w.push(w_tmp);
-            self.alphas.push(*alpha);
             self.counter += n;
         }
         (SpcotMsgForSender { v }, SpcotMsgForReceiver { w })
@@ -80,24 +76,28 @@ impl IdealSpcot {
     /// * `sender_msg` - The message that the ideal SPCOT sends to the sender.
     /// * `receiver_msg` - The message that the ideal SPCOT sends to the receiver.
     pub fn check(
-        &mut self,
+        &self,
         sender_msg: SpcotMsgForSender,
         receiver_msg: SpcotMsgForReceiver,
+        pos: &[(usize, u32)],
     ) -> bool {
         let SpcotMsgForSender { mut v } = sender_msg;
         let SpcotMsgForReceiver { w } = receiver_msg;
 
-        let res = v
-            .iter_mut()
+        v.iter_mut()
             .zip(w.iter())
-            .zip(self.alphas.iter())
-            .all(|((vs, ws), alpha)| {
-                vs[*alpha as usize] ^= self.delta;
-                vs == ws
+            .zip(pos.iter())
+            .for_each(|((v, w), (n, p))| {
+                assert_eq!(v.len(), *n);
+                assert_eq!(w.len(), *n);
+                v[*p as usize] ^= self.delta;
             });
 
-        self.alphas.clear();
-
+        let res = v.iter().zip(w.iter()).all(|(v,w)|{
+            v.iter().zip(w.iter()).all(|(x,y)|{
+                *x == *y
+            })
+        });
         res
     }
 }
@@ -112,6 +112,6 @@ mod tests {
 
         let (sender_msg, receiver_msg) = ideal_spcot.extend(&[(10, 2), (20, 3)]);
 
-        assert!(ideal_spcot.check(sender_msg, receiver_msg));
+        assert!(ideal_spcot.check(sender_msg, receiver_msg, &[(10, 2), (20, 3)]));
     }
 }
