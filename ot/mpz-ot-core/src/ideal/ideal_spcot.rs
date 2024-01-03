@@ -93,11 +93,10 @@ impl IdealSpcot {
                 v[*p as usize] ^= self.delta;
             });
 
-        let res = v.iter().zip(w.iter()).all(|(v,w)|{
-            v.iter().zip(w.iter()).all(|(x,y)|{
-                *x == *y
-            })
-        });
+        let res = v
+            .iter()
+            .zip(w.iter())
+            .all(|(v, w)| v.iter().zip(w.iter()).all(|(x, y)| *x == *y));
         res
     }
 }
