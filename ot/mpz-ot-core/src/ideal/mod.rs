@@ -2,3 +2,4 @@
 
 pub mod ideal_cot;
 pub mod ideal_spcot;
+pub mod ideal_mpcot;
