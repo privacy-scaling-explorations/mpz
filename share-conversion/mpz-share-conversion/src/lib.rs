@@ -2,7 +2,7 @@
 //! between additive and multiplicative representations.
 //!
 //! The protocol is based on `Two Party RSA Key Generation [Gil99]` which describes a method for
-//! converting multipicative shares of a finite field element into additive shares (M2A). We use a similar technique
+//! converting multiplicative shares of a finite field element into additive shares (M2A). We use a similar technique
 //! to convert additive shares into multiplicative shares (A2M), inspired by `Efficient Secure Two-Party Exponentiation [YCCL11]`.
 
 #![deny(missing_docs, unreachable_pub, unused_must_use)]
