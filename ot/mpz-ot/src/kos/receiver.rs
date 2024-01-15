@@ -14,9 +14,14 @@ use utils_aio::{
     stream::{ExpectStreamExt, IoStream},
 };
 
-use crate::{OTError, OTReceiver, OTSender, OTSetup, VerifiableOTReceiver, VerifiableOTSender};
+use crate::{
+    ChosenMessageRandomOTReceiver, OTError, OTReceiver, OTSender, OTSetup, VerifiableOTReceiver,
+    VerifiableOTSender,
+};
 
-use super::{into_base_sink, into_base_stream, ReceiverError, ReceiverVerifyError};
+use super::{
+    into_base_sink, into_base_stream, random_bytes_from_seed, ReceiverError, ReceiverVerifyError,
+};
 
 #[derive(Debug, EnumTryAsInner)]
 #[derive_err(Debug)]
@@ -304,6 +309,26 @@ where
 }
 
 #[async_trait]
+impl<BaseOT> ChosenMessageRandomOTReceiver<bool, Block> for Receiver<BaseOT>
+where
+    BaseOT: ProtocolMessage + Send,
+{
+    async fn receive(&mut self, count: usize) -> Result<(Vec<bool>, Vec<Block>), OTError> {
+        let receiver = self
+            .state
+            .try_as_extension_mut()
+            .map_err(ReceiverError::from)?;
+
+        let (choices, random_outputs) = receiver
+            .keys(count)
+            .map_err(ReceiverError::from)?
+            .take_choices_and_keys();
+
+        Ok((choices, random_outputs))
+    }
+}
+
+#[async_trait]
 impl<const N: usize, BaseOT> OTReceiver<bool, [u8; N]> for Receiver<BaseOT>
 where
     BaseOT: ProtocolMessage + Send,
@@ -347,6 +372,32 @@ where
         .await?;
 
         Ok(received)
+    }
+}
+
+#[async_trait]
+impl<const N: usize, BaseOT> ChosenMessageRandomOTReceiver<bool, [u8; N]> for Receiver<BaseOT>
+where
+    BaseOT: ProtocolMessage + Send,
+{
+    async fn receive(&mut self, count: usize) -> Result<(Vec<bool>, Vec<[u8; N]>), OTError> {
+        let receiver = self
+            .state
+            .try_as_extension_mut()
+            .map_err(ReceiverError::from)?;
+
+        let (choices, random_outputs) = receiver
+            .keys(count)
+            .map_err(ReceiverError::from)?
+            .take_choices_and_keys();
+
+        Ok((
+            choices,
+            random_outputs
+                .into_iter()
+                .map(|block| random_bytes_from_seed(block.to_bytes()))
+                .collect(),
+        ))
     }
 }
 

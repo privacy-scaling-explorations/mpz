@@ -68,6 +68,22 @@ where
     ) -> Result<(), OTError>;
 }
 
+/// A random OT sender.
+///
+/// The OT sender gets two messages which are guaranteed to be random by the protocol.
+///
+/// # Arguments
+///
+/// * `count` - The number of random messages to get.
+#[async_trait]
+pub trait RandomOTSender<T>
+where
+    T: Send + Sync,
+{
+    /// Outputs two random messages.
+    async fn random_messages(&mut self, count: usize) -> Result<Vec<T>, OTError>;
+}
+
 /// An oblivious transfer receiver.
 #[async_trait]
 pub trait OTReceiver<T, U>: ProtocolMessage
@@ -88,6 +104,26 @@ where
         stream: &mut St,
         choices: &[T],
     ) -> Result<Vec<U>, OTError>;
+}
+
+/// A random OT receiver.
+///
+/// ATTENTION: This is a random OT receiver trait where from a security perspective the receiver
+/// could make the choice of which message to receive. Although this is not exposed in the interface,
+/// this trait is meant for protocols, where the receiver could choose the choice bit. So do NOT
+/// use this trait in your protocol if it is required that the receiver's choices are random.
+#[async_trait]
+pub trait ChosenMessageRandomOTReceiver<T, U>
+where
+    T: Send + Sync,
+    U: Send + Sync,
+{
+    /// Outputs the choice bits and the corresponding messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The number of random messages to receive.
+    async fn receive(&mut self, count: usize) -> Result<(Vec<T>, Vec<U>), OTError>;
 }
 
 /// An oblivious transfer sender that is committed to its messages and can reveal them

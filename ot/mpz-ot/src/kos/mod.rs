@@ -6,6 +6,8 @@ mod sender;
 
 pub use error::{ReceiverError, ReceiverVerifyError, SenderError};
 use futures_util::{SinkExt, StreamExt};
+use rand_chacha::ChaCha20Rng;
+use rand_core::{RngCore, SeedableRng};
 pub use receiver::Receiver;
 pub use sender::Sender;
 
@@ -35,6 +37,19 @@ pub(crate) fn into_base_stream<'a, St: IoStream<msgs::Message<T>> + Send + Unpin
         Ok(msg) => msg.try_into_base_msg().map_err(From::from),
         Err(err) => Err(err),
     })
+}
+
+/// Stretches a 16-byte seed to arbitrary length using ChaCha20.
+fn random_bytes_from_seed<const N: usize>(seed: [u8; 16]) -> [u8; N] {
+    let mut stretched_seed = [0_u8; 32];
+    let double_seed = [seed, seed].concat();
+
+    stretched_seed.copy_from_slice(&double_seed);
+    let mut rng = ChaCha20Rng::from_seed(stretched_seed);
+
+    let mut output = [0_u8; N];
+    rng.fill_bytes(&mut output);
+    output
 }
 
 #[cfg(test)]

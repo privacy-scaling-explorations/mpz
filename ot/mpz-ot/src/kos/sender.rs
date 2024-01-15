@@ -1,6 +1,6 @@
 use crate::{
     kos::SenderError, CommittedOTReceiver, CommittedOTSender, OTError, OTReceiver, OTSender,
-    OTSetup,
+    OTSetup, RandomOTSender,
 };
 
 use async_trait::async_trait;
@@ -19,7 +19,7 @@ use utils_aio::{
 
 use enum_try_as_inner::EnumTryAsInner;
 
-use super::{into_base_sink, into_base_stream};
+use super::{into_base_sink, into_base_stream, random_bytes_from_seed};
 
 #[derive(Debug, EnumTryAsInner)]
 #[derive_err(Debug)]
@@ -337,6 +337,22 @@ where
 }
 
 #[async_trait]
+impl<BaseOT> RandomOTSender<[Block; 2]> for Sender<BaseOT>
+where
+    BaseOT: ProtocolMessage + Send,
+{
+    async fn random_messages(&mut self, count: usize) -> Result<Vec<[Block; 2]>, OTError> {
+        let sender = self
+            .state
+            .try_as_extension_mut()
+            .map_err(SenderError::from)?;
+
+        let random_outputs = sender.keys(count).map_err(SenderError::from)?;
+        Ok(random_outputs.take_keys())
+    }
+}
+
+#[async_trait]
 impl<const N: usize, BaseOT> OTSender<[[u8; N]; 2]> for Sender<BaseOT>
 where
     BaseOT: ProtocolMessage + Send,
@@ -372,6 +388,32 @@ where
             .map_err(SenderError::from)?;
 
         Ok(())
+    }
+}
+
+#[async_trait]
+impl<const N: usize, BaseOT> RandomOTSender<[[u8; N]; 2]> for Sender<BaseOT>
+where
+    BaseOT: ProtocolMessage + Send,
+{
+    async fn random_messages(&mut self, count: usize) -> Result<Vec<[[u8; N]; 2]>, OTError> {
+        let sender = self
+            .state
+            .try_as_extension_mut()
+            .map_err(SenderError::from)?;
+
+        let random_outputs = sender.keys(count).map_err(SenderError::from)?;
+
+        Ok(random_outputs
+            .take_keys()
+            .into_iter()
+            .map(|[a, b]| {
+                [
+                    random_bytes_from_seed(a.to_bytes()),
+                    random_bytes_from_seed(b.to_bytes()),
+                ]
+            })
+            .collect())
     }
 }
 
