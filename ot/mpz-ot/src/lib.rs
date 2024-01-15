@@ -71,16 +71,16 @@ where
 /// A random OT sender.
 ///
 /// The OT sender gets two messages which are guaranteed to be random by the protocol.
-///
-/// # Arguments
-///
-/// * `count` - The number of random messages to get.
 #[async_trait]
 pub trait RandomOTSender<T>
 where
     T: Send + Sync,
 {
     /// Outputs two random messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The number of random messages to get.
     async fn random_messages(&mut self, count: usize) -> Result<Vec<T>, OTError>;
 }
 
