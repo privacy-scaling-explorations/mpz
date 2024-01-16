@@ -116,6 +116,32 @@ where
     ) -> Result<Vec<T>, OTError>;
 }
 
+/// A random correlated oblivious transfer sender.
+#[async_trait]
+pub trait RandomCOTSender<T>: ProtocolMessage
+where
+    T: Send + Sync,
+{
+    /// Obliviously transfers the correlations to the receiver.
+    ///
+    /// Returns the `0`-bit messages that were obliviously transferred.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the receiver.
+    /// * `stream` - The IO stream from the receiver.
+    /// * `count` - The number of correlations to obliviously transfer.
+    async fn send_random_correlated<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<Vec<T>, OTError>;
+}
+
 /// An oblivious transfer receiver.
 #[async_trait]
 pub trait OTReceiver<T, U>: ProtocolMessage
@@ -178,6 +204,33 @@ where
     /// * `stream` - The IO stream from the sender.
     /// * `count` - The number of random messages to receive.
     async fn receive_random<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<(Vec<T>, Vec<U>), OTError>;
+}
+
+/// A random correlated oblivious transfer receiver.
+#[async_trait]
+pub trait RandomCOTReceiver<T, U>: ProtocolMessage
+where
+    T: Send + Sync,
+    U: Send + Sync,
+{
+    /// Obliviously receives correlated messages with random choices.
+    ///
+    /// Returns a tuple of the choices and the messages, respectively.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the sender.
+    /// * `stream` - The IO stream from the sender.
+    /// * `count` - The number of correlations to obliviously receive.
+    async fn receive_random_correlated<
         Si: IoSink<Self::Msg> + Send + Unpin,
         St: IoStream<Self::Msg> + Send + Unpin,
     >(
@@ -315,6 +368,20 @@ pub trait COTSenderShared<T> {
     async fn send_correlated(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
 }
 
+/// A random correlated oblivious transfer sender that can be used via a shared reference.
+#[async_trait]
+pub trait RandomCOTSenderShared<T> {
+    /// Obliviously transfers correlated messages to the receiver.
+    ///
+    /// Returns the `0`-bit messages that were obliviously transferred.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `count` - The number of correlations to obliviously transfer.
+    async fn send_random_correlated(&self, id: &str, count: usize) -> Result<Vec<T>, OTError>;
+}
+
 /// An oblivious transfer receiver that can be used via a shared reference.
 #[async_trait]
 pub trait OTReceiverShared<T, U> {
@@ -337,6 +404,24 @@ pub trait COTReceiverShared<T, U> {
     /// * `id` - The unique identifier for this transfer.
     /// * `choices` - The choices made by the receiver.
     async fn receive_correlated(&self, id: &str, choices: &[T]) -> Result<Vec<U>, OTError>;
+}
+
+/// A random correlated oblivious transfer receiver that can be used via a shared reference.
+#[async_trait]
+pub trait RandomCOTReceiverShared<T, U> {
+    /// Obliviously receives correlated messages with random choices.
+    ///
+    /// Returns a tuple of the choices and the messages, respectively.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `count` - The number of correlations to obliviously receive.
+    async fn receive_random_correlated(
+        &self,
+        id: &str,
+        count: usize,
+    ) -> Result<(Vec<T>, Vec<U>), OTError>;
 }
 
 /// An oblivious transfer sender that is committed to its messages and can reveal them
