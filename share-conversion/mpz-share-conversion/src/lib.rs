@@ -100,7 +100,7 @@ mod tests {
 
     use crate::config::{ReceiverConfig, SenderConfig};
 
-    use mpz_ot::mock::{mock_ot_shared_pair, MockSharedOTReceiver, MockSharedOTSender};
+    use mpz_ot::ideal::{ideal_ot_shared_pair, IdealSharedOTReceiver, IdealSharedOTSender};
     use mpz_share_conversion_core::{
         fields::{gf2_128::Gf2_128, p256::P256, Field},
         ShareType,
@@ -132,10 +132,10 @@ mod tests {
         #[case] _pd: PhantomData<T>,
         #[values(false, true)] malicious: bool,
     ) where
-        MockSharedOTSender: OTSendElement<T>,
-        MockSharedOTReceiver: OTReceiveElement<T>,
+        IdealSharedOTSender: OTSendElement<T>,
+        IdealSharedOTReceiver: OTReceiveElement<T>,
     {
-        let (ot_sender, ot_receiver) = mock_ot_shared_pair();
+        let (ot_sender, ot_receiver) = ideal_ot_shared_pair();
         let (mut sender_channel, mut receiver_channel) = MemoryDuplex::new();
         let (mut sender, mut receiver) = create_pair::<T>();
         let mut rng = ChaCha20Rng::from_seed([0; 32]);

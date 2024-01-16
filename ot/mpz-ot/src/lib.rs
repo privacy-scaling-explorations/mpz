@@ -7,9 +7,9 @@
 #[cfg(feature = "actor")]
 pub mod actor;
 pub mod chou_orlandi;
+#[cfg(feature = "ideal")]
+pub mod ideal;
 pub mod kos;
-#[cfg(feature = "mock")]
-pub mod mock;
 
 use async_trait::async_trait;
 use mpz_core::ProtocolMessage;

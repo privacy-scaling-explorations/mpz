@@ -11,17 +11,17 @@ use crate::{
     CommittedOTSenderShared, OTError, OTReceiverShared, OTSenderShared, VerifiableOTReceiverShared,
 };
 
-/// Creates a mock sender and receiver pair.
-pub fn mock_ot_shared_pair() -> (MockSharedOTSender, MockSharedOTReceiver) {
+/// Creates a ideal sender and receiver pair.
+pub fn ideal_ot_shared_pair() -> (IdealSharedOTSender, IdealSharedOTReceiver) {
     let sender_buffer = Arc::new(Mutex::new(HashMap::new()));
     let receiver_buffer = Arc::new(Mutex::new(HashMap::new()));
 
-    let sender = MockSharedOTSender {
+    let sender = IdealSharedOTSender {
         sender_buffer: sender_buffer.clone(),
         receiver_buffer: receiver_buffer.clone(),
     };
 
-    let receiver = MockSharedOTReceiver {
+    let receiver = IdealSharedOTReceiver {
         sender_buffer,
         receiver_buffer,
     };
@@ -32,21 +32,21 @@ pub fn mock_ot_shared_pair() -> (MockSharedOTSender, MockSharedOTReceiver) {
 /// A mock oblivious transfer sender.
 #[derive(Clone, Debug)]
 #[allow(clippy::type_complexity)]
-pub struct MockSharedOTSender {
+pub struct IdealSharedOTSender {
     sender_buffer: Arc<Mutex<HashMap<String, Box<dyn Any + Send + 'static>>>>,
     receiver_buffer: Arc<Mutex<HashMap<String, oneshot::Sender<Box<dyn Any + Send + 'static>>>>>,
 }
 
 #[async_trait]
 impl<T: Clone + std::fmt::Debug + Send + Sync + 'static> OTSenderShared<[T; 2]>
-    for MockSharedOTSender
+    for IdealSharedOTSender
 {
     async fn send(&self, id: &str, msgs: &[[T; 2]]) -> Result<(), OTError> {
         let msgs = Box::new(msgs.to_vec());
         if let Some(sender) = self.receiver_buffer.lock().unwrap().remove(id) {
             sender
                 .send(msgs)
-                .expect("MockOTSenderControl should be able to send");
+                .expect("IdealOTSenderControl should be able to send");
         } else {
             self.sender_buffer
                 .lock()
@@ -59,7 +59,7 @@ impl<T: Clone + std::fmt::Debug + Send + Sync + 'static> OTSenderShared<[T; 2]>
 
 #[async_trait]
 impl<T: Clone + std::fmt::Debug + Send + Sync + 'static> CommittedOTSenderShared<[T; 2]>
-    for MockSharedOTSender
+    for IdealSharedOTSender
 {
     async fn reveal(&self) -> Result<(), OTError> {
         Ok(())
@@ -69,13 +69,13 @@ impl<T: Clone + std::fmt::Debug + Send + Sync + 'static> CommittedOTSenderShared
 /// A mock oblivious transfer receiver.
 #[derive(Clone, Debug)]
 #[allow(clippy::type_complexity)]
-pub struct MockSharedOTReceiver {
+pub struct IdealSharedOTReceiver {
     sender_buffer: Arc<Mutex<HashMap<String, Box<dyn Any + Send + 'static>>>>,
     receiver_buffer: Arc<Mutex<HashMap<String, oneshot::Sender<Box<dyn Any + Send + 'static>>>>>,
 }
 
 #[async_trait]
-impl<T: Send + Copy + 'static> OTReceiverShared<bool, T> for MockSharedOTReceiver {
+impl<T: Send + Copy + 'static> OTReceiverShared<bool, T> for IdealSharedOTReceiver {
     async fn receive(&self, id: &str, choices: &[bool]) -> Result<Vec<T>, OTError> {
         if let Some(value) = self.sender_buffer.lock().unwrap().remove(id) {
             let value = *value
@@ -111,10 +111,10 @@ impl<T: Send + Copy + 'static> OTReceiverShared<bool, T> for MockSharedOTReceive
 
 #[async_trait]
 impl<T: Send + Copy + 'static> VerifiableOTReceiverShared<bool, T, [T; 2]>
-    for MockSharedOTReceiver
+    for IdealSharedOTReceiver
 {
     async fn verify(&self, _id: &str, _msgs: &[[T; 2]]) -> Result<(), OTError> {
-        // MockOT is always honest
+        // Ideal OT is always honest
         Ok(())
     }
 }
@@ -124,10 +124,10 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_mock_ot() {
+    async fn test_ideal_ot() {
         let values = vec![[0, 1], [2, 3]];
         let choices = vec![false, true];
-        let (sender, receiver) = mock_ot_shared_pair();
+        let (sender, receiver) = ideal_ot_shared_pair();
 
         sender.send("", &values).await.unwrap();
 

@@ -52,7 +52,7 @@ mod tests {
     use utils_aio::{duplex::MemoryDuplex, sink::IoSink, stream::IoStream};
 
     use crate::{
-        mock::{mock_ot_pair, MockOTReceiver, MockOTSender},
+        ideal::{ideal_ot_pair, IdealOTReceiver, IdealOTSender},
         OTReceiver, OTSender, OTSetup, RandomOTReceiver, RandomOTSender, VerifiableOTReceiver,
     };
 
@@ -89,8 +89,11 @@ mod tests {
         receiver_sink: &mut Si,
         receiver_stream: &mut St,
         count: usize,
-    ) -> (Sender<MockOTReceiver<Block>>, Receiver<MockOTSender<Block>>) {
-        let (base_sender, base_receiver) = mock_ot_pair();
+    ) -> (
+        Sender<IdealOTReceiver<Block>>,
+        Receiver<IdealOTSender<Block>>,
+    ) {
+        let (base_sender, base_receiver) = ideal_ot_pair();
 
         let mut sender = Sender::new(sender_config, base_receiver);
         let mut receiver = Receiver::new(receiver_config, base_sender);
