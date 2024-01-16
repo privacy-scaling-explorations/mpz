@@ -1,25 +1,24 @@
-use crate::{
-    kos::SenderError, CommittedOTReceiver, CommittedOTSender, OTError, OTReceiver, OTSender,
-    OTSetup, RandomOTSender,
-};
-
 use async_trait::async_trait;
+use enum_try_as_inner::EnumTryAsInner;
 use futures_util::SinkExt;
 use itybity::IntoBits;
-use mpz_core::{cointoss, Block, ProtocolMessage};
+use mpz_core::{cointoss, prg::Prg, Block, ProtocolMessage};
 use mpz_ot_core::kos::{
     msgs::Message, sender_state as state, Sender as SenderCore, SenderConfig, CSP, SSP,
 };
 use rand::{thread_rng, Rng};
+use rand_core::{RngCore, SeedableRng};
 use utils_aio::{
     non_blocking_backend::{Backend, NonBlockingBackend},
     sink::IoSink,
     stream::{ExpectStreamExt, IoStream},
 };
 
-use enum_try_as_inner::EnumTryAsInner;
-
-use super::{into_base_sink, into_base_stream, random_bytes_from_seed};
+use super::{into_base_sink, into_base_stream};
+use crate::{
+    kos::SenderError, CommittedOTReceiver, CommittedOTSender, OTError, OTReceiver, OTSender,
+    OTSetup, RandomOTSender,
+};
 
 #[derive(Debug, EnumTryAsInner)]
 #[derive_err(Debug)]
@@ -341,7 +340,15 @@ impl<BaseOT> RandomOTSender<[Block; 2]> for Sender<BaseOT>
 where
     BaseOT: ProtocolMessage + Send,
 {
-    async fn random_messages(&mut self, count: usize) -> Result<Vec<[Block; 2]>, OTError> {
+    async fn send_random<
+        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
+        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
+    >(
+        &mut self,
+        _sink: &mut Si,
+        _stream: &mut St,
+        count: usize,
+    ) -> Result<Vec<[Block; 2]>, OTError> {
         let sender = self
             .state
             .try_as_extension_mut()
@@ -396,7 +403,15 @@ impl<const N: usize, BaseOT> RandomOTSender<[[u8; N]; 2]> for Sender<BaseOT>
 where
     BaseOT: ProtocolMessage + Send,
 {
-    async fn random_messages(&mut self, count: usize) -> Result<Vec<[[u8; N]; 2]>, OTError> {
+    async fn send_random<
+        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
+        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
+    >(
+        &mut self,
+        _sink: &mut Si,
+        _stream: &mut St,
+        count: usize,
+    ) -> Result<Vec<[[u8; N]; 2]>, OTError> {
         let sender = self
             .state
             .try_as_extension_mut()
@@ -404,15 +419,17 @@ where
 
         let random_outputs = sender.keys(count).map_err(SenderError::from)?;
 
+        let prng = |block| {
+            let mut prg = Prg::from_seed(block);
+            let mut out = [0_u8; N];
+            prg.fill_bytes(&mut out);
+            out
+        };
+
         Ok(random_outputs
             .take_keys()
             .into_iter()
-            .map(|[a, b]| {
-                [
-                    random_bytes_from_seed(a.to_bytes()),
-                    random_bytes_from_seed(b.to_bytes()),
-                ]
-            })
+            .map(|[a, b]| [prng(a), prng(b)])
             .collect())
     }
 }

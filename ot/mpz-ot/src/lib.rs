@@ -69,10 +69,8 @@ where
 }
 
 /// A random OT sender.
-///
-/// The OT sender gets two messages which are guaranteed to be random by the protocol.
 #[async_trait]
-pub trait RandomOTSender<T>
+pub trait RandomOTSender<T>: ProtocolMessage
 where
     T: Send + Sync,
 {
@@ -80,8 +78,18 @@ where
     ///
     /// # Arguments
     ///
+    /// * `sink` - The IO sink to the receiver.
+    /// * `stream` - The IO stream from the receiver.
     /// * `count` - The number of random messages to get.
-    async fn random_messages(&mut self, count: usize) -> Result<Vec<T>, OTError>;
+    async fn send_random<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<Vec<T>, OTError>;
 }
 
 /// An oblivious transfer receiver.
@@ -107,13 +115,8 @@ where
 }
 
 /// A random OT receiver.
-///
-/// ATTENTION: This is a random OT receiver trait where from a security perspective the receiver
-/// could make the choice of which message to receive. Although this is not exposed in the interface,
-/// this trait is meant for protocols, where the receiver could choose the choice bit. So do NOT
-/// use this trait in your protocol if it is required that the receiver's choices are random.
 #[async_trait]
-pub trait ChosenMessageRandomOTReceiver<T, U>
+pub trait RandomOTReceiver<T, U>: ProtocolMessage
 where
     T: Send + Sync,
     U: Send + Sync,
@@ -122,8 +125,18 @@ where
     ///
     /// # Arguments
     ///
+    /// * `sink` - The IO sink to the sender.
+    /// * `stream` - The IO stream from the sender.
     /// * `count` - The number of random messages to receive.
-    async fn receive(&mut self, count: usize) -> Result<(Vec<T>, Vec<U>), OTError>;
+    async fn receive_random<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<(Vec<T>, Vec<U>), OTError>;
 }
 
 /// An oblivious transfer sender that is committed to its messages and can reveal them
