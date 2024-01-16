@@ -300,10 +300,34 @@ pub trait OTSenderShared<T> {
     async fn send(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
 }
 
+/// A correlated oblivious transfer sender that can be used via a shared reference.
+#[async_trait]
+pub trait COTSenderShared<T> {
+    /// Obliviously transfers correlated messages to the receiver.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `msgs` - The `0`-bit messages to obliviously transfer.
+    async fn send(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
+}
+
 /// An oblivious transfer receiver that can be used via a shared reference.
 #[async_trait]
 pub trait OTReceiverShared<T, U> {
     /// Obliviously receives data from the sender.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `choices` - The choices made by the receiver.
+    async fn receive(&self, id: &str, choices: &[T]) -> Result<Vec<U>, OTError>;
+}
+
+/// A correlated oblivious transfer receiver that can be used via a shared reference.
+#[async_trait]
+pub trait COTReceiverShared<T, U> {
+    /// Obliviously receives correlated messages from the sender.
     ///
     /// # Arguments
     ///
