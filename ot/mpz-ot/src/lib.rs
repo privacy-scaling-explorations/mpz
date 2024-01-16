@@ -152,7 +152,10 @@ where
     /// * `sink` - The IO sink to the sender.
     /// * `stream` - The IO stream from the sender.
     /// * `choices` - The choices made by the receiver.
-    async fn receive<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
+    async fn receive_correlated<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
         &mut self,
         sink: &mut Si,
         stream: &mut St,
@@ -309,7 +312,7 @@ pub trait COTSenderShared<T> {
     ///
     /// * `id` - The unique identifier for this transfer.
     /// * `msgs` - The `0`-bit messages to obliviously transfer.
-    async fn send(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
+    async fn send_correlated(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
 }
 
 /// An oblivious transfer receiver that can be used via a shared reference.
@@ -333,7 +336,7 @@ pub trait COTReceiverShared<T, U> {
     ///
     /// * `id` - The unique identifier for this transfer.
     /// * `choices` - The choices made by the receiver.
-    async fn receive(&self, id: &str, choices: &[T]) -> Result<Vec<U>, OTError>;
+    async fn receive_correlated(&self, id: &str, choices: &[T]) -> Result<Vec<U>, OTError>;
 }
 
 /// An oblivious transfer sender that is committed to its messages and can reveal them
