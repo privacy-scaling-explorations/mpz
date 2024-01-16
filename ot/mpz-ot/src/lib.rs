@@ -68,6 +68,30 @@ where
     ) -> Result<(), OTError>;
 }
 
+/// A correlated oblivious transfer sender.
+#[async_trait]
+pub trait COTSender<T>: ProtocolMessage
+where
+    T: Send + Sync,
+{
+    /// Obliviously transfers the correlations to the receiver.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the receiver.
+    /// * `stream` - The IO stream from the receiver.
+    /// * `msgs` - The `0`-bit messages to obliviously transfer.
+    async fn send_correlated<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        msgs: &[T],
+    ) -> Result<(), OTError>;
+}
+
 /// A random OT sender.
 #[async_trait]
 pub trait RandomOTSender<T>: ProtocolMessage
@@ -100,6 +124,28 @@ where
     U: Send + Sync,
 {
     /// Obliviously receives data from the sender.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the sender.
+    /// * `stream` - The IO stream from the sender.
+    /// * `choices` - The choices made by the receiver.
+    async fn receive<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        choices: &[T],
+    ) -> Result<Vec<U>, OTError>;
+}
+
+/// A correlated oblivious transfer receiver.
+#[async_trait]
+pub trait COTReceiver<T, U>: ProtocolMessage
+where
+    T: Send + Sync,
+    U: Send + Sync,
+{
+    /// Obliviously receives correlated messages from the sender.
     ///
     /// # Arguments
     ///
