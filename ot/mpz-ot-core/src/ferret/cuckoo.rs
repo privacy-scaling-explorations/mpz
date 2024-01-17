@@ -1,16 +1,15 @@
-//! Utils for the implementation of Ferret.
+//! Implementation of Cuckoo hash.
+
+use std::sync::Arc;
 
 use mpz_core::{aes::AesEncryptor, Block};
 
 use super::{CUCKOO_HASH_NUM, CUCKOO_TRIAL_NUM};
 
-/// Errors that can occur when inserting Cuckoo hash.
+/// Cuckoo hash insertion error
 #[derive(Debug, thiserror::Error)]
-#[allow(missing_docs)]
-pub enum CuckooHashError {
-    #[error("invalid Cuckoo hash state: expected {0}")]
-    CuckooHashLoop(String),
-}
+#[error("insertion loops")]
+pub struct CuckooHashError;
 
 /// Errors that can occur when handling Buckets.
 #[derive(Debug, thiserror::Error)]
@@ -26,32 +25,21 @@ pub enum BucketError {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Item {
     /// Value in the table.
-    pub value: u32,
+    pub(crate) value: u32,
     /// The hash index during the insertion.
-    pub hash_index: usize,
+    pub(crate) hash_index: usize,
 }
 
 /// Implementation of Cuckoo hash. See [here](https://eprint.iacr.org/2019/1084.pdf) for reference.
-pub struct CuckooHash<'a> {
-    /// The table contains the elements.
-    pub table: Vec<Option<Item>>,
-    /// The length of the table.
-    pub m: usize,
-    // The hash functions.
-    hashes: &'a [AesEncryptor; CUCKOO_HASH_NUM],
+pub struct CuckooHash {
+    hashes: Arc<[AesEncryptor; CUCKOO_HASH_NUM]>,
 }
 
-impl<'a> CuckooHash<'a> {
+impl CuckooHash {
     /// Creates a new instance.
     #[inline]
-    pub fn new(hashes: &'a [AesEncryptor; CUCKOO_HASH_NUM]) -> Self {
-        let table = Vec::default();
-
-        Self {
-            table,
-            m: 0,
-            hashes,
-        }
+    pub fn new(hashes: Arc<[AesEncryptor; CUCKOO_HASH_NUM]>) -> Self {
+        Self { hashes }
     }
 
     /// Insert elements into a Cuckoo hash table.
@@ -60,23 +48,22 @@ impl<'a> CuckooHash<'a> {
     ///
     /// * `alphas` - A u32 vector being inserted.
     #[inline]
-    pub fn insert(&mut self, alphas: &[u32]) -> Result<(), CuckooHashError> {
+    pub fn insert(&self, alphas: &[u32]) -> Result<Vec<Option<Item>>, CuckooHashError> {
         // Always sets m = 1.5 * t. t is the length of `alphas`.
-        self.m = compute_table_length(alphas.len() as u32);
+        let m = compute_table_length(alphas.len() as u32);
 
         // Allocates table.
-        self.table = vec![None; self.m];
-
+        let mut table = vec![None; m];
         // Inserts each alpha.
         for &value in alphas {
-            self.hash(value)?
+            self.hash(&mut table, value)?
         }
-        Ok(())
+        Ok(table)
     }
 
     // Hash an element to a position with the current hash function.
     #[inline]
-    fn hash(&mut self, value: u32) -> Result<(), CuckooHashError> {
+    fn hash(&self, table: &mut Vec<Option<Item>>, value: u32) -> Result<(), CuckooHashError> {
         // The item consists of the value and hash index, starting from 0.
         let mut item = Item {
             value,
@@ -85,10 +72,10 @@ impl<'a> CuckooHash<'a> {
 
         for _ in 0..CUCKOO_TRIAL_NUM {
             // Computes the position of the value.
-            let pos = hash_to_index(&self.hashes[item.hash_index], self.m, item.value);
+            let pos = hash_to_index(&self.hashes[item.hash_index], table.len(), item.value);
 
             // Inserts the value to position `pos`.
-            let opt_item = self.table[pos].replace(item);
+            let opt_item = table[pos].replace(item);
 
             // If position `pos` is not empty before the above insertion, iteratively inserts the obtained value.
             if let Some(x) = opt_item {
@@ -99,31 +86,23 @@ impl<'a> CuckooHash<'a> {
                 return Ok(());
             }
         }
-        Err(CuckooHashError::CuckooHashLoop(
-            "insertion loops".to_string(),
-        ))
+        Err(CuckooHashError)
     }
 }
 
 /// Implementation of Bucket. See step 3 in Figure 7
-pub struct Bucket<'a> {
+pub struct Bucket {
     // The hash functions.
-    hashes: &'a [AesEncryptor; CUCKOO_HASH_NUM],
+    hashes: Arc<[AesEncryptor; CUCKOO_HASH_NUM]>,
     // The number of buckets.
     m: usize,
-    /// The buckets contain all the elements.
-    pub buckets: Vec<Vec<Item>>,
 }
 
-impl<'a> Bucket<'a> {
+impl Bucket {
     /// Creates a new instance.
     #[inline]
-    pub fn new(hashes: &'a [AesEncryptor; CUCKOO_HASH_NUM], m: usize) -> Self {
-        Self {
-            hashes,
-            m,
-            buckets: Vec::default(),
-        }
+    pub fn new(hashes: Arc<[AesEncryptor; CUCKOO_HASH_NUM]>, m: usize) -> Self {
+        Self { hashes, m }
     }
 
     /// Inserts the input vector [0..n-1] into buckets.
@@ -132,21 +111,23 @@ impl<'a> Bucket<'a> {
     ///
     /// * `n` - The length of the vector [0..n-1].
     #[inline]
-    pub fn insert(&mut self, n: u32) {
-        self.buckets = vec![Vec::default(); self.m];
+    pub fn insert(&self, n: u32) -> Vec<Vec<Item>> {
+        let mut buckets = vec![Vec::default(); self.m];
+        // NOTE: the sorted step in Step 3.c can be removed.
         for i in 0..n {
             for (index, hash) in self.hashes.iter().enumerate() {
                 let pos = hash_to_index(hash, self.m, i);
-                self.buckets[pos].push(Item {
+                buckets[pos].push(Item {
                     value: i,
                     hash_index: index,
                 });
             }
         }
+        buckets
     }
 }
 
-// Always sets m = 1.5 * t. t is the length of `alphas`.
+// Always sets m = 1.5 * t. t is the length of `alphas`. See Section 7.1 Parameter Selection.
 #[inline(always)]
 pub(crate) fn compute_table_length(t: u32) -> usize {
     (1.5 * (t as f32)).ceil() as usize
@@ -170,7 +151,8 @@ pub(crate) fn find_pos(bucket: &[Item], item: &Item) -> Result<usize, BucketErro
 
 #[cfg(test)]
 mod tests {
-    use crate::ferret::utils::find_pos;
+    use crate::ferret::cuckoo::find_pos;
+    use std::sync::Arc;
 
     use super::{Bucket, CuckooHash};
     use mpz_core::{aes::AesEncryptor, prg::Prg};
@@ -179,28 +161,28 @@ mod tests {
     fn cockoo_hash_bucket_test() {
         let mut prg = Prg::new();
         const NUM: usize = 50;
-        let hashes = std::array::from_fn(|_| AesEncryptor::new(prg.random_block()));
-        let mut cuckoo = CuckooHash::new(&hashes);
+        let hashes = Arc::new(std::array::from_fn(|_| {
+            AesEncryptor::new(prg.random_block())
+        }));
+        let cuckoo = CuckooHash::new(hashes.clone());
         let input: [u32; NUM] = std::array::from_fn(|i| i as u32);
 
-        cuckoo.insert(&input).unwrap();
+        let table = cuckoo.insert(&input).unwrap();
 
-        let mut bucket = Bucket::new(&hashes, cuckoo.m);
-        bucket.insert((2 * NUM) as u32);
+        let bucket = Bucket::new(hashes, table.len());
+        let buckets = bucket.insert((2 * NUM) as u32);
 
-        assert!(cuckoo
-            .table
+        assert!(table
             .iter()
-            .zip(bucket.buckets.iter())
+            .zip(buckets.iter())
             .all(|(value, bin)| match value {
                 Some(x) => bin.contains(x),
                 None => true,
             }));
 
-        let _: Vec<usize> = cuckoo
-            .table
+        let _: Vec<usize> = table
             .iter()
-            .zip(bucket.buckets.iter())
+            .zip(buckets.iter())
             .map(|(value, bin)| {
                 if let Some(x) = value {
                     find_pos(bin, x).unwrap()

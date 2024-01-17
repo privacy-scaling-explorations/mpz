@@ -20,7 +20,7 @@ mod tests {
     fn mpcot_general_test() {
         let mut prg = Prg::new();
         let delta = prg.random_block();
-        let mut ideal_spcot = IdealSpcot::init_with_delta(delta);
+        let mut ideal_spcot = IdealSpcot::new_with_delta(delta);
 
         let sender = MpcotSender::new();
         let receiver = MpcotReceiver::new();
@@ -96,7 +96,7 @@ mod tests {
     fn mpcot_regular_test() {
         let mut prg = Prg::new();
         let delta = prg.random_block();
-        let mut ideal_spcot = IdealSpcot::init_with_delta(delta);
+        let mut ideal_spcot = IdealSpcot::new_with_delta(delta);
 
         let sender = RegularSender::new();
         let receiver = RegularReceiver::new();

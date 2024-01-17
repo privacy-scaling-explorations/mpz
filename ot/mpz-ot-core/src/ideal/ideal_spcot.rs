@@ -19,14 +19,14 @@ pub struct SpcotMsgForReceiver {
 
 #[allow(missing_docs)]
 pub struct IdealSpcot {
-    pub delta: Block,
-    pub counter: usize,
-    pub prg: Prg,
+    delta: Block,
+    counter: usize,
+    prg: Prg,
 }
 
 impl IdealSpcot {
     /// Initiate the functionality.
-    pub fn init() -> Self {
+    pub fn new() -> Self {
         let mut prg = Prg::new();
         let delta = prg.random_block();
         IdealSpcot {
@@ -37,7 +37,7 @@ impl IdealSpcot {
     }
 
     /// Initiate with a given delta
-    pub fn init_with_delta(delta: Block) -> Self {
+    pub fn new_with_delta(delta: Block) -> Self {
         let prg = Prg::new();
         IdealSpcot {
             delta,
@@ -69,7 +69,7 @@ impl IdealSpcot {
         (SpcotMsgForSender { v }, SpcotMsgForReceiver { w })
     }
 
-    /// Performs the checks.
+    /// Checks if the outputs statisfy the relation with Delta, this is only used for test.
     ///
     /// # Arguments
     ///
@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     fn ideal_spcot_test() {
-        let mut ideal_spcot = IdealSpcot::init();
+        let mut ideal_spcot = IdealSpcot::new();
 
         let (sender_msg, receiver_msg) = ideal_spcot.extend(&[(10, 2), (20, 3)]);
 

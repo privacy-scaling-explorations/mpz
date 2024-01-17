@@ -1,8 +1,9 @@
 //! MPCOT sender for general indices.
+use std::sync::Arc;
 
 use crate::ferret::{
+    cuckoo::{compute_table_length, find_pos, hash_to_index, Bucket, Item},
     mpcot::error::SenderError,
-    utils::{compute_table_length, find_pos, hash_to_index, Bucket, Item},
     CUCKOO_HASH_NUM,
 };
 use mpz_core::{aes::AesEncryptor, prg::Prg, Block};
@@ -39,7 +40,7 @@ impl Sender {
                 delta,
                 counter: 0,
                 m: 0,
-                hashes,
+                hashes: Arc::new(hashes),
                 buckets: Vec::default(),
                 buckets_length: Vec::default(),
             },
@@ -67,14 +68,14 @@ impl Sender<state::Extension> {
         // Compute m = 1.5 * t.
         self.state.m = compute_table_length(t);
 
-        let mut bucket = Bucket::new(&self.state.hashes, self.state.m);
+        let bucket = Bucket::new(self.state.hashes.clone(), self.state.m);
 
         // Geneates the buckets.
-        bucket.insert(n);
+        let buckets = bucket.insert(n);
 
         // Computes `log(length + 1)` of each bucket.
         let mut bs = vec![];
-        for bin in bucket.buckets.iter() {
+        for bin in buckets.iter() {
             if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
                 bs.push(power.ilog2() as usize);
                 self.state.buckets_length.push(power);
@@ -86,7 +87,7 @@ impl Sender<state::Extension> {
         }
 
         // Stores the buckets.
-        self.state.buckets = bucket.buckets;
+        self.state.buckets = buckets;
 
         Ok(bs)
     }
@@ -180,7 +181,7 @@ pub mod state {
         /// Current length of Cuckoo hash table, will possibly be changed in each extension.
         pub(super) m: usize,
         /// The hashes to generate Cuckoo hash table.
-        pub(super) hashes: [AesEncryptor; CUCKOO_HASH_NUM],
+        pub(super) hashes: Arc<[AesEncryptor; CUCKOO_HASH_NUM]>,
         /// The buckets contains all the hash values.
         pub(super) buckets: Vec<Vec<Item>>,
         /// The padded buckets length (power of 2).

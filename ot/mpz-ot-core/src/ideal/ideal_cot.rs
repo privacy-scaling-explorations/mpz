@@ -20,14 +20,14 @@ pub struct CotMsgForReceiver {
 }
 #[allow(missing_docs)]
 pub struct IdealCOT {
-    pub delta: Block,
-    pub counter: usize,
-    pub prg: Prg,
+    delta: Block,
+    counter: usize,
+    prg: Prg,
 }
 
 impl IdealCOT {
     /// Initiate the functionality
-    pub fn init() -> Self {
+    pub fn new() -> Self {
         let mut prg = Prg::new();
         let delta = prg.random_block();
         IdealCOT {
@@ -38,13 +38,18 @@ impl IdealCOT {
     }
 
     /// Initiate with a given delta
-    pub fn init_with_delta(delta: Block) -> Self {
+    pub fn new_with_delta(delta: Block) -> Self {
         let prg = Prg::new();
         IdealCOT {
             delta,
             counter: 0,
             prg,
         }
+    }
+
+    /// Ouput delta
+    pub fn delta(&self) -> Block {
+        self.delta
     }
 
     /// Performs the extension with random choice bits.
@@ -69,7 +74,7 @@ impl IdealCOT {
         (CotMsgForSender { qs }, CotMsgForReceiver { rs, ts })
     }
 
-    /// Perform the checks.
+    /// Checks if the outputs statisfy the relation with Delta, this is only used for test.
     ///
     /// # Arguments
     ///
@@ -98,7 +103,7 @@ mod tests {
     #[test]
     fn ideal_cot_test() {
         let num = 100;
-        let mut ideal_cot = IdealCOT::init();
+        let mut ideal_cot = IdealCOT::new();
         let (sender, receiver) = ideal_cot.extend(num);
 
         assert!(ideal_cot.check(sender, receiver));

@@ -17,13 +17,13 @@ mod tests {
 
     #[test]
     fn spcot_test() {
-        let mut ideal_cot = IdealCOT::init();
+        let mut ideal_cot = IdealCOT::new();
         let sender = SpcotSender::new();
         let receiver = SpcotReceiver::new();
 
         let mut prg = Prg::new();
         let sender_seed = prg.random_block();
-        let delta = ideal_cot.delta;
+        let delta = ideal_cot.delta();
 
         let mut sender = sender.setup(delta, sender_seed);
         let mut receiver = receiver.setup();

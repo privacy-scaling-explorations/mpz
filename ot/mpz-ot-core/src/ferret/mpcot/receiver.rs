@@ -1,8 +1,9 @@
 //! MPCOT receiver for general indices.
+use std::sync::Arc;
 
 use crate::ferret::{
+    cuckoo::{find_pos, hash_to_index, Bucket, CuckooHash, Item},
     mpcot::error::ReceiverError,
-    utils::{find_pos, hash_to_index, Bucket, CuckooHash, Item},
     CUCKOO_HASH_NUM,
 };
 use mpz_core::{aes::AesEncryptor, prg::Prg, Block};
@@ -38,7 +39,7 @@ impl Receiver {
             state: state::Extension {
                 counter: 0,
                 m: 0,
-                hashes,
+                hashes: Arc::new(hashes),
                 buckets: Vec::default(),
                 buckets_length: Vec::default(),
             },
@@ -71,22 +72,22 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let mut cuckoo = CuckooHash::new(&self.state.hashes);
+        let cuckoo = CuckooHash::new(self.state.hashes.clone());
 
         // Inserts all the alpha's.
-        cuckoo.insert(alphas)?;
+        let table = cuckoo.insert(alphas)?;
 
-        self.state.m = cuckoo.m;
+        self.state.m = table.len();
 
-        let mut bucket = Bucket::new(&self.state.hashes, self.state.m);
+        let bucket = Bucket::new(self.state.hashes.clone(), self.state.m);
 
         // Geneates the buckets.
-        bucket.insert(n);
+        let buckets = bucket.insert(n);
 
         // Generates queries for SPCOT.
         // See Step 4 in Figure 7.
         let mut p = vec![];
-        for (alpha, bin) in cuckoo.table.iter().zip(bucket.buckets.iter()) {
+        for (alpha, bin) in table.iter().zip(buckets.iter()) {
             if let Some(x) = alpha {
                 let pos = find_pos(bin, x)?;
                 if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
@@ -108,7 +109,7 @@ impl Receiver<state::Extension> {
         }
 
         // Stores the buckets.
-        self.state.buckets = bucket.buckets;
+        self.state.buckets = buckets;
 
         Ok(p)
     }
@@ -196,7 +197,7 @@ pub mod state {
         /// Current length of Cuckoo hash table, will possibly be changed in each extension.
         pub(super) m: usize,
         /// The hashes to generate Cuckoo hash table.
-        pub(super) hashes: [AesEncryptor; CUCKOO_HASH_NUM],
+        pub(super) hashes: Arc<[AesEncryptor; CUCKOO_HASH_NUM]>,
         /// The buckets contains all the hash values, will be cleared after each extension.
         pub(super) buckets: Vec<Vec<Item>>,
         /// The padded buckets length (power of 2).

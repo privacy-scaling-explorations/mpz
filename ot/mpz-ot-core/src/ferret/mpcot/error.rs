@@ -1,6 +1,6 @@
 //! Errors that can occur when using the MPCOT protocol.
 
-use crate::ferret::utils::{BucketError, CuckooHashError};
+use crate::ferret::cuckoo::{BucketError, CuckooHashError};
 /// Errors that can occur when using the MPCOT sender.
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
