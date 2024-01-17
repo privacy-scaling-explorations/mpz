@@ -1,6 +1,6 @@
 use mpz_circuits::{circuits::AES128, types::StaticValueType};
 use mpz_garble_core::msg::GarbleMessage;
-use mpz_ot::mock::mock_ot_shared_pair;
+use mpz_ot::ideal::ideal_ot_shared_pair;
 use utils_aio::duplex::MemoryDuplex;
 
 use mpz_garble::{config::Visibility, Evaluator, Generator, GeneratorConfigBuilder, ValueMemory};
@@ -8,7 +8,7 @@ use mpz_garble::{config::Visibility, Evaluator, Generator, GeneratorConfigBuilde
 #[tokio::test]
 async fn test_offline_garble() {
     let (mut gen_channel, mut ev_channel) = MemoryDuplex::<GarbleMessage>::new();
-    let (ot_send, ot_recv) = mock_ot_shared_pair();
+    let (ot_send, ot_recv) = ideal_ot_shared_pair();
 
     let gen = Generator::new(
         GeneratorConfigBuilder::default().build().unwrap(),

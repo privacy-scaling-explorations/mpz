@@ -8,7 +8,7 @@ name = "mpz_garble"
 
 [features]
 default = ["mock"]
-mock = ["mpz-ot/mock"]
+mock = ["mpz-ot/ideal"]
 
 [dependencies]
 mpz-circuits.workspace = true
@@ -34,7 +34,7 @@ itybity.workspace = true
 opaque-debug.workspace = true
 
 [dev-dependencies]
-mpz-ot = { workspace = true, features = ["mock"] }
+mpz-ot = { workspace = true, features = ["ideal"] }
 rstest = { workspace = true }
 criterion = { workspace = true, features = ["async_tokio"] }
 tlsn-utils-aio = { workspace = true, features = ["duplex"] }

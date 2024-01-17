@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use rstest::*;
 
-use mpz_ot::mock::{mock_ot_shared_pair, MockSharedOTReceiver, MockSharedOTSender};
+use mpz_ot::ideal::{ideal_ot_shared_pair, IdealSharedOTReceiver, IdealSharedOTSender};
 use mpz_share_conversion::{
     AdditiveToMultiplicative, ConverterReceiver, ConverterSender, Field, Gf2_128,
     MultiplicativeToAdditive, OTReceiveElement, OTSendElement, ReceiverConfig, SenderConfig,
@@ -19,12 +19,12 @@ use rand_chacha::ChaCha12Rng;
 #[tokio::test]
 async fn test_converter<T: Field>(#[case] _pd: PhantomData<T>)
 where
-    MockSharedOTSender: OTSendElement<T>,
-    MockSharedOTReceiver: OTReceiveElement<T>,
+    IdealSharedOTSender: OTSendElement<T>,
+    IdealSharedOTReceiver: OTReceiveElement<T>,
 {
     let mut rng = ChaCha12Rng::seed_from_u64(0);
 
-    let (ot_sender, ot_receiver) = mock_ot_shared_pair();
+    let (ot_sender, ot_receiver) = ideal_ot_shared_pair();
     let (sender_channel, receiver_channel) = MemoryDuplex::new();
 
     let mut sender = ConverterSender::<T, _>::new(

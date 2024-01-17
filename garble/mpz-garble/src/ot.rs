@@ -126,12 +126,12 @@ mod tests {
 
     use mpz_circuits::circuits::AES128;
     use mpz_garble_core::{ChaChaEncoder, Encoder};
-    use mpz_ot::mock::mock_ot_shared_pair;
+    use mpz_ot::ideal::ideal_ot_shared_pair;
 
     #[tokio::test]
     async fn test_encoding_transfer() {
         let encoder = ChaChaEncoder::new([0u8; 32]);
-        let (sender, receiver) = mock_ot_shared_pair();
+        let (sender, receiver) = ideal_ot_shared_pair();
 
         let inputs = AES128
             .inputs()

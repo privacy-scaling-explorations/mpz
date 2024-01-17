@@ -34,8 +34,8 @@ pub(crate) fn into_kos_stream<'a, St: IoStream<msgs::Message<T>> + Send + Unpin,
 #[cfg(test)]
 mod tests {
     use crate::{
+        ideal::{ideal_ot_pair, IdealOTReceiver, IdealOTSender},
         kos::{Receiver, Sender},
-        mock::{mock_ot_pair, MockOTReceiver, MockOTSender},
         OTReceiverShared, OTSenderShared, VerifiableOTReceiverShared,
     };
 
@@ -83,12 +83,12 @@ mod tests {
         count: usize,
     ) -> (
         SenderActor<
-            MockOTReceiver<Block>,
+            IdealOTReceiver<Block>,
             SplitSink<MemoryDuplex<Message<()>>, Message<()>>,
             SplitStream<MemoryDuplex<Message<()>>>,
         >,
         ReceiverActor<
-            MockOTSender<Block>,
+            IdealOTSender<Block>,
             SplitSink<MemoryDuplex<Message<()>>, Message<()>>,
             SplitStream<MemoryDuplex<Message<()>>>,
         >,
@@ -98,7 +98,7 @@ mod tests {
         let (sender_sink, sender_stream) = sender_channel.split();
         let (receiver_sink, receiver_stream) = receiver_channel.split();
 
-        let (base_sender, base_receiver) = mock_ot_pair();
+        let (base_sender, base_receiver) = ideal_ot_pair();
 
         let sender = Sender::new(sender_config, base_receiver);
         let receiver = Receiver::new(receiver_config, base_sender);
