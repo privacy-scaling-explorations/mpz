@@ -68,6 +68,30 @@ where
     ) -> Result<(), OTError>;
 }
 
+/// A correlated oblivious transfer sender.
+#[async_trait]
+pub trait COTSender<T>: ProtocolMessage
+where
+    T: Send + Sync,
+{
+    /// Obliviously transfers the correlated messages to the receiver.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the receiver.
+    /// * `stream` - The IO stream from the receiver.
+    /// * `msgs` - The `0`-bit messages to use during the oblivious transfer.
+    async fn send_correlated<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        msgs: &[T],
+    ) -> Result<(), OTError>;
+}
+
 /// A random OT sender.
 #[async_trait]
 pub trait RandomOTSender<T>: ProtocolMessage
@@ -107,6 +131,31 @@ where
     /// * `stream` - The IO stream from the sender.
     /// * `choices` - The choices made by the receiver.
     async fn receive<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        choices: &[T],
+    ) -> Result<Vec<U>, OTError>;
+}
+
+/// A correlated oblivious transfer receiver.
+#[async_trait]
+pub trait COTReceiver<T, U>: ProtocolMessage
+where
+    T: Send + Sync,
+    U: Send + Sync,
+{
+    /// Obliviously receives correlated messages from the sender.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the sender.
+    /// * `stream` - The IO stream from the sender.
+    /// * `choices` - The choices made by the receiver.
+    async fn receive_correlated<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
         &mut self,
         sink: &mut Si,
         stream: &mut St,
@@ -254,6 +303,18 @@ pub trait OTSenderShared<T> {
     async fn send(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
 }
 
+/// A correlated oblivious transfer sender that can be used via a shared reference.
+#[async_trait]
+pub trait COTSenderShared<T> {
+    /// Obliviously transfers correlated messages to the receiver.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `msgs` - The `0`-bit messages to use during the oblivious transfer.
+    async fn send_correlated(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
+}
+
 /// An oblivious transfer receiver that can be used via a shared reference.
 #[async_trait]
 pub trait OTReceiverShared<T, U> {
@@ -264,6 +325,18 @@ pub trait OTReceiverShared<T, U> {
     /// * `id` - The unique identifier for this transfer.
     /// * `choices` - The choices made by the receiver.
     async fn receive(&self, id: &str, choices: &[T]) -> Result<Vec<U>, OTError>;
+}
+
+/// A correlated oblivious transfer receiver that can be used via a shared reference.
+#[async_trait]
+pub trait COTReceiverShared<T, U> {
+    /// Obliviously receives correlated messages from the sender.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `choices` - The choices made by the receiver.
+    async fn receive_correlated(&self, id: &str, choices: &[T]) -> Result<Vec<U>, OTError>;
 }
 
 /// An oblivious transfer sender that is committed to its messages and can reveal them
