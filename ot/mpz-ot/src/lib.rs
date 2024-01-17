@@ -74,7 +74,7 @@ pub trait RandomOTSender<T>: ProtocolMessage
 where
     T: Send + Sync,
 {
-    /// Outputs two random messages.
+    /// Outputs pairs of random messages.
     ///
     /// # Arguments
     ///
