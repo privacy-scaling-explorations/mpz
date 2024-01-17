@@ -1,4 +1,4 @@
-//! Mock implementations of the OT protocols.
+//! Ideal implementations of the OT protocols.
 
 mod owned;
 mod shared;

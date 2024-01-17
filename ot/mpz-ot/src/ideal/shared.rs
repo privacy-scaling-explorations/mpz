@@ -29,7 +29,7 @@ pub fn ideal_ot_shared_pair() -> (IdealSharedOTSender, IdealSharedOTReceiver) {
     (sender, receiver)
 }
 
-/// A mock oblivious transfer sender.
+/// A ideal oblivious transfer sender.
 #[derive(Clone, Debug)]
 #[allow(clippy::type_complexity)]
 pub struct IdealSharedOTSender {
@@ -66,7 +66,7 @@ impl<T: Clone + std::fmt::Debug + Send + Sync + 'static> CommittedOTSenderShared
     }
 }
 
-/// A mock oblivious transfer receiver.
+/// A ideal oblivious transfer receiver.
 #[derive(Clone, Debug)]
 #[allow(clippy::type_complexity)]
 pub struct IdealSharedOTReceiver {
