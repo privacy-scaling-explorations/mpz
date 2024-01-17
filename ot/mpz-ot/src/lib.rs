@@ -80,7 +80,7 @@ where
     ///
     /// * `sink` - The IO sink to the receiver.
     /// * `stream` - The IO stream from the receiver.
-    /// * `count` - The number of random messages to get.
+    /// * `count` - The number of pairs of random messages to output.
     async fn send_random<
         Si: IoSink<Self::Msg> + Send + Unpin,
         St: IoStream<Self::Msg> + Send + Unpin,
