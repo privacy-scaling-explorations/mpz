@@ -101,6 +101,12 @@ impl IdealSpcot {
     }
 }
 
+impl Default for IdealSpcot {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::ideal::ideal_spcot::IdealSpcot;

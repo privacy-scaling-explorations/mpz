@@ -96,6 +96,11 @@ impl IdealCOT {
     }
 }
 
+impl Default for IdealCOT {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::ideal::ideal_cot::IdealCOT;
