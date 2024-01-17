@@ -53,7 +53,7 @@ mod tests {
 
     use crate::{
         mock::{mock_ot_pair, MockOTReceiver, MockOTSender},
-        OTReceiver, OTSender, OTSetup, VerifiableOTReceiver,
+        OTReceiver, OTSender, OTSetup, RandomOTReceiver, RandomOTSender, VerifiableOTReceiver,
     };
 
     #[fixture]
@@ -144,6 +144,46 @@ mod tests {
         let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
 
         assert_eq!(received, expected);
+    }
+
+    #[tokio::test]
+    async fn test_kos_random() {
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
+
+        let (mut sender_sink, mut sender_stream) = sender_channel.split();
+        let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
+
+        let (mut sender, mut receiver) = setup(
+            SenderConfig::default(),
+            ReceiverConfig::default(),
+            &mut sender_sink,
+            &mut sender_stream,
+            &mut receiver_sink,
+            &mut receiver_stream,
+            10,
+        )
+        .await;
+
+        let (sender_res, receiver_res) = tokio::join!(
+            RandomOTSender::send_random(&mut sender, &mut sender_sink, &mut sender_stream, 10),
+            RandomOTReceiver::receive_random(
+                &mut receiver,
+                &mut receiver_sink,
+                &mut receiver_stream,
+                10
+            )
+        );
+
+        let sender_output: Vec<[Block; 2]> = sender_res.unwrap();
+        let (choices, receiver_output): (Vec<bool>, Vec<Block>) = receiver_res.unwrap();
+
+        let expected = sender_output
+            .into_iter()
+            .zip(choices)
+            .map(|(output, choice)| output[choice as usize])
+            .collect::<Vec<_>>();
+
+        assert_eq!(receiver_output, expected);
     }
 
     #[rstest]

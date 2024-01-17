@@ -581,6 +581,11 @@ impl ReceiverKeys {
             })
             .collect())
     }
+
+    /// Returns the choices and the keys
+    pub fn take_choices_and_keys(self) -> (Vec<bool>, Vec<Block>) {
+        (self.choices, self.keys)
+    }
 }
 
 struct PayloadRecordNoDelta {

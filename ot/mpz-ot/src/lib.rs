@@ -68,6 +68,30 @@ where
     ) -> Result<(), OTError>;
 }
 
+/// A random OT sender.
+#[async_trait]
+pub trait RandomOTSender<T>: ProtocolMessage
+where
+    T: Send + Sync,
+{
+    /// Outputs pairs of random messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the receiver.
+    /// * `stream` - The IO stream from the receiver.
+    /// * `count` - The number of pairs of random messages to output.
+    async fn send_random<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<Vec<T>, OTError>;
+}
+
 /// An oblivious transfer receiver.
 #[async_trait]
 pub trait OTReceiver<T, U>: ProtocolMessage
@@ -88,6 +112,31 @@ where
         stream: &mut St,
         choices: &[T],
     ) -> Result<Vec<U>, OTError>;
+}
+
+/// A random OT receiver.
+#[async_trait]
+pub trait RandomOTReceiver<T, U>: ProtocolMessage
+where
+    T: Send + Sync,
+    U: Send + Sync,
+{
+    /// Outputs the choice bits and the corresponding messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the sender.
+    /// * `stream` - The IO stream from the sender.
+    /// * `count` - The number of random messages to receive.
+    async fn receive_random<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<(Vec<T>, Vec<U>), OTError>;
 }
 
 /// An oblivious transfer sender that is committed to its messages and can reveal them

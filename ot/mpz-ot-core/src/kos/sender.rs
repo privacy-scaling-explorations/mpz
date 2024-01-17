@@ -448,6 +448,11 @@ impl SenderKeys {
             },
         })
     }
+
+    /// Returns the keys
+    pub fn take_keys(self) -> Vec<[Block; 2]> {
+        self.keys
+    }
 }
 
 /// The sender's state.
