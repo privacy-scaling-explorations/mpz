@@ -114,7 +114,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_ideal_ot() {
+    async fn test_ideal_cot_shared() {
         let mut rng = ChaCha12Rng::seed_from_u64(0);
 
         let values = Block::random_vec(&mut rng, 8);

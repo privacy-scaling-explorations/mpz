@@ -74,13 +74,13 @@ pub trait COTSender<T>: ProtocolMessage
 where
     T: Send + Sync,
 {
-    /// Obliviously transfers the correlations to the receiver.
+    /// Obliviously transfers the correlated messages to the receiver.
     ///
     /// # Arguments
     ///
     /// * `sink` - The IO sink to the receiver.
     /// * `stream` - The IO stream from the receiver.
-    /// * `msgs` - The `0`-bit messages to obliviously transfer.
+    /// * `msgs` - The `0`-bit messages to use during the oblivious transfer.
     async fn send_correlated<
         Si: IoSink<Self::Msg> + Send + Unpin,
         St: IoStream<Self::Msg> + Send + Unpin,
@@ -311,7 +311,7 @@ pub trait COTSenderShared<T> {
     /// # Arguments
     ///
     /// * `id` - The unique identifier for this transfer.
-    /// * `msgs` - The `0`-bit messages to obliviously transfer.
+    /// * `msgs` - The `0`-bit messages to use during the oblivious transfer.
     async fn send_correlated(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
 }
 
