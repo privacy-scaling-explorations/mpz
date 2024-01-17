@@ -122,7 +122,7 @@ pub trait RandomCOTSender<T>: ProtocolMessage
 where
     T: Send + Sync,
 {
-    /// Obliviously transfers the correlations to the receiver.
+    /// Obliviously transfers the correlated messages to the receiver.
     ///
     /// Returns the `0`-bit messages that were obliviously transferred.
     ///
@@ -130,7 +130,7 @@ where
     ///
     /// * `sink` - The IO sink to the receiver.
     /// * `stream` - The IO stream from the receiver.
-    /// * `count` - The number of correlations to obliviously transfer.
+    /// * `count` - The number of correlated messages to obliviously transfer.
     async fn send_random_correlated<
         Si: IoSink<Self::Msg> + Send + Unpin,
         St: IoStream<Self::Msg> + Send + Unpin,
@@ -229,7 +229,7 @@ where
     ///
     /// * `sink` - The IO sink to the sender.
     /// * `stream` - The IO stream from the sender.
-    /// * `count` - The number of correlations to obliviously receive.
+    /// * `count` - The number of correlated messages to obliviously receive.
     async fn receive_random_correlated<
         Si: IoSink<Self::Msg> + Send + Unpin,
         St: IoStream<Self::Msg> + Send + Unpin,
@@ -378,7 +378,7 @@ pub trait RandomCOTSenderShared<T> {
     /// # Arguments
     ///
     /// * `id` - The unique identifier for this transfer.
-    /// * `count` - The number of correlations to obliviously transfer.
+    /// * `count` - The number of correlated messages to obliviously transfer.
     async fn send_random_correlated(&self, id: &str, count: usize) -> Result<Vec<T>, OTError>;
 }
 
@@ -416,7 +416,7 @@ pub trait RandomCOTReceiverShared<T, U> {
     /// # Arguments
     ///
     /// * `id` - The unique identifier for this transfer.
-    /// * `count` - The number of correlations to obliviously receive.
+    /// * `count` - The number of correlated messages to obliviously receive.
     async fn receive_random_correlated(
         &self,
         id: &str,
