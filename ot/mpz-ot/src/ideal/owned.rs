@@ -1,7 +1,6 @@
 use crate::{
-    CommittedOTReceiver, CommittedOTSender, CommittedOTSenderWithIo, OTError, OTReceiver,
-    OTReceiverWithIo, OTSender, OTSenderWithIo, OTSetup, VerifiableOTReceiver,
-    VerifiableOTReceiverWithIo, VerifiableOTSender,
+    CommittedOTReceiver, CommittedOTSender, OTError, OTReceiver, OTSender, OTSetup,
+    VerifiableOTReceiver, VerifiableOTSender,
 };
 use async_trait::async_trait;
 use futures::{
@@ -79,16 +78,6 @@ where
         _stream: &mut St,
         msgs: &[[T; 2]],
     ) -> Result<(), OTError> {
-        <Self as OTSenderWithIo<[T; 2]>>::send(self, msgs).await
-    }
-}
-
-#[async_trait]
-impl<T> OTSenderWithIo<[T; 2]> for IdealOTSender<T>
-where
-    T: Send + Sync + Clone + 'static,
-{
-    async fn send(&mut self, msgs: &[[T; 2]]) -> Result<(), OTError> {
         self.msgs.extend(msgs.iter().cloned());
 
         self.sender
@@ -124,16 +113,6 @@ where
         _stream: &mut St,
         choices: &[bool],
     ) -> Result<Vec<T>, OTError> {
-        <Self as OTReceiverWithIo<bool, T>>::receive(self, choices).await
-    }
-}
-
-#[async_trait]
-impl<T> OTReceiverWithIo<bool, T> for IdealOTReceiver<T>
-where
-    T: Send + Sync + 'static,
-{
-    async fn receive(&mut self, choices: &[bool]) -> Result<Vec<T>, OTError> {
         self.choices.extend(choices.iter().copied());
 
         let payload = self
@@ -175,16 +154,6 @@ where
 }
 
 #[async_trait]
-impl<T> VerifiableOTReceiverWithIo<[T; 2]> for IdealOTReceiver<T>
-where
-    T: Send + Sync + 'static,
-{
-    async fn verify(&mut self, _msgs: &[[T; 2]]) -> Result<(), OTError> {
-        Ok(())
-    }
-}
-
-#[async_trait]
 impl<T> CommittedOTSender<[T; 2]> for IdealOTSender<T>
 where
     T: Send + Sync + Clone + 'static,
@@ -194,16 +163,6 @@ where
         _sink: &mut Si,
         _stream: &mut St,
     ) -> Result<(), OTError> {
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl<T> CommittedOTSenderWithIo for IdealOTSender<T>
-where
-    T: Send + 'static,
-{
-    async fn reveal(&mut self) -> Result<(), OTError> {
         Ok(())
     }
 }
@@ -249,20 +208,32 @@ where
 
 #[cfg(test)]
 mod tests {
+    use utils_aio::duplex::MemoryDuplex;
+
     use super::*;
 
     // Test that the sender and receiver can be used to send and receive values
     #[tokio::test]
     async fn test_ideal_ot_owned() {
+        let (send_channel, recv_channel) = MemoryDuplex::<()>::new();
+
+        let (mut send_sink, mut send_stream) = send_channel.split();
+        let (mut recv_sink, mut recv_stream) = recv_channel.split();
+
         let values = vec![[0, 1], [2, 3]];
         let choices = vec![false, true];
         let (mut sender, mut receiver) = ideal_ot_pair::<u8>();
 
-        OTSenderWithIo::send(&mut sender, &values).await.unwrap();
-
-        let received = OTReceiverWithIo::receive(&mut receiver, &choices)
+        sender
+            .send(&mut send_sink, &mut send_stream, &values)
             .await
             .unwrap();
+
+        let received = receiver
+            .receive(&mut recv_sink, &mut recv_stream, &choices)
+            .await
+            .unwrap();
+
         assert_eq!(received, vec![0, 3]);
     }
 }
