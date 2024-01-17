@@ -63,7 +63,7 @@ impl CuckooHash {
 
     // Hash an element to a position with the current hash function.
     #[inline]
-    fn hash(&self, table: &mut Vec<Option<Item>>, value: u32) -> Result<(), CuckooHashError> {
+    fn hash(&self, table: &mut[Option<Item>], value: u32) -> Result<(), CuckooHashError> {
         // The item consists of the value and hash index, starting from 0.
         let mut item = Item {
             value,
