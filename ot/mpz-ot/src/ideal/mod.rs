@@ -10,6 +10,7 @@ pub use owned::{
 };
 pub use shared::{
     ideal_cot_shared_pair, ideal_ot_shared_pair, ideal_random_cot_shared_pair,
-    IdealSharedCOTReceiver, IdealSharedCOTSender, IdealSharedOTReceiver, IdealSharedOTSender,
-    IdealSharedRandomCOTReceiver, IdealSharedRandomCOTSender,
+    ideal_random_ot_shared_pair, IdealSharedCOTReceiver, IdealSharedCOTSender,
+    IdealSharedOTReceiver, IdealSharedOTSender, IdealSharedRandomCOTReceiver,
+    IdealSharedRandomCOTSender, IdealSharedRandomOTReceiver, IdealSharedRandomOTSender,
 };

@@ -364,7 +364,8 @@ pub trait RandomOTSenderShared<T> {
     /// # Arguments
     ///
     /// * `id` - The unique identifier for this transfer.
-    async fn send(&self, id: &str) -> Result<Vec<T>, OTError>;
+    /// * `count` - The number of pairs of random messages to output.
+    async fn send_random(&self, id: &str, count: usize) -> Result<Vec<T>, OTError>;
 }
 
 /// A correlated oblivious transfer sender that can be used via a shared reference.
@@ -413,7 +414,8 @@ pub trait RandomOTReceiverShared<T, U> {
     /// # Arguments
     ///
     /// * `id` - The unique identifier for this transfer.
-    async fn receive(&self, id: &str) -> Result<(Vec<T>, Vec<U>), OTError>;
+    /// * `count` - The number of random messages to receive.
+    async fn receive_random(&self, id: &str, count: usize) -> Result<(Vec<T>, Vec<U>), OTError>;
 }
 
 /// A correlated oblivious transfer receiver that can be used via a shared reference.
