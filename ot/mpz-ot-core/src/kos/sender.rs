@@ -1,5 +1,6 @@
 use crate::{
     kos::{
+        extension_matrix_size,
         msgs::{Check, Ciphertexts, Extend, SenderPayload},
         Aes128Ctr, Rng, RngSeed, SenderConfig, SenderError, CSP, SSP,
     },
@@ -126,17 +127,9 @@ impl Sender<state::Extension> {
         const NROWS: usize = CSP;
         let row_width = count / 8;
 
-        let Extend {
-            us,
-            count: receiver_count,
-        } = extend;
+        let Extend { us } = extend;
 
-        // Make sure the number of OTs to extend matches the receiver's setup message.
-        if receiver_count != count {
-            return Err(SenderError::CountMismatch(receiver_count, count));
-        }
-
-        if us.len() != NROWS * row_width {
+        if us.len() != extension_matrix_size(count) {
             return Err(SenderError::InvalidExtend);
         }
 

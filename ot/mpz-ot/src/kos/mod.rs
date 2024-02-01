@@ -18,6 +18,9 @@ pub use mpz_ot_core::kos::{
 };
 use utils_aio::{sink::IoSink, stream::IoStream};
 
+/// The size of the chunks used to send the extension matrix, 1MB.
+const EXTEND_CHUNK_SIZE: usize = 1024 * 1024;
+
 /// Converts a sink of KOS messages into a sink of base OT messages.
 pub(crate) fn into_base_sink<'a, Si: IoSink<msgs::Message<T>> + Send + Unpin, T: Send + 'a>(
     sink: &'a mut Si,

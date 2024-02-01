@@ -18,6 +18,7 @@ use crate::msgs::Derandomize;
 #[allow(missing_docs)]
 pub enum Message<BaseMsg> {
     BaseMsg(BaseMsg),
+    StartExtend(StartExtend),
     Extend(Extend),
     Check(Check),
     Derandomize(Derandomize),
@@ -33,13 +34,53 @@ impl<BaseMsg> From<MessageError<BaseMsg>> for std::io::Error {
     }
 }
 
+/// Extension message sent by the receiver to agree upon the number of OTs to set up.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StartExtend {
+    /// The number of OTs to set up.
+    pub count: usize,
+}
+
 /// Extension message sent by the receiver.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Extend {
-    /// The number of OTs to set up.
-    pub count: usize,
     /// The receiver's extension vectors.
     pub us: Vec<u8>,
+}
+
+impl Extend {
+    /// Splits the message into chunks.
+    pub fn into_chunks(self, chunk_size: usize) -> ExtendChunks {
+        ExtendChunks {
+            chunk_size,
+            us: self.us,
+        }
+    }
+}
+
+/// Iterator over the chunks of an extension message.
+pub struct ExtendChunks {
+    chunk_size: usize,
+    us: Vec<u8>,
+}
+
+impl Iterator for ExtendChunks {
+    type Item = Extend;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let remaining = self.us.len();
+        if remaining == 0 {
+            return None;
+        }
+
+        let us = if remaining <= self.chunk_size {
+            std::mem::take(&mut self.us)
+        } else {
+            self.us.split_off(remaining - self.chunk_size)
+        };
+
+        Some(Extend { us })
+    }
 }
 
 /// Values for the correlation check sent by the receiver.

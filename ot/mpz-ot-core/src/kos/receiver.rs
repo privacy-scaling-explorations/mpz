@@ -196,7 +196,7 @@ impl Receiver<state::Extension> {
         );
         self.state.unchecked_choices.extend(choices);
 
-        Ok(Extend { count, us })
+        Ok(Extend { us })
     }
 
     /// Performs the correlation check for all outstanding OTS.

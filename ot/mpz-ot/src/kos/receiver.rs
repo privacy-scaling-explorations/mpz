@@ -3,7 +3,8 @@ use futures::SinkExt;
 use itybity::{FromBitIterator, IntoBitIterator};
 use mpz_core::{cointoss, prg::Prg, Block, ProtocolMessage};
 use mpz_ot_core::kos::{
-    msgs::Message, receiver_state as state, Receiver as ReceiverCore, ReceiverConfig, CSP, SSP,
+    msgs::{Message, StartExtend},
+    receiver_state as state, Receiver as ReceiverCore, ReceiverConfig, CSP, SSP,
 };
 
 use enum_try_as_inner::EnumTryAsInner;
@@ -15,7 +16,9 @@ use utils_aio::{
     stream::{ExpectStreamExt, IoStream},
 };
 
-use super::{into_base_sink, into_base_stream, ReceiverError, ReceiverVerifyError};
+use super::{
+    into_base_sink, into_base_stream, ReceiverError, ReceiverVerifyError, EXTEND_CHUNK_SIZE,
+};
 use crate::{
     OTError, OTReceiver, OTSender, OTSetup, RandomOTReceiver, VerifiableOTReceiver,
     VerifiableOTSender,
@@ -105,7 +108,12 @@ where
         let (cointoss_sender, cointoss_commitment) = cointoss::Sender::new(vec![seed]).send();
 
         // Send the extend message and cointoss commitment
-        sink.feed(Message::Extend(extend)).await?;
+        sink.feed(Message::StartExtend(StartExtend { count }))
+            .await?;
+        let mut chunks = extend.into_chunks(EXTEND_CHUNK_SIZE);
+        while let Some(extend) = chunks.next() {
+            sink.feed(Message::Extend(extend)).await?;
+        }
         sink.feed(Message::CointossCommit(cointoss_commitment))
             .await?;
         sink.flush().await?;

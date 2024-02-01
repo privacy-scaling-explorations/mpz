@@ -4,7 +4,9 @@ use futures_util::SinkExt;
 use itybity::IntoBits;
 use mpz_core::{cointoss, prg::Prg, Block, ProtocolMessage};
 use mpz_ot_core::kos::{
-    msgs::Message, sender_state as state, Sender as SenderCore, SenderConfig, CSP, SSP,
+    extension_matrix_size,
+    msgs::{Extend, Message, StartExtend},
+    sender_state as state, Sender as SenderCore, SenderConfig, CSP, SSP,
 };
 use rand::{thread_rng, Rng};
 use rand_core::{RngCore, SeedableRng};
@@ -138,12 +140,35 @@ where
         let mut ext_sender =
             std::mem::replace(&mut self.state, State::Error).try_into_extension()?;
 
-        // Receive extend message from the receiver.
-        let extend = stream
+        let StartExtend {
+            count: receiver_count,
+        } = stream
             .expect_next()
             .await?
-            .try_into_extend()
+            .try_into_start_extend()
             .map_err(SenderError::from)?;
+
+        if count != receiver_count {
+            return Err(SenderError::ConfigError(
+                "sender and receiver count mismatch".to_string(),
+            ));
+        }
+
+        let expected_us = extension_matrix_size(count);
+        let mut extend = Extend {
+            us: Vec::with_capacity(expected_us),
+        };
+
+        // Receive extension matrix from the receiver.
+        while extend.us.len() < expected_us {
+            let Extend { us: chunk } = stream
+                .expect_next()
+                .await?
+                .try_into_extend()
+                .map_err(SenderError::from)?;
+
+            extend.us.extend(chunk);
+        }
 
         // Receive coin toss commitments from the receiver.
         let commitment = stream.expect_next().await?.try_into_cointoss_commit()?;
