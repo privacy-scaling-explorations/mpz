@@ -110,8 +110,7 @@ where
         // Send the extend message and cointoss commitment
         sink.feed(Message::StartExtend(StartExtend { count }))
             .await?;
-        let mut chunks = extend.into_chunks(EXTEND_CHUNK_SIZE);
-        while let Some(extend) = chunks.next() {
+        for extend in extend.into_chunks(EXTEND_CHUNK_SIZE) {
             sink.feed(Message::Extend(extend)).await?;
         }
         sink.feed(Message::CointossCommit(cointoss_commitment))
