@@ -25,7 +25,7 @@ impl Receiver {
         }
     }
 
-    /// Completes the setup phase of the protocol.
+    /// Complets the setup phase for PreExtend.
     ///
     /// See step 1 in Figure 6.
     ///
@@ -58,8 +58,9 @@ impl Receiver<state::PreExtension> {
     ///
     /// * `alphas` - The queried indices.
     /// * `n` - The total number of indices.
+    #[allow(clippy::type_complexity)]
     pub fn pre_extend(
-        &self,
+        &mut self,
         alphas: &[u32],
         n: u32,
     ) -> Result<(Receiver<state::Extension>, Vec<(usize, u32)>), ReceiverError> {
@@ -86,33 +87,36 @@ impl Receiver<state::PreExtension> {
         let mut buckets_length = vec![];
         for (alpha, bin) in table.iter().zip(buckets.iter()) {
             // pad to power of 2.
-            let power = (bin.len() + 1)
+            let power_of_two = (bin.len() + 1)
                 .checked_next_power_of_two()
                 .expect("bucket length should be less than usize::MAX / 2 - 1");
 
+            let power = power_of_two.ilog2() as usize;
+
             if let Some(x) = alpha {
                 let pos = find_pos(bin, x)?;
-                p.push((power.ilog2() as usize, pos as u32));
+                p.push((power, pos as u32));
             } else {
-                p.push((power.ilog2() as usize, bin.len() as u32));
+                p.push((power, bin.len() as u32));
             }
 
-            buckets_length.push(power);
+            buckets_length.push(power_of_two);
         }
 
-        Ok((
-            Receiver {
-                state: state::Extension {
-                    counter: self.state.counter,
-                    m,
-                    n,
-                    hashes: self.state.hashes.clone(),
-                    buckets,
-                    buckets_length,
-                },
+        let receiver = Receiver {
+            state: state::Extension {
+                counter: self.state.counter,
+                m,
+                n,
+                hashes: self.state.hashes.clone(),
+                buckets,
+                buckets_length,
             },
-            p,
-        ))
+        };
+
+        self.state.counter += 1;
+
+        Ok((receiver, p))
     }
 }
 impl Receiver<state::Extension> {

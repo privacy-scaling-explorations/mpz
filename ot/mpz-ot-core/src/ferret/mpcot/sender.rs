@@ -56,7 +56,7 @@ impl Sender<state::PreExtension> {
     /// * `t` - The number of queried indices.
     /// * `n` - The total number of indices.
     pub fn pre_extend(
-        &self,
+        &mut self,
         t: u32,
         n: u32,
     ) -> Result<(Sender<state::Extension>, Vec<usize>), SenderError> {
@@ -78,26 +78,28 @@ impl Sender<state::PreExtension> {
         let mut bs = vec![];
         let mut buckets_length = vec![];
         for bin in buckets.iter() {
-            let power = (bin.len() + 1)
+            let power_of_two = (bin.len() + 1)
                 .checked_next_power_of_two()
                 .expect("bucket length should be less than usize::MAX / 2 - 1");
-            bs.push(power.ilog2() as usize);
-            buckets_length.push(power);
+            bs.push(power_of_two.ilog2() as usize);
+            buckets_length.push(power_of_two);
         }
-        Ok((
-            Sender {
-                state: state::Extension {
-                    delta: self.state.delta,
-                    counter: self.state.counter,
-                    m,
-                    n,
-                    hashes: self.state.hashes.clone(),
-                    buckets,
-                    buckets_length,
-                },
+
+        let sender = Sender {
+            state: state::Extension {
+                delta: self.state.delta,
+                counter: self.state.counter,
+                m,
+                n,
+                hashes: self.state.hashes.clone(),
+                buckets,
+                buckets_length,
             },
-            bs,
-        ))
+        };
+
+        self.state.counter += 1;
+
+        Ok((sender, bs))
     }
 }
 
@@ -142,8 +144,6 @@ impl Sender<state::Extension> {
                 *x ^= st[bucket_index][pos];
             }
         }
-
-        self.state.counter += 1;
 
         // Clears the buckets.
         self.state.buckets.clear();
@@ -200,6 +200,7 @@ pub mod state {
         #[allow(dead_code)]
         pub(super) delta: Block,
         /// Current MPCOT counter
+        #[allow(dead_code)]
         pub(super) counter: usize,
 
         /// Current length of Cuckoo hash table, will possibly be changed in each extension.
