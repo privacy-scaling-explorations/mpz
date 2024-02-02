@@ -27,18 +27,18 @@ mod tests {
 
         // receiver chooses hash and setup.
         let hash_seed = prg.random_block();
-        let (mut receiver, hash_seed) = receiver.setup(hash_seed);
+        let (receiver_pre, hash_seed) = receiver.setup(hash_seed);
         // sender receives the hash and setup.
-        let mut sender = sender.setup(delta, hash_seed);
+        let sender_pre = sender.setup(delta, hash_seed);
 
         // extend once.
         let alphas = [0, 1, 3, 4, 2];
         let t = alphas.len();
         let n = 10;
         // sender generates the messages to invoke ideal spcot.
-        let sender_queries = sender.extend_pre(t as u32, n).unwrap();
+        let (mut sender, sender_queries) = sender_pre.pre_extend(t as u32, n).unwrap();
 
-        let mut queries = receiver.extend_pre(&alphas, n).unwrap();
+        let (mut receiver, mut queries) = receiver_pre.pre_extend(&alphas, n).unwrap();
 
         assert!(sender_queries
             .iter()
@@ -52,8 +52,8 @@ mod tests {
         let SpcotMsgForSender { v: st } = sender_spcot_msg;
         let SpcotMsgForReceiver { w: rt } = receiver_spcot_msg;
 
-        let mut output_sender = sender.extend(&st, n).unwrap();
-        let output_receiver = receiver.extend(&rt, n).unwrap();
+        let mut output_sender = sender.extend(&st).unwrap();
+        let output_receiver = receiver.extend(&rt).unwrap();
 
         for i in alphas {
             output_sender[i as usize] ^= delta;
@@ -66,9 +66,9 @@ mod tests {
         let t = alphas.len();
         let n = 16;
         // sender generates the messages to invoke ideal spcot.
-        let sender_queries = sender.extend_pre(t as u32, n).unwrap();
+        let (mut sender, sender_queries) = sender_pre.pre_extend(t as u32, n).unwrap();
 
-        let mut queries = receiver.extend_pre(&alphas, n).unwrap();
+        let (mut receiver, mut queries) = receiver_pre.pre_extend(&alphas, n).unwrap();
 
         assert!(sender_queries
             .iter()
@@ -82,8 +82,8 @@ mod tests {
         let SpcotMsgForSender { v: st } = sender_spcot_msg;
         let SpcotMsgForReceiver { w: rt } = receiver_spcot_msg;
 
-        let mut output_sender = sender.extend(&st, n).unwrap();
-        let output_receiver = receiver.extend(&rt, n).unwrap();
+        let mut output_sender = sender.extend(&st).unwrap();
+        let output_receiver = receiver.extend(&rt).unwrap();
 
         for i in alphas {
             output_sender[i as usize] ^= delta;

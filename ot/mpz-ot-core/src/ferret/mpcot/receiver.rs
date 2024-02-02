@@ -32,16 +32,13 @@ impl Receiver {
     /// # Argument
     ///
     /// * `hash_seed` - Random seed to generate hashes, will be sent to the sender.
-    pub fn setup(self, hash_seed: Block) -> (Receiver<state::Extension>, HashSeed) {
+    pub fn setup(self, hash_seed: Block) -> (Receiver<state::PreExtension>, HashSeed) {
         let mut prg = Prg::from_seed(hash_seed);
         let hashes = std::array::from_fn(|_| AesEncryptor::new(prg.random_block()));
         let recv = Receiver {
-            state: state::Extension {
+            state: state::PreExtension {
                 counter: 0,
-                m: 0,
                 hashes: Arc::new(hashes),
-                buckets: Vec::default(),
-                buckets_length: Vec::default(),
             },
         };
 
@@ -51,7 +48,7 @@ impl Receiver {
     }
 }
 
-impl Receiver<state::Extension> {
+impl Receiver<state::PreExtension> {
     /// Performs the hash procedure in MPCOT extension.
     /// Outputs the length of each bucket plus 1.
     ///
@@ -61,25 +58,24 @@ impl Receiver<state::Extension> {
     ///
     /// * `alphas` - The queried indices.
     /// * `n` - The total number of indices.
-    pub fn extend_pre(
-        &mut self,
+    pub fn pre_extend(
+        &self,
         alphas: &[u32],
         n: u32,
-    ) -> Result<Vec<(usize, u32)>, ReceiverError> {
+    ) -> Result<(Receiver<state::Extension>, Vec<(usize, u32)>), ReceiverError> {
         if alphas.len() as u32 > n {
             return Err(ReceiverError::InvalidInput(
                 "length of alphas should not exceed n".to_string(),
             ));
         }
-
         let cuckoo = CuckooHash::new(self.state.hashes.clone());
 
         // Inserts all the alpha's.
         let table = cuckoo.insert(alphas)?;
 
-        self.state.m = table.len();
+        let m = table.len();
 
-        let bucket = Bucket::new(self.state.hashes.clone(), self.state.m);
+        let bucket = Bucket::new(self.state.hashes.clone(), m);
 
         // Geneates the buckets.
         let buckets = bucket.insert(n);
@@ -87,6 +83,7 @@ impl Receiver<state::Extension> {
         // Generates queries for SPCOT.
         // See Step 4 in Figure 7.
         let mut p = vec![];
+        let mut buckets_length = vec![];
         for (alpha, bin) in table.iter().zip(buckets.iter()) {
             // pad to power of 2.
             let power = (bin.len() + 1)
@@ -99,16 +96,26 @@ impl Receiver<state::Extension> {
             } else {
                 p.push((power.ilog2() as usize, bin.len() as u32));
             }
-            
-            self.state.buckets_length.push(power);
+
+            buckets_length.push(power);
         }
 
-        // Stores the buckets.
-        self.state.buckets = buckets;
-
-        Ok(p)
+        Ok((
+            Receiver {
+                state: state::Extension {
+                    counter: self.state.counter,
+                    m,
+                    n,
+                    hashes: self.state.hashes.clone(),
+                    buckets,
+                    buckets_length,
+                },
+            },
+            p,
+        ))
     }
-
+}
+impl Receiver<state::Extension> {
     /// Performs MPCOT extension.
     ///
     /// See Step 5 in Figure 7.
@@ -116,8 +123,7 @@ impl Receiver<state::Extension> {
     /// # Arguments
     ///
     /// * `rt` - The vector received from SPCOT protocol on multiple queries.
-    /// * `n` - The total nunber of indices.
-    pub fn extend(&mut self, rt: &[Vec<Block>], n: u32) -> Result<Vec<Block>, ReceiverError> {
+    pub fn extend(&mut self, rt: &[Vec<Block>]) -> Result<Vec<Block>, ReceiverError> {
         if rt.len() != self.state.m {
             return Err(ReceiverError::InvalidInput(
                 "the length rt should be m".to_string(),
@@ -134,7 +140,7 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let mut res = vec![Block::ZERO; n as usize];
+        let mut res = vec![Block::ZERO; self.state.n as usize];
 
         for (value, x) in res.iter_mut().enumerate() {
             for tau in 0..CUCKOO_HASH_NUM {
@@ -169,6 +175,7 @@ pub mod state {
         pub trait Sealed {}
 
         impl Sealed for super::Initialized {}
+        impl Sealed for super::PreExtension {}
         impl Sealed for super::Extension {}
     }
 
@@ -183,7 +190,20 @@ pub mod state {
 
     opaque_debug::implement!(Initialized);
 
-    /// The receiver's state after the setup phase.
+    /// The receiver's state before extending.
+    ///
+    /// In this state the receiver performs pre extension in MPCOT (potentially multiple times).
+    pub struct PreExtension {
+        /// Current MPCOT counter
+        pub(super) counter: usize,
+        /// The hashes to generate Cuckoo hash table.
+        pub(super) hashes: Arc<[AesEncryptor; CUCKOO_HASH_NUM]>,
+    }
+
+    impl State for PreExtension {}
+
+    opaque_debug::implement!(PreExtension);
+    /// The receiver's state of extension.
     ///
     /// In this state the receiver performs MPCOT extension (potentially multiple times).
     pub struct Extension {
@@ -191,6 +211,8 @@ pub mod state {
         pub(super) counter: usize,
         /// Current length of Cuckoo hash table, will possibly be changed in each extension.
         pub(super) m: usize,
+        /// The total number of indices in the current extension.
+        pub(super) n: u32,
         /// The hashes to generate Cuckoo hash table.
         pub(super) hashes: Arc<[AesEncryptor; CUCKOO_HASH_NUM]>,
         /// The buckets contains all the hash values, will be cleared after each extension.
