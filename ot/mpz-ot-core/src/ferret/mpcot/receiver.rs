@@ -88,24 +88,19 @@ impl Receiver<state::Extension> {
         // See Step 4 in Figure 7.
         let mut p = vec![];
         for (alpha, bin) in table.iter().zip(buckets.iter()) {
+            // pad to power of 2.
+            let power = (bin.len() + 1)
+                .checked_next_power_of_two()
+                .expect("bucket length should be less than usize::MAX / 2 - 1");
+
             if let Some(x) = alpha {
                 let pos = find_pos(bin, x)?;
-                if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
-                    p.push((power.ilog2() as usize, pos as u32));
-                    self.state.buckets_length.push(power);
-                } else {
-                    return Err(ReceiverError::InvalidBucketSize(
-                        "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
-                    ));
-                }
-            } else if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
-                p.push((power.ilog2() as usize, bin.len() as u32));
-                self.state.buckets_length.push(power);
+                p.push((power.ilog2() as usize, pos as u32));
             } else {
-                return Err(ReceiverError::InvalidBucketSize(
-                    "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
-                ));
+                p.push((power.ilog2() as usize, bin.len() as u32));
             }
+            
+            self.state.buckets_length.push(power);
         }
 
         // Stores the buckets.

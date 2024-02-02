@@ -70,13 +70,11 @@ impl Sender<state::Extension> {
         let mut res = Vec::with_capacity(t as usize);
 
         for len in self.state.queries_length.iter() {
-            if let Some(power) = len.checked_next_power_of_two() {
-                res.push(power.ilog2() as usize);
-            } else {
-                return Err(SenderError::InvalidInput(
-                    "The next power of 2 of each length exceeds the MAX number".to_string(),
-                ));
-            }
+            // pad `len`` to power of 2.
+            let power = len
+                .checked_next_power_of_two()
+                .expect("len should be less than usize::MAX / 2 - 1");
+            res.push(power.ilog2() as usize);
         }
 
         self.state.queries_depth = res.clone();

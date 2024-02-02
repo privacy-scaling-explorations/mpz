@@ -73,17 +73,14 @@ impl Sender<state::Extension> {
         // Geneates the buckets.
         let buckets = bucket.insert(n);
 
-        // Computes `log(length + 1)` of each bucket.
+        // First pad (length + 1) to a pow of 2, then computes `log(length + 1)` of each bucket.
         let mut bs = vec![];
         for bin in buckets.iter() {
-            if let Some(power) = (bin.len() + 1).checked_next_power_of_two() {
-                bs.push(power.ilog2() as usize);
-                self.state.buckets_length.push(power);
-            } else {
-                return Err(SenderError::InvalidBucketSize(
-                    "The next power of 2 of the bucket size exceeds the MAX number".to_string(),
-                ));
-            }
+            let power = (bin.len() + 1)
+                .checked_next_power_of_two()
+                .expect("bucket length should be less than usize::MAX / 2 - 1");
+            bs.push(power.ilog2() as usize);
+            self.state.buckets_length.push(power);
         }
 
         // Stores the buckets.
