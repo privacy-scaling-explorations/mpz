@@ -134,7 +134,7 @@ impl Receiver<state::Extension> {
                 counter: self.state.counter + 1,
             },
         };
-        
+
         Ok((receiver, res))
     }
 }
