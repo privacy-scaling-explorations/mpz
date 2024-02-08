@@ -35,7 +35,7 @@ impl Receiver<state::PreExtension> {
     /// * `n` - The total number of indices.
     #[allow(clippy::type_complexity)]
     pub fn pre_extend(
-        &mut self,
+        self,
         alphas: &[u32],
         n: u32,
     ) -> Result<(Receiver<state::Extension>, Vec<(usize, u32)>), ReceiverError> {
@@ -99,8 +99,6 @@ impl Receiver<state::PreExtension> {
             },
         };
 
-        self.state.counter += 1;
-
         Ok((receiver, res))
     }
 }
@@ -111,7 +109,10 @@ impl Receiver<state::Extension> {
     /// # Arguments.
     ///
     /// * `rt` - The vector received from SPCOT protocol on multiple queries.
-    pub fn extend(&mut self, rt: &[Vec<Block>]) -> Result<Vec<Block>, ReceiverError> {
+    pub fn extend(
+        self,
+        rt: &[Vec<Block>],
+    ) -> Result<(Receiver<state::PreExtension>, Vec<Block>), ReceiverError> {
         if rt
             .iter()
             .zip(self.state.queries_depth.iter())
@@ -128,10 +129,13 @@ impl Receiver<state::Extension> {
             res.extend(&blks[..*pos]);
         }
 
-        self.state.queries_depth.clear();
-        self.state.queries_length.clear();
-
-        Ok(res)
+        let receiver = Receiver {
+            state: state::PreExtension {
+                counter: self.state.counter + 1,
+            },
+        };
+        
+        Ok((receiver, res))
     }
 }
 /// The receiver's state.

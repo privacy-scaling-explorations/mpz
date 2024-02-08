@@ -25,7 +25,7 @@ impl Sender {
         }
     }
 
-    /// Complets the setup phase for PreExtend.
+    /// Completes the setup phase for PreExtend.
     ///
     /// # Arguments.
     ///
@@ -56,7 +56,7 @@ impl Sender<state::PreExtension> {
     /// * `t` - The number of queried indices.
     /// * `n` - The total number of indices.
     pub fn pre_extend(
-        &mut self,
+        self,
         t: u32,
         n: u32,
     ) -> Result<(Sender<state::Extension>, Vec<usize>), SenderError> {
@@ -91,13 +91,11 @@ impl Sender<state::PreExtension> {
                 counter: self.state.counter,
                 m,
                 n,
-                hashes: self.state.hashes.clone(),
+                hashes: self.state.hashes,
                 buckets,
                 buckets_length,
             },
         };
-
-        self.state.counter += 1;
 
         Ok((sender, bs))
     }
@@ -111,7 +109,10 @@ impl Sender<state::Extension> {
     /// # Arguments
     ///
     /// * `st` - The vector received from SPCOT protocol on multiple queries.
-    pub fn extend(&mut self, st: &[Vec<Block>]) -> Result<Vec<Block>, SenderError> {
+    pub fn extend(
+        self,
+        st: &[Vec<Block>],
+    ) -> Result<(Sender<state::PreExtension>, Vec<Block>), SenderError> {
         if st.len() != self.state.m {
             return Err(SenderError::InvalidInput(
                 "the length st should be m".to_string(),
@@ -145,11 +146,15 @@ impl Sender<state::Extension> {
             }
         }
 
-        // Clears the buckets.
-        self.state.buckets.clear();
-        self.state.buckets_length.clear();
+        let sender = Sender {
+            state: state::PreExtension {
+                delta: self.state.delta,
+                counter: self.state.counter + 1,
+                hashes: self.state.hashes,
+            },
+        };
 
-        Ok(res)
+        Ok((sender, res))
     }
 }
 
@@ -181,7 +186,6 @@ pub mod state {
     /// In this state the sender performs pre extension in MPCOT (potentially multiple times).
     pub struct PreExtension {
         /// Sender's global secret.
-        #[allow(dead_code)]
         pub(super) delta: Block,
         /// Current MPCOT counter
         pub(super) counter: usize,
@@ -197,10 +201,8 @@ pub mod state {
     /// In this state the sender performs MPCOT extension (potentially multiple times).
     pub struct Extension {
         /// Sender's global secret.
-        #[allow(dead_code)]
         pub(super) delta: Block,
         /// Current MPCOT counter
-        #[allow(dead_code)]
         pub(super) counter: usize,
 
         /// Current length of Cuckoo hash table, will possibly be changed in each extension.

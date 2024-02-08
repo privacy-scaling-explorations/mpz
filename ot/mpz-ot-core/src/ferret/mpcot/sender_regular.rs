@@ -39,7 +39,7 @@ impl Sender<state::PreExtension> {
     /// * `t` - The number of queried indices.
     /// * `n` - The total number of indices.
     pub fn pre_extend(
-        &mut self,
+        self,
         t: u32,
         n: u32,
     ) -> Result<(Sender<state::Extension>, Vec<usize>), SenderError> {
@@ -87,8 +87,6 @@ impl Sender<state::PreExtension> {
             },
         };
 
-        self.state.counter += 1;
-
         Ok((sender, queries_depth))
     }
 }
@@ -99,7 +97,10 @@ impl Sender<state::Extension> {
     /// # Arguments.
     ///
     /// * `st` - The vector received from SPCOT protocol on multiple queries.
-    pub fn extend(&mut self, st: &[Vec<Block>]) -> Result<Vec<Block>, SenderError> {
+    pub fn extend(
+        self,
+        st: &[Vec<Block>],
+    ) -> Result<(Sender<state::PreExtension>, Vec<Block>), SenderError> {
         if st
             .iter()
             .zip(self.state.queries_depth.iter())
@@ -115,10 +116,14 @@ impl Sender<state::Extension> {
             res.extend(&blks[..*pos]);
         }
 
-        self.state.queries_depth.clear();
-        self.state.queries_length.clear();
+        let sender = Sender {
+            state: state::PreExtension {
+                delta: self.state.delta,
+                counter: self.state.counter + 1,
+            },
+        };
 
-        Ok(res)
+        Ok((sender, res))
     }
 }
 /// The sender's state.
@@ -150,7 +155,6 @@ pub mod state {
     /// In this state the sender performs pre extension in MPCOT (potentially multiple times).
     pub struct PreExtension {
         /// Sender's global secret.
-        #[allow(dead_code)]
         pub(super) delta: Block,
         /// Current MPCOT counter
         pub(super) counter: usize,
@@ -164,10 +168,8 @@ pub mod state {
     /// In this state the sender performs MPCOT extension (potentially multiple times).
     pub struct Extension {
         /// Sender's global secret.
-        #[allow(dead_code)]
         pub(super) delta: Block,
         /// Current MPCOT counter
-        #[allow(dead_code)]
         pub(super) counter: usize,
         /// The total number of indices in the current extension.
         pub(super) n: u32,

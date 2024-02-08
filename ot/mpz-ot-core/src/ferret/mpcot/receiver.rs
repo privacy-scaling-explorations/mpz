@@ -25,7 +25,7 @@ impl Receiver {
         }
     }
 
-    /// Complets the setup phase for PreExtend.
+    /// Completes the setup phase for PreExtend.
     ///
     /// See step 1 in Figure 6.
     ///
@@ -60,7 +60,7 @@ impl Receiver<state::PreExtension> {
     /// * `n` - The total number of indices.
     #[allow(clippy::type_complexity)]
     pub fn pre_extend(
-        &mut self,
+        self,
         alphas: &[u32],
         n: u32,
     ) -> Result<(Receiver<state::Extension>, Vec<(usize, u32)>), ReceiverError> {
@@ -114,8 +114,6 @@ impl Receiver<state::PreExtension> {
             },
         };
 
-        self.state.counter += 1;
-
         Ok((receiver, p))
     }
 }
@@ -127,7 +125,10 @@ impl Receiver<state::Extension> {
     /// # Arguments
     ///
     /// * `rt` - The vector received from SPCOT protocol on multiple queries.
-    pub fn extend(&mut self, rt: &[Vec<Block>]) -> Result<Vec<Block>, ReceiverError> {
+    pub fn extend(
+        self,
+        rt: &[Vec<Block>],
+    ) -> Result<(Receiver<state::PreExtension>, Vec<Block>), ReceiverError> {
         if rt.len() != self.state.m {
             return Err(ReceiverError::InvalidInput(
                 "the length rt should be m".to_string(),
@@ -162,13 +163,15 @@ impl Receiver<state::Extension> {
                 *x ^= rt[bucket_index][pos];
             }
         }
-        self.state.counter += 1;
 
-        // Clears the buckets.
-        self.state.buckets.clear();
-        self.state.buckets_length.clear();
+        let receiver = Receiver {
+            state: state::PreExtension {
+                counter: self.state.counter + 1,
+                hashes: self.state.hashes,
+            },
+        };
 
-        Ok(res)
+        Ok((receiver, res))
     }
 }
 /// The receiver's state.
