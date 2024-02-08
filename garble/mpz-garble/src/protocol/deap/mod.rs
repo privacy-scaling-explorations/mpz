@@ -225,15 +225,11 @@ impl DEAP {
         Ok(())
     }
 
-    /// Proves the output of a circuit to the other party.
+    /// Executes the provided circuit as the prover, assigning to the provided output values.
     ///
     /// # Notes
     ///
     /// This function can only be called by the leader.
-    ///
-    /// This function does _not_ prove the output right away,
-    /// instead the proof is committed to and decommitted later during
-    /// the call to [`finalize`](Self::finalize).
     ///
     /// # Arguments
     ///
@@ -241,7 +237,6 @@ impl DEAP {
     /// * `circ` - The circuit to execute.
     /// * `inputs` - The inputs to the circuit.
     /// * `outputs` - The outputs to the circuit.
-    /// * `sink` - The sink to send messages to.
     /// * `stream` - The stream to receive messages from.
     /// * `ot_recv` - The OT receiver.
     #[allow(clippy::too_many_arguments)]
@@ -332,7 +327,7 @@ impl DEAP {
         Ok(())
     }
 
-    /// Sends a commitment to the provided values, proving them to the follower upon finalization.
+    /// Sends a commitment to the provided output values, deferring the actual proving until finalization.
     pub async fn defer_prove<S: Sink<GarbleMessage, Error = std::io::Error> + Unpin>(
         &self,
         id: &str,
@@ -354,7 +349,7 @@ impl DEAP {
         Ok(())
     }
 
-    /// Receives a commitment to the provided values, and stores it until finalization.
+    /// Receives a commitment to the provided output values, and stores it until finalization.
     ///
     /// # Notes
     ///
@@ -364,7 +359,7 @@ impl DEAP {
     ///
     /// * `id` - The ID of the operation
     /// * `values` - The values to receive a commitment to
-    /// * `expected_values` - The expected values which will be verified against the commitment
+    /// * `expected_values` - The expected plaintext values which will be verified against the commitment
     /// * `stream` - The stream to receive messages from
     pub async fn defer_verify<S: Stream<Item = Result<GarbleMessage, std::io::Error>> + Unpin>(
         &self,
@@ -375,6 +370,7 @@ impl DEAP {
     ) -> Result<(), DEAPError> {
         let encoded_values = self.gen.get_encodings(values)?;
 
+        // Encode the expected plaintext values.
         let expected_values = expected_values
             .iter()
             .zip(encoded_values)

@@ -335,7 +335,8 @@ pub trait Execute {
     ) -> Result<(), ExecutionError>;
 }
 
-/// This trait provides methods for proving the output of a circuit.
+/// This trait provides methods for the evaluator to prove the authenticity of the evaluated garbled
+/// circuit's output.
 #[async_trait]
 pub trait Prove {
     /// Executes the provided circuit as the prover, assigning to the provided output values.
@@ -346,11 +347,11 @@ pub trait Prove {
         outputs: &[ValueRef],
     ) -> Result<(), ProveError>;
 
-    /// Proves the provided values.
+    /// Proves the authenticity of the provided output values.
     async fn prove(&mut self, values: &[ValueRef]) -> Result<(), ProveError>;
 }
 
-/// This trait provides methods for verifying the output of a circuit.
+/// This trait provides methods for the garbler to verify the authenticity of the evaluator's output.
 #[async_trait]
 pub trait Verify {
     /// Executes the provided circuit as the verifier, assigning to the provided output values.
@@ -361,7 +362,7 @@ pub trait Verify {
         outputs: &[ValueRef],
     ) -> Result<(), VerifyError>;
 
-    /// Verifies the provided values against the expected values.
+    /// Verifies the provided output values against the expected values.
     async fn verify(
         &mut self,
         values: &[ValueRef],
