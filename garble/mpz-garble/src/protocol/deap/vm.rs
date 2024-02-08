@@ -482,15 +482,15 @@ mod tests {
     use crate::protocol::deap::mock::create_mock_deap_vm;
 
     use core::{future::Future, pin::Pin};
-    use mpz_ot::mock::{MockSharedOTReceiver, MockSharedOTSender};
+    use mpz_ot::ideal::{IdealSharedOTReceiver, IdealSharedOTSender};
     use rstest::{fixture, rstest};
 
     // Leader and follower VMs in a set up state and the futures which need to be awaited
     // to trigger circuit execution.
     struct VmFixture {
-        leader_vm: DEAPVm<MockSharedOTSender, MockSharedOTReceiver>,
+        leader_vm: DEAPVm<IdealSharedOTSender, IdealSharedOTReceiver>,
         leader_fut: Pin<Box<dyn Future<Output = Vec<Value>>>>,
-        follower_vm: DEAPVm<MockSharedOTSender, MockSharedOTReceiver>,
+        follower_vm: DEAPVm<IdealSharedOTSender, IdealSharedOTReceiver>,
         follower_fut: Pin<Box<dyn Future<Output = Vec<Value>>>>,
     }
 

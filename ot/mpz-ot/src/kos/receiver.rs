@@ -1,22 +1,25 @@
 use async_trait::async_trait;
 use futures::SinkExt;
 use itybity::{FromBitIterator, IntoBitIterator};
-use mpz_core::{cointoss, Block, ProtocolMessage};
+use mpz_core::{cointoss, prg::Prg, Block, ProtocolMessage};
 use mpz_ot_core::kos::{
     msgs::Message, receiver_state as state, Receiver as ReceiverCore, ReceiverConfig, CSP, SSP,
 };
 
 use enum_try_as_inner::EnumTryAsInner;
 use rand::{thread_rng, Rng};
+use rand_core::{RngCore, SeedableRng};
 use utils_aio::{
     non_blocking_backend::{Backend, NonBlockingBackend},
     sink::IoSink,
     stream::{ExpectStreamExt, IoStream},
 };
 
-use crate::{OTError, OTReceiver, OTSender, OTSetup, VerifiableOTReceiver, VerifiableOTSender};
-
 use super::{into_base_sink, into_base_stream, ReceiverError, ReceiverVerifyError};
+use crate::{
+    OTError, OTReceiver, OTSender, OTSetup, RandomOTReceiver, VerifiableOTReceiver,
+    VerifiableOTSender,
+};
 
 #[derive(Debug, EnumTryAsInner)]
 #[derive_err(Debug)]
@@ -304,6 +307,34 @@ where
 }
 
 #[async_trait]
+impl<BaseOT> RandomOTReceiver<bool, Block> for Receiver<BaseOT>
+where
+    BaseOT: ProtocolMessage + Send,
+{
+    async fn receive_random<
+        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
+        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
+    >(
+        &mut self,
+        _sink: &mut Si,
+        _stream: &mut St,
+        count: usize,
+    ) -> Result<(Vec<bool>, Vec<Block>), OTError> {
+        let receiver = self
+            .state
+            .try_as_extension_mut()
+            .map_err(ReceiverError::from)?;
+
+        let (choices, random_outputs) = receiver
+            .keys(count)
+            .map_err(ReceiverError::from)?
+            .take_choices_and_keys();
+
+        Ok((choices, random_outputs))
+    }
+}
+
+#[async_trait]
 impl<const N: usize, BaseOT> OTReceiver<bool, [u8; N]> for Receiver<BaseOT>
 where
     BaseOT: ProtocolMessage + Send,
@@ -347,6 +378,45 @@ where
         .await?;
 
         Ok(received)
+    }
+}
+
+#[async_trait]
+impl<const N: usize, BaseOT> RandomOTReceiver<bool, [u8; N]> for Receiver<BaseOT>
+where
+    BaseOT: ProtocolMessage + Send,
+{
+    async fn receive_random<
+        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
+        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
+    >(
+        &mut self,
+        _sink: &mut Si,
+        _stream: &mut St,
+        count: usize,
+    ) -> Result<(Vec<bool>, Vec<[u8; N]>), OTError> {
+        let receiver = self
+            .state
+            .try_as_extension_mut()
+            .map_err(ReceiverError::from)?;
+
+        let (choices, random_outputs) = receiver
+            .keys(count)
+            .map_err(ReceiverError::from)?
+            .take_choices_and_keys();
+
+        Ok((
+            choices,
+            random_outputs
+                .into_iter()
+                .map(|block| {
+                    let mut prg = Prg::from_seed(block);
+                    let mut out = [0_u8; N];
+                    prg.fill_bytes(&mut out);
+                    out
+                })
+                .collect(),
+        ))
     }
 }
 

@@ -3,14 +3,14 @@
 use crate::{OTReceiveElement, OTSendElement};
 
 use super::{ConverterReceiver, ConverterSender, ReceiverConfig, SenderConfig};
-use mpz_ot::mock::{mock_ot_shared_pair, MockSharedOTReceiver, MockSharedOTSender};
+use mpz_ot::ideal::{ideal_ot_shared_pair, IdealSharedOTReceiver, IdealSharedOTSender};
 use mpz_share_conversion_core::fields::Field;
 use utils_aio::duplex::MemoryDuplex;
 
 /// A mock converter sender
-pub type MockConverterSender<F> = ConverterSender<F, MockSharedOTSender>;
+pub type MockConverterSender<F> = ConverterSender<F, IdealSharedOTSender>;
 /// A mock converter receiver
-pub type MockConverterReceiver<F> = ConverterReceiver<F, MockSharedOTReceiver>;
+pub type MockConverterReceiver<F> = ConverterReceiver<F, IdealSharedOTReceiver>;
 
 /// Creates a mock sender and receiver for testing the share conversion protocol.
 #[allow(clippy::type_complexity)]
@@ -18,16 +18,16 @@ pub fn mock_converter_pair<F: Field>(
     sender_config: SenderConfig,
     receiver_config: ReceiverConfig,
 ) -> (
-    ConverterSender<F, MockSharedOTSender>,
-    ConverterReceiver<F, MockSharedOTReceiver>,
+    ConverterSender<F, IdealSharedOTSender>,
+    ConverterReceiver<F, IdealSharedOTReceiver>,
 )
 where
-    MockSharedOTSender: OTSendElement<F>,
-    MockSharedOTReceiver: OTReceiveElement<F>,
+    IdealSharedOTSender: OTSendElement<F>,
+    IdealSharedOTReceiver: OTReceiveElement<F>,
 {
     let (c1, c2) = MemoryDuplex::new();
 
-    let (ot_sender, ot_receiver) = mock_ot_shared_pair();
+    let (ot_sender, ot_receiver) = ideal_ot_shared_pair();
 
     let sender = ConverterSender::new(sender_config, ot_sender, Box::new(c1));
     let receiver = ConverterReceiver::new(receiver_config, ot_receiver, Box::new(c2));

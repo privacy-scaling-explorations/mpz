@@ -1,6 +1,6 @@
 //! Mocked DEAP VMs for testing
 
-use mpz_ot::mock::{mock_ot_shared_pair, MockSharedOTReceiver, MockSharedOTSender};
+use mpz_ot::ideal::{ideal_ot_shared_pair, IdealSharedOTReceiver, IdealSharedOTSender};
 use utils_aio::mux::{mock::MockMuxChannelFactory, MuxChannel};
 
 use crate::config::Role;
@@ -8,24 +8,24 @@ use crate::config::Role;
 use super::{vm::DEAPVm, DEAPThread};
 
 /// Mock DEAP Leader VM.
-pub type MockLeader = DEAPVm<MockSharedOTSender, MockSharedOTReceiver>;
+pub type MockLeader = DEAPVm<IdealSharedOTSender, IdealSharedOTReceiver>;
 /// Mock DEAP Leader thread.
-pub type MockLeaderThread = DEAPThread<MockSharedOTSender, MockSharedOTReceiver>;
+pub type MockLeaderThread = DEAPThread<IdealSharedOTSender, IdealSharedOTReceiver>;
 /// Mock DEAP Follower VM.
-pub type MockFollower = DEAPVm<MockSharedOTSender, MockSharedOTReceiver>;
+pub type MockFollower = DEAPVm<IdealSharedOTSender, IdealSharedOTReceiver>;
 /// Mock DEAP Follower thread.
-pub type MockFollowerThread = DEAPThread<MockSharedOTSender, MockSharedOTReceiver>;
+pub type MockFollowerThread = DEAPThread<IdealSharedOTSender, IdealSharedOTReceiver>;
 
 /// Create a pair of mocked DEAP VMs
 pub async fn create_mock_deap_vm(
     id: &str,
 ) -> (
-    DEAPVm<MockSharedOTSender, MockSharedOTReceiver>,
-    DEAPVm<MockSharedOTSender, MockSharedOTReceiver>,
+    DEAPVm<IdealSharedOTSender, IdealSharedOTReceiver>,
+    DEAPVm<IdealSharedOTSender, IdealSharedOTReceiver>,
 ) {
     let mut mux_factory = MockMuxChannelFactory::new();
-    let (leader_ot_send, follower_ot_recv) = mock_ot_shared_pair();
-    let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
+    let (leader_ot_send, follower_ot_recv) = ideal_ot_shared_pair();
+    let (follower_ot_send, leader_ot_recv) = ideal_ot_shared_pair();
 
     let leader_channel = mux_factory.get_channel(id).await.unwrap();
     let follower_channel = mux_factory.get_channel(id).await.unwrap();

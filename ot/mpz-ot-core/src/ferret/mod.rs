@@ -65,7 +65,7 @@ mod tests {
     fn ferret_test() {
         let mut prg = Prg::new();
         let delta = prg.random_block();
-        let mut ideal_cot = IdealCOT::init_with_delta(delta);
+        let mut ideal_cot = IdealCOT::new_with_delta(delta);
         let mut ideal_mpcot = IdealMpcot::init_with_delta(delta);
 
         let sender = FerretSender::new();

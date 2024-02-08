@@ -889,7 +889,7 @@ impl State {
 #[cfg(test)]
 mod tests {
     use mpz_circuits::{circuits::AES128, ops::WrappingAdd, CircuitBuilder};
-    use mpz_ot::mock::mock_ot_shared_pair;
+    use mpz_ot::ideal::ideal_ot_shared_pair;
     use utils_aio::duplex::MemoryDuplex;
 
     use crate::Memory;
@@ -912,8 +912,8 @@ mod tests {
     #[tokio::test]
     async fn test_deap() {
         let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
-        let (leader_ot_send, follower_ot_recv) = mock_ot_shared_pair();
-        let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
+        let (leader_ot_send, follower_ot_recv) = ideal_ot_shared_pair();
+        let (follower_ot_send, leader_ot_recv) = ideal_ot_shared_pair();
 
         let mut leader = DEAP::new(Role::Leader, [42u8; 32]);
         let mut follower = DEAP::new(Role::Follower, [69u8; 32]);
@@ -1005,8 +1005,8 @@ mod tests {
     #[tokio::test]
     async fn test_deap_load() {
         let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
-        let (leader_ot_send, follower_ot_recv) = mock_ot_shared_pair();
-        let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
+        let (leader_ot_send, follower_ot_recv) = ideal_ot_shared_pair();
+        let (follower_ot_send, leader_ot_recv) = ideal_ot_shared_pair();
 
         let mut leader = DEAP::new(Role::Leader, [42u8; 32]);
         let mut follower = DEAP::new(Role::Follower, [69u8; 32]);
@@ -1120,8 +1120,8 @@ mod tests {
     #[tokio::test]
     async fn test_deap_decode_private() {
         let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
-        let (leader_ot_send, follower_ot_recv) = mock_ot_shared_pair();
-        let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
+        let (leader_ot_send, follower_ot_recv) = ideal_ot_shared_pair();
+        let (follower_ot_send, leader_ot_recv) = ideal_ot_shared_pair();
 
         let mut leader = DEAP::new(Role::Leader, [42u8; 32]);
         let mut follower = DEAP::new(Role::Follower, [69u8; 32]);
@@ -1228,8 +1228,8 @@ mod tests {
     #[tokio::test]
     async fn test_deap_decode_shared() {
         let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
-        let (leader_ot_send, follower_ot_recv) = mock_ot_shared_pair();
-        let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
+        let (leader_ot_send, follower_ot_recv) = ideal_ot_shared_pair();
+        let (follower_ot_send, leader_ot_recv) = ideal_ot_shared_pair();
 
         let mut leader = DEAP::new(Role::Leader, [42u8; 32]);
         let mut follower = DEAP::new(Role::Follower, [69u8; 32]);
@@ -1366,8 +1366,8 @@ mod tests {
 
     async fn run_zk(key: [u8; 16], msg: [u8; 16], expected_ciphertext: [u8; 16]) {
         let (leader_channel, follower_channel) = MemoryDuplex::<GarbleMessage>::new();
-        let (_, follower_ot_recv) = mock_ot_shared_pair();
-        let (follower_ot_send, leader_ot_recv) = mock_ot_shared_pair();
+        let (_, follower_ot_recv) = ideal_ot_shared_pair();
+        let (follower_ot_send, leader_ot_recv) = ideal_ot_shared_pair();
 
         let mut leader = DEAP::new(Role::Leader, [42u8; 32]);
         let mut follower = DEAP::new(Role::Follower, [69u8; 32]);

@@ -19,18 +19,13 @@ impl Receiver {
     }
 
     /// Completes the setup phase of the protocol.
-    pub fn setup(self) -> Receiver<state::Extension> {
+    pub fn setup(self) -> Receiver<state::PreExtension> {
         Receiver {
-            state: state::Extension {
-                counter: 0,
-                queries_length: Vec::default(),
-                queries_depth: Vec::default(),
-            },
+            state: state::PreExtension { counter: 0 },
         }
     }
 }
-
-impl Receiver<state::Extension> {
+impl Receiver<state::PreExtension> {
     /// Performs the prepare procedure in MPCOT extension.
     /// Outputs the indices for SPCOT.
     ///
@@ -38,11 +33,12 @@ impl Receiver<state::Extension> {
     ///
     /// * `alphas` - The queried indices.
     /// * `n` - The total number of indices.
-    pub fn extend_pre(
-        &mut self,
+    #[allow(clippy::type_complexity)]
+    pub fn pre_extend(
+        self,
         alphas: &[u32],
         n: u32,
-    ) -> Result<Vec<(usize, u32)>, ReceiverError> {
+    ) -> Result<(Receiver<state::Extension>, Vec<(usize, u32)>), ReceiverError> {
         let t = alphas.len() as u32;
         if t > n {
             return Err(ReceiverError::InvalidInput(
@@ -53,7 +49,7 @@ impl Receiver<state::Extension> {
         // The range of each interval.
         let k = (n + t - 1) / t;
 
-        self.state.queries_length = if n % t == 0 {
+        let queries_length = if n % t == 0 {
             vec![k as usize; t as usize]
         } else {
             let mut tmp = vec![k as usize; (t - 1) as usize];
@@ -67,14 +63,15 @@ impl Receiver<state::Extension> {
             }
         };
 
-        for len in self.state.queries_length.iter() {
-            if let Some(power) = len.checked_next_power_of_two() {
-                self.state.queries_depth.push(power.ilog2() as usize);
-            } else {
-                return Err(ReceiverError::InvalidInput(
-                    "The next power of 2 of each length exceeds the MAX number".to_string(),
-                ));
-            }
+        let mut queries_depth = Vec::with_capacity(queries_length.len());
+        for len in queries_length.iter() {
+            // pad `len` to power of 2.
+            let power = len
+                .checked_next_power_of_two()
+                .expect("len should be less than usize::MAX / 2 - 1")
+                .ilog2() as usize;
+
+            queries_depth.push(power);
         }
 
         if !alphas
@@ -87,24 +84,35 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let res: Vec<(usize, u32)> = self
-            .state
-            .queries_depth
+        let res: Vec<(usize, u32)> = queries_depth
             .iter()
             .zip(alphas.iter())
             .map(|(&d, &alpha)| (d, alpha % k))
             .collect();
 
-        Ok(res)
-    }
+        let receiver = Receiver {
+            state: state::Extension {
+                counter: self.state.counter,
+                n,
+                queries_length,
+                queries_depth,
+            },
+        };
 
+        Ok((receiver, res))
+    }
+}
+
+impl Receiver<state::Extension> {
     /// Performs MPCOT extension.
     ///
     /// # Arguments.
     ///
     /// * `rt` - The vector received from SPCOT protocol on multiple queries.
-    /// * `n` - The total number of indices.
-    pub fn extend(&mut self, rt: &[Vec<Block>], n: u32) -> Result<Vec<Block>, ReceiverError> {
+    pub fn extend(
+        self,
+        rt: &[Vec<Block>],
+    ) -> Result<(Receiver<state::PreExtension>, Vec<Block>), ReceiverError> {
         if rt
             .iter()
             .zip(self.state.queries_depth.iter())
@@ -115,17 +123,19 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let mut res: Vec<Block> = Vec::with_capacity(n as usize);
+        let mut res: Vec<Block> = Vec::with_capacity(self.state.n as usize);
 
         for (blks, pos) in rt.iter().zip(self.state.queries_length.iter()) {
             res.extend(&blks[..*pos]);
         }
 
-        self.state.counter += 1;
-        self.state.queries_depth.clear();
-        self.state.queries_length.clear();
+        let receiver = Receiver {
+            state: state::PreExtension {
+                counter: self.state.counter + 1,
+            },
+        };
 
-        Ok(res)
+        Ok((receiver, res))
     }
 }
 /// The receiver's state.
@@ -135,6 +145,7 @@ pub mod state {
         pub trait Sealed {}
 
         impl Sealed for super::Initialized {}
+        impl Sealed for super::PreExtension {}
         impl Sealed for super::Extension {}
     }
 
@@ -148,17 +159,29 @@ pub mod state {
     impl State for Initialized {}
 
     opaque_debug::implement!(Initialized);
+    /// The receiver's state before extending.
+    ///
+    /// In this state the receiver performs pre extension in MPCOT (potentially multiple times).
+    pub struct PreExtension {
+        /// Current MPCOT counter
+        pub(super) counter: usize,
+    }
+
+    impl State for PreExtension {}
+
+    opaque_debug::implement!(PreExtension);
 
     /// The receiver's state after the setup phase.
     ///
     /// In this state the receiver performs MPCOT extension (potentially multiple times).
     pub struct Extension {
         /// Current MPCOT counter
+        #[allow(dead_code)]
         pub(super) counter: usize,
-
+        /// The total number of indices in the current extension.
+        pub(super) n: u32,
         /// Current queries length.
         pub(super) queries_length: Vec<usize>,
-
         /// The depth of queries.
         pub(super) queries_depth: Vec<usize>,
     }

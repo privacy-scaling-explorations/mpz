@@ -1,9 +1,9 @@
-//! This crate provides a semi-honest protocol (with optional covert-security) for converting secret-shared finite field elements
+//! This crate provides a semi-honest protocol (with optional covert security) for converting secret-shared finite field elements
 //! between additive and multiplicative representations.
 //!
-//! The protocol is based on `Two Party RSA Key Generation [Gil99]` which devised a method for
-//! converting additive shares of a finite field element into multiplicative shares (A2M). We use a similar technique
-//! to convert multiplicative shares into additive shares (M2A), inspired by `Efficient Secure Two-Party Exponentiation [YCCL11]`.
+//! The protocol is based on `Two Party RSA Key Generation [Gil99]` which describes a method for
+//! converting multiplicative shares of a finite field element into additive shares (M2A). We use a similar technique
+//! to convert additive shares into multiplicative shares (A2M), inspired by `Efficient Secure Two-Party Exponentiation [YCCL11]`.
 
 #![deny(missing_docs, unreachable_pub, unused_must_use)]
 #![deny(clippy::all)]
@@ -100,7 +100,7 @@ mod tests {
 
     use crate::config::{ReceiverConfig, SenderConfig};
 
-    use mpz_ot::mock::{mock_ot_shared_pair, MockSharedOTReceiver, MockSharedOTSender};
+    use mpz_ot::ideal::{ideal_ot_shared_pair, IdealSharedOTReceiver, IdealSharedOTSender};
     use mpz_share_conversion_core::{
         fields::{gf2_128::Gf2_128, p256::P256, Field},
         ShareType,
@@ -132,10 +132,10 @@ mod tests {
         #[case] _pd: PhantomData<T>,
         #[values(false, true)] malicious: bool,
     ) where
-        MockSharedOTSender: OTSendElement<T>,
-        MockSharedOTReceiver: OTReceiveElement<T>,
+        IdealSharedOTSender: OTSendElement<T>,
+        IdealSharedOTReceiver: OTReceiveElement<T>,
     {
-        let (ot_sender, ot_receiver) = mock_ot_shared_pair();
+        let (ot_sender, ot_receiver) = ideal_ot_shared_pair();
         let (mut sender_channel, mut receiver_channel) = MemoryDuplex::new();
         let (mut sender, mut receiver) = create_pair::<T>();
         let mut rng = ChaCha20Rng::from_seed([0; 32]);

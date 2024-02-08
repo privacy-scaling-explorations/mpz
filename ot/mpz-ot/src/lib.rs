@@ -7,9 +7,9 @@
 #[cfg(feature = "actor")]
 pub mod actor;
 pub mod chou_orlandi;
+#[cfg(feature = "ideal")]
+pub mod ideal;
 pub mod kos;
-#[cfg(feature = "mock")]
-pub mod mock;
 
 use async_trait::async_trait;
 use mpz_core::ProtocolMessage;
@@ -68,6 +68,80 @@ where
     ) -> Result<(), OTError>;
 }
 
+/// A correlated oblivious transfer sender.
+#[async_trait]
+pub trait COTSender<T>: ProtocolMessage
+where
+    T: Send + Sync,
+{
+    /// Obliviously transfers the correlated messages to the receiver.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the receiver.
+    /// * `stream` - The IO stream from the receiver.
+    /// * `msgs` - The `0`-bit messages to use during the oblivious transfer.
+    async fn send_correlated<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        msgs: &[T],
+    ) -> Result<(), OTError>;
+}
+
+/// A random OT sender.
+#[async_trait]
+pub trait RandomOTSender<T>: ProtocolMessage
+where
+    T: Send + Sync,
+{
+    /// Outputs pairs of random messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the receiver.
+    /// * `stream` - The IO stream from the receiver.
+    /// * `count` - The number of pairs of random messages to output.
+    async fn send_random<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<Vec<T>, OTError>;
+}
+
+/// A random correlated oblivious transfer sender.
+#[async_trait]
+pub trait RandomCOTSender<T>: ProtocolMessage
+where
+    T: Send + Sync,
+{
+    /// Obliviously transfers the correlated messages to the receiver.
+    ///
+    /// Returns the `0`-bit messages that were obliviously transferred.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the receiver.
+    /// * `stream` - The IO stream from the receiver.
+    /// * `count` - The number of correlated messages to obliviously transfer.
+    async fn send_random_correlated<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<Vec<T>, OTError>;
+}
+
 /// An oblivious transfer receiver.
 #[async_trait]
 pub trait OTReceiver<T, U>: ProtocolMessage
@@ -88,6 +162,83 @@ where
         stream: &mut St,
         choices: &[T],
     ) -> Result<Vec<U>, OTError>;
+}
+
+/// A correlated oblivious transfer receiver.
+#[async_trait]
+pub trait COTReceiver<T, U>: ProtocolMessage
+where
+    T: Send + Sync,
+    U: Send + Sync,
+{
+    /// Obliviously receives correlated messages from the sender.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the sender.
+    /// * `stream` - The IO stream from the sender.
+    /// * `choices` - The choices made by the receiver.
+    async fn receive_correlated<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        choices: &[T],
+    ) -> Result<Vec<U>, OTError>;
+}
+
+/// A random OT receiver.
+#[async_trait]
+pub trait RandomOTReceiver<T, U>: ProtocolMessage
+where
+    T: Send + Sync,
+    U: Send + Sync,
+{
+    /// Outputs the choice bits and the corresponding messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the sender.
+    /// * `stream` - The IO stream from the sender.
+    /// * `count` - The number of random messages to receive.
+    async fn receive_random<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<(Vec<T>, Vec<U>), OTError>;
+}
+
+/// A random correlated oblivious transfer receiver.
+#[async_trait]
+pub trait RandomCOTReceiver<T, U>: ProtocolMessage
+where
+    T: Send + Sync,
+    U: Send + Sync,
+{
+    /// Obliviously receives correlated messages with random choices.
+    ///
+    /// Returns a tuple of the choices and the messages, respectively.
+    ///
+    /// # Arguments
+    ///
+    /// * `sink` - The IO sink to the sender.
+    /// * `stream` - The IO stream from the sender.
+    /// * `count` - The number of correlated messages to obliviously receive.
+    async fn receive_random_correlated<
+        Si: IoSink<Self::Msg> + Send + Unpin,
+        St: IoStream<Self::Msg> + Send + Unpin,
+    >(
+        &mut self,
+        sink: &mut Si,
+        stream: &mut St,
+        count: usize,
+    ) -> Result<(Vec<T>, Vec<U>), OTError>;
 }
 
 /// An oblivious transfer sender that is committed to its messages and can reveal them
@@ -205,6 +356,44 @@ pub trait OTSenderShared<T> {
     async fn send(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
 }
 
+/// A random oblivious transfer sender that can be used via a shared reference.
+#[async_trait]
+pub trait RandomOTSenderShared<T> {
+    /// Outputs pairs of random messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `count` - The number of pairs of random messages to output.
+    async fn send_random(&self, id: &str, count: usize) -> Result<Vec<T>, OTError>;
+}
+
+/// A correlated oblivious transfer sender that can be used via a shared reference.
+#[async_trait]
+pub trait COTSenderShared<T> {
+    /// Obliviously transfers correlated messages to the receiver.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `msgs` - The `0`-bit messages to use during the oblivious transfer.
+    async fn send_correlated(&self, id: &str, msgs: &[T]) -> Result<(), OTError>;
+}
+
+/// A random correlated oblivious transfer sender that can be used via a shared reference.
+#[async_trait]
+pub trait RandomCOTSenderShared<T> {
+    /// Obliviously transfers correlated messages to the receiver.
+    ///
+    /// Returns the `0`-bit messages that were obliviously transferred.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `count` - The number of correlated messages to obliviously transfer.
+    async fn send_random_correlated(&self, id: &str, count: usize) -> Result<Vec<T>, OTError>;
+}
+
 /// An oblivious transfer receiver that can be used via a shared reference.
 #[async_trait]
 pub trait OTReceiverShared<T, U> {
@@ -215,6 +404,48 @@ pub trait OTReceiverShared<T, U> {
     /// * `id` - The unique identifier for this transfer.
     /// * `choices` - The choices made by the receiver.
     async fn receive(&self, id: &str, choices: &[T]) -> Result<Vec<U>, OTError>;
+}
+
+/// A random oblivious transfer receiver that can be used via a shared reference.
+#[async_trait]
+pub trait RandomOTReceiverShared<T, U> {
+    /// Outputs the choice bits and the corresponding messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `count` - The number of random messages to receive.
+    async fn receive_random(&self, id: &str, count: usize) -> Result<(Vec<T>, Vec<U>), OTError>;
+}
+
+/// A correlated oblivious transfer receiver that can be used via a shared reference.
+#[async_trait]
+pub trait COTReceiverShared<T, U> {
+    /// Obliviously receives correlated messages from the sender.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `choices` - The choices made by the receiver.
+    async fn receive_correlated(&self, id: &str, choices: &[T]) -> Result<Vec<U>, OTError>;
+}
+
+/// A random correlated oblivious transfer receiver that can be used via a shared reference.
+#[async_trait]
+pub trait RandomCOTReceiverShared<T, U> {
+    /// Obliviously receives correlated messages with random choices.
+    ///
+    /// Returns a tuple of the choices and the messages, respectively.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for this transfer.
+    /// * `count` - The number of correlated messages to obliviously receive.
+    async fn receive_random_correlated(
+        &self,
+        id: &str,
+        count: usize,
+    ) -> Result<(Vec<T>, Vec<U>), OTError>;
 }
 
 /// An oblivious transfer sender that is committed to its messages and can reveal them
@@ -241,83 +472,4 @@ pub trait VerifiableOTReceiverShared<T, U, V>: OTReceiverShared<T, U> {
     /// * `id` - The unique identifier for the transfer corresponding to the messages.
     /// * `msgs` - The purported messages sent by the sender.
     async fn verify(&self, id: &str, msgs: &[V]) -> Result<(), OTError>;
-}
-
-// ########################################################################
-// ############################## With IO #################################
-// ########################################################################
-
-/// An oblivious transfer sender that owns its own IO channels.
-#[async_trait]
-pub trait OTSenderWithIo<T>
-where
-    T: Send + Sync,
-{
-    /// Obliviously transfers the messages to the receiver.
-    ///
-    /// # Arguments
-    ///
-    /// * `msgs` - The messages to obliviously transfer.
-    async fn send(&mut self, msgs: &[T]) -> Result<(), OTError>;
-}
-
-/// An oblivious transfer sender that owns its own IO channels, and
-/// can reveal its messages.
-#[async_trait]
-pub trait CommittedOTSenderWithIo {
-    /// Reveals all messages sent to the receiver.
-    ///
-    /// # Warning
-    ///
-    /// Obviously, you should be sure you want to do this before calling this function!
-    async fn reveal(&mut self) -> Result<(), OTError>;
-}
-
-/// An oblivious transfer sender that owns its own IO Channels,
-/// and can verify the receiver's choices.
-#[async_trait]
-pub trait VerifiableOTSenderWithIo<T> {
-    /// Receives the purported choices made by the receiver and verifies them.
-    async fn verify_choices(&mut self) -> Result<T, OTError>;
-}
-
-/// An oblivious transfer receiver that owns its own IO channels.
-#[async_trait]
-pub trait OTReceiverWithIo<T, U>
-where
-    T: Send + Sync,
-    U: Send + Sync,
-{
-    /// Obliviously receives data from the sender.
-    ///
-    /// # Arguments
-    ///
-    /// * `choices` - The choices made by the receiver.
-    async fn receive(&mut self, choices: &[T]) -> Result<Vec<U>, OTError>;
-}
-
-/// An oblivious transfer receiver that can reveal its choices.
-#[async_trait]
-pub trait CommittedOTReceiverWithIo {
-    /// Reveals the choices made by the receiver.
-    ///
-    /// # Warning
-    ///
-    /// Obviously, you should be sure you want to do this before calling this function!
-    async fn reveal_choices(&mut self) -> Result<(), OTError>;
-}
-
-/// An oblivious transfer receiver that owns its own IO channels, and
-/// can verify the sender's messages.
-#[async_trait]
-pub trait VerifiableOTReceiverWithIo<T>
-where
-    T: Send + Sync,
-{
-    /// Verifies purported messages sent by the sender.
-    ///
-    /// # Arguments
-    ///
-    /// * `msgs` - The purported messages sent by the sender.
-    async fn verify(&mut self, msgs: &[T]) -> Result<(), OTError>;
 }

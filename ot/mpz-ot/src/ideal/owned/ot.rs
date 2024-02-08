@@ -1,7 +1,6 @@
 use crate::{
-    CommittedOTReceiver, CommittedOTSender, CommittedOTSenderWithIo, OTError, OTReceiver,
-    OTReceiverWithIo, OTSender, OTSenderWithIo, OTSetup, VerifiableOTReceiver,
-    VerifiableOTReceiverWithIo, VerifiableOTSender,
+    CommittedOTReceiver, CommittedOTSender, OTError, OTReceiver, OTSender, OTSetup,
+    VerifiableOTReceiver, VerifiableOTSender,
 };
 use async_trait::async_trait;
 use futures::{
@@ -11,42 +10,42 @@ use futures::{
 use mpz_core::ProtocolMessage;
 use utils_aio::{sink::IoSink, stream::IoStream};
 
-/// Mock OT sender.
+/// Ideal OT sender.
 #[derive(Debug)]
-pub struct MockOTSender<T> {
+pub struct IdealOTSender<T> {
     sender: mpsc::Sender<Vec<[T; 2]>>,
     msgs: Vec<[T; 2]>,
     choices_receiver: Option<oneshot::Receiver<Vec<bool>>>,
 }
 
-/// Mock OT receiver.
+/// Ideal OT receiver.
 #[derive(Debug)]
-pub struct MockOTReceiver<T> {
+pub struct IdealOTReceiver<T> {
     receiver: mpsc::Receiver<Vec<[T; 2]>>,
     choices: Vec<bool>,
     choices_sender: Option<oneshot::Sender<Vec<bool>>>,
 }
 
-impl<T> ProtocolMessage for MockOTSender<T> {
+impl<T> ProtocolMessage for IdealOTSender<T> {
     type Msg = ();
 }
 
-impl<T> ProtocolMessage for MockOTReceiver<T> {
+impl<T> ProtocolMessage for IdealOTReceiver<T> {
     type Msg = ();
 }
 
-/// Creates a pair of mock OT sender and receiver.
-pub fn mock_ot_pair<T: Send + Sync + 'static>() -> (MockOTSender<T>, MockOTReceiver<T>) {
+/// Creates a pair of ideal OT sender and receiver.
+pub fn ideal_ot_pair<T: Send + Sync + 'static>() -> (IdealOTSender<T>, IdealOTReceiver<T>) {
     let (sender, receiver) = mpsc::channel(10);
     let (choices_sender, choices_receiver) = oneshot::channel();
 
     (
-        MockOTSender {
+        IdealOTSender {
             sender,
             msgs: Vec::default(),
             choices_receiver: Some(choices_receiver),
         },
-        MockOTReceiver {
+        IdealOTReceiver {
             receiver,
             choices: Vec::default(),
             choices_sender: Some(choices_sender),
@@ -55,7 +54,7 @@ pub fn mock_ot_pair<T: Send + Sync + 'static>() -> (MockOTSender<T>, MockOTRecei
 }
 
 #[async_trait]
-impl<T> OTSetup for MockOTSender<T>
+impl<T> OTSetup for IdealOTSender<T>
 where
     T: Send + Sync,
 {
@@ -69,7 +68,7 @@ where
 }
 
 #[async_trait]
-impl<T> OTSender<[T; 2]> for MockOTSender<T>
+impl<T> OTSender<[T; 2]> for IdealOTSender<T>
 where
     T: Send + Sync + Clone + 'static,
 {
@@ -79,16 +78,6 @@ where
         _stream: &mut St,
         msgs: &[[T; 2]],
     ) -> Result<(), OTError> {
-        <Self as OTSenderWithIo<[T; 2]>>::send(self, msgs).await
-    }
-}
-
-#[async_trait]
-impl<T> OTSenderWithIo<[T; 2]> for MockOTSender<T>
-where
-    T: Send + Sync + Clone + 'static,
-{
-    async fn send(&mut self, msgs: &[[T; 2]]) -> Result<(), OTError> {
         self.msgs.extend(msgs.iter().cloned());
 
         self.sender
@@ -100,7 +89,7 @@ where
 }
 
 #[async_trait]
-impl<T> OTSetup for MockOTReceiver<T>
+impl<T> OTSetup for IdealOTReceiver<T>
 where
     T: Send + Sync,
 {
@@ -114,7 +103,7 @@ where
 }
 
 #[async_trait]
-impl<T> OTReceiver<bool, T> for MockOTReceiver<T>
+impl<T> OTReceiver<bool, T> for IdealOTReceiver<T>
 where
     T: Send + Sync + 'static,
 {
@@ -124,16 +113,6 @@ where
         _stream: &mut St,
         choices: &[bool],
     ) -> Result<Vec<T>, OTError> {
-        <Self as OTReceiverWithIo<bool, T>>::receive(self, choices).await
-    }
-}
-
-#[async_trait]
-impl<T> OTReceiverWithIo<bool, T> for MockOTReceiver<T>
-where
-    T: Send + Sync + 'static,
-{
-    async fn receive(&mut self, choices: &[bool]) -> Result<Vec<T>, OTError> {
         self.choices.extend(choices.iter().copied());
 
         let payload = self
@@ -158,7 +137,7 @@ where
 }
 
 #[async_trait]
-impl<U, V> VerifiableOTReceiver<bool, U, V> for MockOTReceiver<U>
+impl<U, V> VerifiableOTReceiver<bool, U, V> for IdealOTReceiver<U>
 where
     U: Send + Sync + 'static,
     V: Send + Sync + 'static,
@@ -175,17 +154,7 @@ where
 }
 
 #[async_trait]
-impl<T> VerifiableOTReceiverWithIo<[T; 2]> for MockOTReceiver<T>
-where
-    T: Send + Sync + 'static,
-{
-    async fn verify(&mut self, _msgs: &[[T; 2]]) -> Result<(), OTError> {
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl<T> CommittedOTSender<[T; 2]> for MockOTSender<T>
+impl<T> CommittedOTSender<[T; 2]> for IdealOTSender<T>
 where
     T: Send + Sync + Clone + 'static,
 {
@@ -199,17 +168,7 @@ where
 }
 
 #[async_trait]
-impl<T> CommittedOTSenderWithIo for MockOTSender<T>
-where
-    T: Send + 'static,
-{
-    async fn reveal(&mut self) -> Result<(), OTError> {
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl<T> CommittedOTReceiver<bool, T> for MockOTReceiver<T>
+impl<T> CommittedOTReceiver<bool, T> for IdealOTReceiver<T>
 where
     T: Send + Sync + 'static,
 {
@@ -229,7 +188,7 @@ where
 }
 
 #[async_trait]
-impl<T> VerifiableOTSender<bool, [T; 2]> for MockOTSender<T>
+impl<T> VerifiableOTSender<bool, [T; 2]> for IdealOTSender<T>
 where
     T: Send + Sync + Clone + 'static,
 {
@@ -249,20 +208,32 @@ where
 
 #[cfg(test)]
 mod tests {
+    use utils_aio::duplex::MemoryDuplex;
+
     use super::*;
 
     // Test that the sender and receiver can be used to send and receive values
     #[tokio::test]
-    async fn test_mock_ot_owned() {
+    async fn test_ideal_ot_owned() {
+        let (send_channel, recv_channel) = MemoryDuplex::<()>::new();
+
+        let (mut send_sink, mut send_stream) = send_channel.split();
+        let (mut recv_sink, mut recv_stream) = recv_channel.split();
+
         let values = vec![[0, 1], [2, 3]];
         let choices = vec![false, true];
-        let (mut sender, mut receiver) = mock_ot_pair::<u8>();
+        let (mut sender, mut receiver) = ideal_ot_pair::<u8>();
 
-        OTSenderWithIo::send(&mut sender, &values).await.unwrap();
-
-        let received = OTReceiverWithIo::receive(&mut receiver, &choices)
+        sender
+            .send(&mut send_sink, &mut send_stream, &values)
             .await
             .unwrap();
+
+        let received = receiver
+            .receive(&mut recv_sink, &mut recv_stream, &choices)
+            .await
+            .unwrap();
+
         assert_eq!(received, vec![0, 3]);
     }
 }

@@ -23,19 +23,14 @@ impl Sender {
     /// # Argument.
     ///
     /// * `delta` - The sender's global secret.
-    pub fn setup(self, delta: Block) -> Sender<state::Extension> {
+    pub fn setup(self, delta: Block) -> Sender<state::PreExtension> {
         Sender {
-            state: state::Extension {
-                delta,
-                counter: 0,
-                queries_length: Vec::default(),
-                queries_depth: Vec::default(),
-            },
+            state: state::PreExtension { delta, counter: 0 },
         }
     }
 }
 
-impl Sender<state::Extension> {
+impl Sender<state::PreExtension> {
     /// Performs the prepare procedure in MPCOT extension.
     /// Outputs the information for SPCOT.
     ///
@@ -43,7 +38,11 @@ impl Sender<state::Extension> {
     ///
     /// * `t` - The number of queried indices.
     /// * `n` - The total number of indices.
-    pub fn extend_pre(&mut self, t: u32, n: u32) -> Result<Vec<usize>, SenderError> {
+    pub fn pre_extend(
+        self,
+        t: u32,
+        n: u32,
+    ) -> Result<(Sender<state::Extension>, Vec<usize>), SenderError> {
         if t > n {
             return Err(SenderError::InvalidInput(
                 "t should not exceed n".to_string(),
@@ -53,7 +52,7 @@ impl Sender<state::Extension> {
         // The range of each interval.
         let k = (n + t - 1) / t;
 
-        self.state.queries_length = if n % t == 0 {
+        let queries_length = if n % t == 0 {
             vec![k as usize; t as usize]
         } else {
             let mut tmp = vec![k as usize; (t - 1) as usize];
@@ -67,29 +66,41 @@ impl Sender<state::Extension> {
             }
         };
 
-        let mut res = Vec::with_capacity(t as usize);
+        let mut queries_depth = Vec::with_capacity(queries_length.len());
 
-        for len in self.state.queries_length.iter() {
-            if let Some(power) = len.checked_next_power_of_two() {
-                res.push(power.ilog2() as usize);
-            } else {
-                return Err(SenderError::InvalidInput(
-                    "The next power of 2 of each length exceeds the MAX number".to_string(),
-                ));
-            }
+        for len in queries_length.iter() {
+            // pad `len`` to power of 2.
+            let power = len
+                .checked_next_power_of_two()
+                .expect("len should be less than usize::MAX / 2 - 1")
+                .ilog2() as usize;
+            queries_depth.push(power);
         }
 
-        self.state.queries_depth = res.clone();
-        Ok(res)
-    }
+        let sender = Sender {
+            state: state::Extension {
+                delta: self.state.delta,
+                counter: self.state.counter,
+                n,
+                queries_length,
+                queries_depth: queries_depth.clone(),
+            },
+        };
 
+        Ok((sender, queries_depth))
+    }
+}
+
+impl Sender<state::Extension> {
     /// Performs MPCOT extension.
     ///
     /// # Arguments.
     ///
     /// * `st` - The vector received from SPCOT protocol on multiple queries.
-    /// * `n` - The total number of indices.
-    pub fn extend(&mut self, st: &[Vec<Block>], n: u32) -> Result<Vec<Block>, SenderError> {
+    pub fn extend(
+        self,
+        st: &[Vec<Block>],
+    ) -> Result<(Sender<state::PreExtension>, Vec<Block>), SenderError> {
         if st
             .iter()
             .zip(self.state.queries_depth.iter())
@@ -99,18 +110,20 @@ impl Sender<state::Extension> {
                 "the length of st[i] should be 2^self.state.queries_depth[i]".to_string(),
             ));
         }
-        let mut res: Vec<Block> = Vec::with_capacity(n as usize);
+        let mut res: Vec<Block> = Vec::with_capacity(self.state.n as usize);
 
         for (blks, pos) in st.iter().zip(self.state.queries_length.iter()) {
             res.extend(&blks[..*pos]);
         }
 
-        self.state.counter += 1;
+        let sender = Sender {
+            state: state::PreExtension {
+                delta: self.state.delta,
+                counter: self.state.counter + 1,
+            },
+        };
 
-        self.state.queries_depth.clear();
-        self.state.queries_length.clear();
-
-        Ok(res)
+        Ok((sender, res))
     }
 }
 /// The sender's state.
@@ -122,6 +135,7 @@ pub mod state {
         pub trait Sealed {}
 
         impl Sealed for super::Initialized {}
+        impl Sealed for super::PreExtension {}
         impl Sealed for super::Extension {}
     }
 
@@ -136,19 +150,31 @@ pub mod state {
 
     opaque_debug::implement!(Initialized);
 
+    /// The sender's state before extending.
+    ///
+    /// In this state the sender performs pre extension in MPCOT (potentially multiple times).
+    pub struct PreExtension {
+        /// Sender's global secret.
+        pub(super) delta: Block,
+        /// Current MPCOT counter
+        pub(super) counter: usize,
+    }
+
+    impl State for PreExtension {}
+    opaque_debug::implement!(PreExtension);
+
     /// The sender's state after the setup phase.
     ///
     /// In this state the sender performs MPCOT extension (potentially multiple times).
     pub struct Extension {
         /// Sender's global secret.
-        #[allow(dead_code)]
         pub(super) delta: Block,
         /// Current MPCOT counter
         pub(super) counter: usize,
-
+        /// The total number of indices in the current extension.
+        pub(super) n: u32,
         /// Current queries from sender, will possibly be changed in each extension.
         pub(super) queries_length: Vec<usize>,
-
         /// The depth of queries.
         pub(super) queries_depth: Vec<usize>,
     }
