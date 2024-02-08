@@ -170,7 +170,7 @@ pub(crate) fn find_pos(bucket: &[Item], item: &Item) -> Result<usize, BucketErro
 
 #[cfg(test)]
 mod tests {
-    use crate::ferret::utils::find_pos;
+    use crate::ferret::cuckoo::find_pos;
 
     use super::{Bucket, CuckooHash};
     use mpz_core::{aes::AesEncryptor, prg::Prg};

@@ -8,7 +8,7 @@ pub mod msgs;
 pub mod receiver;
 pub mod sender;
 pub mod spcot;
-pub mod utils;
+pub mod cuckoo;
 
 /// Computational security parameter
 pub const CSP: usize = 128;

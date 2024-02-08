@@ -2,7 +2,7 @@
 
 use crate::ferret::{
     mpcot::error::SenderError,
-    utils::{compute_table_length, find_pos, hash_to_index, Bucket, Item},
+    cuckoo::{compute_table_length, find_pos, hash_to_index, Bucket, Item},
     CUCKOO_HASH_NUM,
 };
 use mpz_core::{aes::AesEncryptor, prg::Prg, Block};
