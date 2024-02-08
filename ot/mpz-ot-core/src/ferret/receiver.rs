@@ -35,7 +35,7 @@ impl Receiver {
         w: &[Block],
     ) -> Result<(Receiver<state::Extension>, LpnMatrixSeed), ReceiverError> {
         if u.len() != lpn_parameters.k || w.len() != lpn_parameters.k {
-            return Err(ReceiverError::InvalidInput(
+            return Err(ReceiverError(
                 "the length of u and w should be k".to_string(),
             ));
         }
@@ -98,9 +98,7 @@ impl Receiver<state::Extension> {
     /// * `r` - The vector received from the MPCOT protocol.
     pub fn extend(&mut self, r: &[Block]) -> Result<(Vec<bool>, Vec<Block>), ReceiverError> {
         if r.len() != self.state.lpn_parameters.n {
-            return Err(ReceiverError::InvalidInput(
-                "the length of r should be n".to_string(),
-            ));
+            return Err(ReceiverError("the length of r should be n".to_string()));
         }
 
         // Compute z = A * w + r.

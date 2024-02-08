@@ -38,7 +38,7 @@ impl Sender {
         v: &[Block],
     ) -> Result<Sender<state::Extension>, SenderError> {
         if v.len() != lpn_parameters.k {
-            return Err(SenderError::InvalidInput(
+            return Err(SenderError(
                 "the length of v should be equal to k".to_string(),
             ));
         }
@@ -77,9 +77,7 @@ impl Sender<state::Extension> {
     /// * `s` - The vector received from the MPCOT protocol.
     pub fn extend(&mut self, s: &[Block]) -> Result<Vec<Block>, SenderError> {
         if s.len() != self.state.lpn_parameters.n {
-            return Err(SenderError::InvalidInput(
-                "the length of s should be n".to_string(),
-            ));
+            return Err(SenderError("the length of s should be n".to_string()));
         }
 
         // Compute y = A * v + s
