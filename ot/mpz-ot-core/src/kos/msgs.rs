@@ -49,7 +49,7 @@ pub struct Extend {
 }
 
 impl Extend {
-    /// Splits the message into chunks.
+    /// Returns an iterator over the chunks of the message.
     pub fn into_chunks(self, chunk_size: usize) -> ExtendChunks {
         ExtendChunks {
             chunk_size,
