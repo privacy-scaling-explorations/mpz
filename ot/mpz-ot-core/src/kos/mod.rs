@@ -30,11 +30,11 @@ pub(crate) type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
 
 /// Pads the number of OTs to accomodate for the KOS extension check and
 /// the extension matrix transpose optimization.
-pub fn pad_ot_count(count: usize) -> usize {
-    // Round up the OTs to extend to the nearest multiple of 64 (matrix transpose optimization).
-    let count = (count + 63) & !63;
+pub fn pad_ot_count(mut count: usize) -> usize {
     // Add OTs for the KOS extension check.
-    count + CSP + SSP
+    count += CSP + SSP;
+    // Round up the OTs to extend to the nearest multiple of 64 (matrix transpose optimization).
+    (count + 63) & !63
 }
 
 /// Returns the size in bytes of the extension matrix for a given number of OTs.
