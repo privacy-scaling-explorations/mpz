@@ -69,7 +69,7 @@ impl Iterator for ExtendChunks {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.us.len() == 0 {
-            return None;
+            None
         } else {
             Some(Extend {
                 us: self.us.by_ref().take(self.chunk_size).collect::<Vec<_>>(),
