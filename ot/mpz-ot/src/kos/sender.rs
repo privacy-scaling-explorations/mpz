@@ -6,7 +6,7 @@ use mpz_core::{cointoss, prg::Prg, Block, ProtocolMessage};
 use mpz_ot_core::kos::{
     extension_matrix_size,
     msgs::{Extend, Message, StartExtend},
-    sender_state as state, Sender as SenderCore, SenderConfig, CSP, SSP,
+    pad_ot_count, sender_state as state, Sender as SenderCore, SenderConfig, CSP,
 };
 use rand::{thread_rng, Rng};
 use rand_core::{RngCore, SeedableRng};
@@ -140,6 +140,8 @@ where
         let mut ext_sender =
             std::mem::replace(&mut self.state, State::Error).try_into_extension()?;
 
+        let count = pad_ot_count(count);
+
         let StartExtend {
             count: receiver_count,
         } = stream
@@ -174,12 +176,8 @@ where
         let commitment = stream.expect_next().await?.try_into_cointoss_commit()?;
 
         // Extend the OTs, adding padding for the consistency check.
-        let mut ext_sender = Backend::spawn(move || {
-            ext_sender
-                .extend(count + CSP + SSP, extend)
-                .map(|_| ext_sender)
-        })
-        .await?;
+        let mut ext_sender =
+            Backend::spawn(move || ext_sender.extend(count, extend).map(|_| ext_sender)).await?;
 
         // Execute coin toss protocol for consistency check.
         let seed: Block = thread_rng().gen();

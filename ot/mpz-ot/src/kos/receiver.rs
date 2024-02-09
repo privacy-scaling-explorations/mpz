@@ -4,7 +4,7 @@ use itybity::{FromBitIterator, IntoBitIterator};
 use mpz_core::{cointoss, prg::Prg, Block, ProtocolMessage};
 use mpz_ot_core::kos::{
     msgs::{Message, StartExtend},
-    receiver_state as state, Receiver as ReceiverCore, ReceiverConfig, CSP, SSP,
+    pad_ot_count, receiver_state as state, Receiver as ReceiverCore, ReceiverConfig, CSP,
 };
 
 use enum_try_as_inner::EnumTryAsInner;
@@ -93,9 +93,11 @@ where
         let mut ext_receiver =
             std::mem::replace(&mut self.state, State::Error).try_into_extension()?;
 
+        let count = pad_ot_count(count);
+
         // Extend the OTs, adding padding for the consistency check.
         let (mut ext_receiver, extend) = Backend::spawn(move || {
-            let extend = ext_receiver.extend(count + CSP + SSP);
+            let extend = ext_receiver.extend(count);
 
             (ext_receiver, extend)
         })

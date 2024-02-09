@@ -53,7 +53,7 @@ impl Extend {
     pub fn into_chunks(self, chunk_size: usize) -> ExtendChunks {
         ExtendChunks {
             chunk_size,
-            us: self.us,
+            us: self.us.into_iter(),
         }
     }
 }
@@ -61,25 +61,20 @@ impl Extend {
 /// Iterator over the chunks of an extension message.
 pub struct ExtendChunks {
     chunk_size: usize,
-    us: Vec<u8>,
+    us: <Vec<u8> as IntoIterator>::IntoIter,
 }
 
 impl Iterator for ExtendChunks {
     type Item = Extend;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let remaining = self.us.len();
-        if remaining == 0 {
+        if self.us.len() == 0 {
             return None;
-        }
-
-        let us = if remaining <= self.chunk_size {
-            std::mem::take(&mut self.us)
         } else {
-            self.us.split_off(remaining - self.chunk_size)
-        };
-
-        Some(Extend { us })
+            Some(Extend {
+                us: self.us.by_ref().take(self.chunk_size).collect::<Vec<_>>(),
+            })
+        }
     }
 }
 
