@@ -117,6 +117,8 @@ impl Receiver<state::Extension> {
 
     /// Perform the IKNP OT extension.
     ///
+    /// The provided count _must_ be a multiple of 64, otherwise an error will be returned.
+    ///
     /// # Sacrificial OTs
     ///
     /// Performing the consistency check sacrifices 256 OTs, so be sure to
@@ -132,7 +134,7 @@ impl Receiver<state::Extension> {
     ///
     /// # Arguments
     ///
-    /// * `count` - The number of OTs to extend.
+    /// * `count` - The number of OTs to extend (must be a multiple of 64).
     pub fn extend(&mut self, count: usize) -> Result<Extend, ReceiverError> {
         if self.state.extended {
             return Err(ReceiverError::InvalidState(
@@ -140,8 +142,9 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        // Round up the OTs to extend to the nearest multiple of 64 (matrix transpose optimization).
-        let count = (count + 63) & !63;
+        if count % 64 != 0 {
+            return Err(ReceiverError::InvalidCount(count));
+        }
 
         const NROWS: usize = CSP;
         let row_width = count / 8;
