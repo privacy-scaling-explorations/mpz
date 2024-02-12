@@ -95,7 +95,7 @@ where
 
         let count = pad_ot_count(count);
 
-        // Extend the OTs, adding padding for the consistency check.
+        // Extend the OTs.
         let (mut ext_receiver, extend) = Backend::spawn(move || {
             let extend = ext_receiver.extend(count);
 

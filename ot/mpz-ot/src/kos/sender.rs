@@ -175,7 +175,7 @@ where
         // Receive coin toss commitments from the receiver.
         let commitment = stream.expect_next().await?.try_into_cointoss_commit()?;
 
-        // Extend the OTs, adding padding for the consistency check.
+        // Extend the OTs.
         let mut ext_sender =
             Backend::spawn(move || ext_sender.extend(count, extend).map(|_| ext_sender)).await?;
 
