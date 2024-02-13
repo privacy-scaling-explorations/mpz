@@ -28,6 +28,20 @@ pub(crate) type RngSeed = <Rng as SeedableRng>::Seed;
 /// AES-128 CTR used for encryption.
 pub(crate) type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
 
+/// Pads the number of OTs to accomodate for the KOS extension check and
+/// the extension matrix transpose optimization.
+pub fn pad_ot_count(mut count: usize) -> usize {
+    // Add OTs for the KOS extension check.
+    count += CSP + SSP;
+    // Round up the OTs to extend to the nearest multiple of 64 (matrix transpose optimization).
+    (count + 63) & !63
+}
+
+/// Returns the size in bytes of the extension matrix for a given number of OTs.
+pub fn extension_matrix_size(count: usize) -> usize {
+    count * CSP / 8
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

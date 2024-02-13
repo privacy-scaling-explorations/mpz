@@ -4,6 +4,8 @@
 pub enum SenderError {
     #[error("invalid state: expected {0}")]
     InvalidState(String),
+    #[error("invalid count, must be a multiple of 64: {0}")]
+    InvalidCount(usize),
     #[error("count mismatch: expected {0}, got {1}")]
     CountMismatch(usize, usize),
     #[error("id mismatch: expected {0}, got {1}")]
@@ -22,6 +24,8 @@ pub enum SenderError {
 pub enum ReceiverError {
     #[error("invalid state: expected {0}")]
     InvalidState(String),
+    #[error("invalid count, must be a multiple of 64: {0}")]
+    InvalidCount(usize),
     #[error("count mismatch: expected {0}, got {1}")]
     CountMismatch(usize, usize),
     #[error("id mismatch: expected {0}, got {1}")]

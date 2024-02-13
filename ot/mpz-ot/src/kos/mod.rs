@@ -18,6 +18,16 @@ pub use mpz_ot_core::kos::{
 };
 use utils_aio::{sink::IoSink, stream::IoStream};
 
+// If we're testing we use a smaller chunk size to make sure the chunking code paths are tested.
+cfg_if::cfg_if! {
+    if #[cfg(test)] {
+        pub(crate) const EXTEND_CHUNK_SIZE: usize = 1024;
+    } else {
+        /// The size of the chunks used to send the extension matrix, 4MB.
+        pub(crate) const EXTEND_CHUNK_SIZE: usize = 4 * 1024 * 1024;
+    }
+}
+
 /// Converts a sink of KOS messages into a sink of base OT messages.
 pub(crate) fn into_base_sink<'a, Si: IoSink<msgs::Message<T>> + Send + Unpin, T: Send + 'a>(
     sink: &'a mut Si,
