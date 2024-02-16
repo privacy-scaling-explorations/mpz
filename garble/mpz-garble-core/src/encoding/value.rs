@@ -620,13 +620,26 @@ macro_rules! define_encoding_commitment {
     ($( ($EncodedTy:ident, $CommitmentTy:ident) ),*) => {
         /// A commitment to the encoding of a value.
         ///
-        /// Used by the evaluator to detect certain classes of malicious behavior by
-        /// the generator.
+        /// Used by the evaluator to detect **input** leakage in the output encodings. The leakage
+        /// will be detected with probability 1 - 1/2^n, where n is the number of input bits leaked.
         ///
-        /// After generating a garbled circuit, the generator will compute commitments
-        /// to the encoded outputs of the circuit and send them to the evaluator.
-        /// The evaluator will then be able to evaluate the circuit and check the
-        /// commitments against the active encoding of the outputs.
+        /// Signaling (e.g. by aborting the protocol) to a malicious generator whether or not commitment
+        /// verification succeeded will leak one bit of information about the **output**.
+        ///
+        /// After generating a garbled circuit, the generator will compute commitments to the encoded
+        /// outputs of the circuit and send them to the evaluator. The evaluator will then be able
+        /// to evaluate the circuit and check the commitments against the active encoding of the
+        /// outputs.
+        ///
+        /// Refer to https://eprint.iacr.org/2018/743 (especially section 2.1) for more details on
+        /// using output commitments.
+        ///
+        /// # Important
+        ///
+        /// This is not the only remedy required to detect input leakage in a maliciously garbled
+        /// circuit: e.g. the input can be leaked through the circuit's output directly which will
+        /// not be detected by this commitment.
+        /// This commitment only limits leakage in the **output encodings**.
         #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
         #[allow(missing_docs)]
         pub enum EncodingCommitment {
