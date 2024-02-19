@@ -2,13 +2,13 @@
 
 use mpz_core::lpn::LpnParameters;
 
+pub mod cuckoo;
 pub mod error;
 pub mod mpcot;
 pub mod msgs;
 pub mod receiver;
 pub mod sender;
 pub mod spcot;
-pub mod cuckoo;
 
 /// Computational security parameter
 pub const CSP: usize = 128;
@@ -82,7 +82,13 @@ mod tests {
 
         // init the setup of sender and receiver.
         let (mut receiver, seed) = receiver
-            .setup(LPN_PARAMETERS_TEST, lpn_matrix_seed, &u, &w)
+            .setup(
+                LPN_PARAMETERS_TEST,
+                LpnType::Regular,
+                lpn_matrix_seed,
+                &u,
+                &w,
+            )
             .unwrap();
 
         let LpnMatrixSeed {
@@ -90,12 +96,18 @@ mod tests {
         } = seed;
 
         let mut sender = sender
-            .setup(delta, LPN_PARAMETERS_TEST, lpn_matrix_seed, &v)
+            .setup(
+                delta,
+                LPN_PARAMETERS_TEST,
+                LpnType::Regular,
+                lpn_matrix_seed,
+                &v,
+            )
             .unwrap();
 
         // extend once
-        let _ = sender.extend_pre();
-        let query = receiver.extend_pre(LpnType::Regular);
+        let _ = sender.get_mpcot_query();
+        let query = receiver.get_mpcot_query();
 
         let (sender_mpcot, receiver_mpcot) = ideal_mpcot.extend(&query.0, query.1, query.2);
 
@@ -114,8 +126,8 @@ mod tests {
         ));
 
         // extend twice
-        let _ = sender.extend_pre();
-        let query = receiver.extend_pre(LpnType::Regular);
+        let _ = sender.get_mpcot_query();
+        let query = receiver.get_mpcot_query();
 
         let (sender_mpcot, receiver_mpcot) = ideal_mpcot.extend(&query.0, query.1, query.2);
 

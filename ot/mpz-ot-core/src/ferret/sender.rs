@@ -4,7 +4,7 @@ use mpz_core::{
     Block,
 };
 
-use crate::ferret::error::SenderError;
+use crate::ferret::{error::SenderError, LpnType};
 
 /// Ferret sender.
 #[derive(Debug, Default)]
@@ -28,12 +28,14 @@ impl Sender {
     ///
     /// * `delta` - The sender's global secret.
     /// * `lpn_parameters` - The lpn parameters.
+    /// * `lpn_type` - The lpn type.
     /// * `seed` - The seed received from receiver to generate lpn matrix.
     /// * `v` - The vector received from the COT ideal functionality.
     pub fn setup(
         self,
         delta: Block,
         lpn_parameters: LpnParameters,
+        lpn_type: LpnType,
         seed: Block,
         v: &[Block],
     ) -> Result<Sender<state::Extension>, SenderError> {
@@ -49,6 +51,7 @@ impl Sender {
                 delta,
                 counter: 0,
                 lpn_parameters,
+                lpn_type,
                 lpn_encoder,
                 v: v.to_vec(),
             },
@@ -60,7 +63,7 @@ impl Sender<state::Extension> {
     /// Outputs the information for MPCOT.
     ///
     /// See step 3 and 4.
-    pub fn extend_pre(&self) -> (u32, u32) {
+    pub fn get_mpcot_query(&self) -> (u32, u32) {
         (
             self.state.lpn_parameters.t as u32,
             self.state.lpn_parameters.n as u32,
@@ -126,6 +129,9 @@ pub mod state {
         /// Current Ferret counter.
         pub(super) counter: usize,
 
+        /// Lpn type.
+        #[allow(dead_code)]
+        pub(super) lpn_type: LpnType,
         /// Lpn parameters.
         pub(super) lpn_parameters: LpnParameters,
         /// Lpn encoder.

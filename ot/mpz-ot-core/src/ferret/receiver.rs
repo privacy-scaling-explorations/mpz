@@ -22,14 +22,21 @@ impl Receiver {
         }
     }
 
-    /// Completes the setup pahse of the protocol.
+    /// Completes the setup phase of the protocol.
     ///
     /// See step 1 and 2 in Figure 9.
     ///
+    /// # Arguments
     ///
+    /// * `lpn_parameters` - The lpn parameters.
+    /// * `seed` - The seed to generate lpn matrix.
+    /// * `lpn_type` - The lpn type.
+    /// * `u` - The bits received from the COT ideal functionality.
+    /// * `w` - The vector received from the COT ideal functionality.
     pub fn setup(
         self,
         lpn_parameters: LpnParameters,
+        lpn_type: LpnType,
         seed: Block,
         u: &[bool],
         w: &[Block],
@@ -48,6 +55,7 @@ impl Receiver {
                     counter: 0,
                     lpn_parameters,
                     lpn_encoder,
+                    lpn_type,
                     u: u.to_vec(),
                     w: w.to_vec(),
                     e: Vec::default(),
@@ -65,8 +73,8 @@ impl Receiver<state::Extension> {
     /// # Arguments.
     ///
     /// * `lpn_type` - The type of LPN parameters.
-    pub fn extend_pre(&mut self, lpn_type: LpnType) -> (Vec<u32>, usize, usize) {
-        match lpn_type {
+    pub fn get_mpcot_query(&mut self) -> (Vec<u32>, usize, usize) {
+        match self.state.lpn_type {
             LpnType::Uniform => {
                 self.state.e = self.state.lpn_parameters.sample_uniform_error_vector();
             }
@@ -169,6 +177,8 @@ pub mod state {
         pub(super) lpn_parameters: LpnParameters,
         /// Lpn encoder.
         pub(super) lpn_encoder: LpnEncoder<10>,
+        /// Lpn type.
+        pub(super) lpn_type: LpnType,
 
         /// Receiver's COT messages in the setup phase.
         pub(super) u: Vec<bool>,
