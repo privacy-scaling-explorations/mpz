@@ -20,6 +20,7 @@ pub struct RotMsgForReceiver {
 }
 
 /// An ideal functionality for random OT
+#[derive(Debug)]
 pub struct IdealROT {
     counter: usize,
     prg: Prg,
@@ -59,23 +60,6 @@ impl IdealROT {
         self.counter += counter;
         (RotMsgForSender { qs }, RotMsgForReceiver { rs, ts })
     }
-
-    /// Checks if the receiver gets the choices he made
-    ///
-    /// # Arguments
-    ///
-    /// * `sender_msg` - The message that the ideal ROT sends to the sender.
-    /// * `receiver_msg` - The message that the ideal ROT sends to the receiver.
-    #[cfg(test)]
-    fn check(&self, sender_msg: RotMsgForSender, receiver_msg: RotMsgForReceiver) -> bool {
-        let RotMsgForSender { qs } = sender_msg;
-        let RotMsgForReceiver { rs, ts } = receiver_msg;
-
-        qs.into_iter()
-            .zip(ts)
-            .zip(rs)
-            .all(|((q, t), r)| if r { q[1] == t } else { q[0] == t })
-    }
 }
 
 impl Default for IdealROT {
@@ -86,7 +70,7 @@ impl Default for IdealROT {
 
 #[cfg(test)]
 mod tests {
-    use super::IdealROT;
+    use super::{IdealROT, RotMsgForReceiver};
 
     #[test]
     fn ideal_rot_test() {
@@ -94,6 +78,12 @@ mod tests {
         let mut ideal_rot = IdealROT::new();
         let (sender, receiver) = ideal_rot.extend(num);
 
-        assert!(ideal_rot.check(sender, receiver));
+        let qs = sender.qs;
+        let RotMsgForReceiver { rs, ts } = receiver;
+
+        qs.iter()
+            .zip(ts)
+            .zip(rs)
+            .for_each(|((q, t), r)| assert_eq!(q[r as usize], t));
     }
 }
