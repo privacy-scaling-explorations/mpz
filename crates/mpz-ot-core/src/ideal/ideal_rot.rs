@@ -18,8 +18,8 @@ pub struct RotMsgForReceiver {
     /// The chosen blocks that receiver receives from the ROT functionality.
     pub ts: Vec<Block>,
 }
-#[allow(missing_docs)]
-#[derive(Debug)]
+
+/// An ideal functionality for random OT
 pub struct IdealROT {
     counter: usize,
     prg: Prg,
@@ -66,7 +66,8 @@ impl IdealROT {
     ///
     /// * `sender_msg` - The message that the ideal ROT sends to the sender.
     /// * `receiver_msg` - The message that the ideal ROT sends to the receiver.
-    pub fn check(&self, sender_msg: RotMsgForSender, receiver_msg: RotMsgForReceiver) -> bool {
+    #[cfg(test)]
+    fn check(&self, sender_msg: RotMsgForSender, receiver_msg: RotMsgForReceiver) -> bool {
         let RotMsgForSender { qs } = sender_msg;
         let RotMsgForReceiver { rs, ts } = receiver_msg;
 
@@ -82,6 +83,7 @@ impl Default for IdealROT {
         Self::new()
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::IdealROT;
