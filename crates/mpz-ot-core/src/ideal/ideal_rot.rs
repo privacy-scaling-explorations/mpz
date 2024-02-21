@@ -19,6 +19,7 @@ pub struct RotMsgForReceiver {
     pub ts: Vec<Block>,
 }
 #[allow(missing_docs)]
+#[derive(Debug)]
 pub struct IdealROT {
     counter: usize,
     prg: Prg,
