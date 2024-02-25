@@ -47,7 +47,7 @@ impl IdealCOT {
         }
     }
 
-    /// Ouput delta
+    /// Output delta
     pub fn delta(&self) -> Block {
         self.delta
     }
@@ -74,7 +74,7 @@ impl IdealCOT {
         (CotMsgForSender { qs }, CotMsgForReceiver { rs, ts })
     }
 
-    /// Checks if the outputs statisfy the relation with Delta, this is only used for test.
+    /// Checks if the outputs satisfy the relation with Delta, this is only used for test.
     ///
     /// # Arguments
     ///

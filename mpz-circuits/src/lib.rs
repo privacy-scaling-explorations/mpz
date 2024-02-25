@@ -66,7 +66,7 @@ pub use once_cell;
 ///
 /// The default path of the trace is the original path appended with the `_trace` suffix.
 ///
-/// This can be overriden by passing the path in as the second argument to the attribute, eg `#[dep(old_path, new_path)]`.
+/// This can be overridden by passing the path in as the second argument to the attribute, eg `#[dep(old_path, new_path)]`.
 ///
 /// ## Example
 ///
@@ -122,7 +122,7 @@ pub use once_cell;
 ///
 /// This preserves the original function, which can be used for testing.
 ///
-/// This suffix can be overriden by passing the `suffix = "new_suffix"` argument to the macro.
+/// This suffix can be overridden by passing the `suffix = "new_suffix"` argument to the macro.
 pub use mpz_circuits_macros::trace;
 
 /// Evaluates a circuit and attempts to coerce the output into the specified return type

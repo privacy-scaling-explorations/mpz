@@ -78,7 +78,7 @@ impl Receiver<state::PreExtension> {
 
         let bucket = Bucket::new(self.state.hashes.clone(), m);
 
-        // Geneates the buckets.
+        // Generates the buckets.
         let buckets = bucket.insert(n);
 
         // Generates queries for SPCOT.

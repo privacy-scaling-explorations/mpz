@@ -1,5 +1,5 @@
 //! Implement LPN with local linear code.
-//! More especifically, a local linear code is a random boolean matrix with at most D non-zero values in each row.
+//! More specifically, a local linear code is a random boolean matrix with at most D non-zero values in each row.
 
 use crate::{prp::Prp, Block};
 use rayon::prelude::*;
@@ -15,7 +15,7 @@ use rayon::prelude::*;
 ///
 /// `e` - is a `F_{2^128}` vector with length `n`.
 ///
-/// Note that in the standard LPN problem, `x` is a binary vector, `e` is a sparse binary vector. The way we difined here is a more generic way in term of computing `y`.
+/// Note that in the standard LPN problem, `x` is a binary vector, `e` is a sparse binary vector. The way we defined here is a more generic way in term of computing `y`.
 pub struct LpnEncoder<const D: usize> {
     /// The seed to generate the random sparse matrix A.
     seed: Block,

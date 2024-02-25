@@ -196,7 +196,7 @@ impl Sender<state::Extension> {
     /// * `chi_seed` - The seed used to generate the consistency check weights.
     /// * `receiver_check` - The receiver's consistency check message.
     pub fn check(&mut self, chi_seed: Block, receiver_check: Check) -> Result<(), SenderError> {
-        // Make sure we have enough sacrifical OTs to perform the consistency check.
+        // Make sure we have enough sacrificial OTs to perform the consistency check.
         if self.state.unchecked_qs.len() < CSP + SSP {
             return Err(SenderError::InsufficientSetup(
                 CSP + SSP,

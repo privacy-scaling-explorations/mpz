@@ -71,7 +71,7 @@ impl Sender<state::PreExtension> {
 
         let bucket = Bucket::new(self.state.hashes.clone(), m);
 
-        // Geneates the buckets.
+        // Generates the buckets.
         let buckets = bucket.insert(n);
 
         // First pad (length + 1) to a pow of 2, then computes `log(length + 1)` of each bucket.

@@ -57,6 +57,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [PADO Labs](https://github.com/pado-labs)
 
 
-### Pronounciation
+### Pronunciation
 
 mpz is pronounced "em-peasy".
