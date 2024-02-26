@@ -22,3 +22,11 @@ pub trait ProtocolMessage {
     /// The type of message used in the protocol.
     type Msg: Send + Sync + std::fmt::Debug + 'static;
 }
+
+/// A protocol thread which can be forked.
+pub trait Fork {
+    /// Forks the protocol thread with a new identifier.
+    fn fork(&self, id: &str) -> Self
+    where
+        Self: Sized;
+}
