@@ -12,8 +12,6 @@ pub mod ideal;
 pub mod kos;
 
 use async_trait::async_trait;
-use mpz_core::ProtocolMessage;
-use utils_aio::{sink::IoSink, stream::IoStream};
 
 /// An oblivious transfer error.
 #[derive(Debug, thiserror::Error)]
@@ -33,23 +31,14 @@ pub enum OTError {
 
 /// An oblivious transfer protocol that needs to perform a one-time setup.
 #[async_trait]
-pub trait OTSetup: ProtocolMessage {
+pub trait OTSetup {
     /// Runs any one-time setup for the protocol.
-    ///
-    /// # Arguments
-    ///
-    /// * `sink` - The IO sink to the peer.
-    /// * `stream` - The IO stream from the peer.
-    async fn setup<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<(), OTError>;
+    async fn setup(&mut self) -> Result<(), OTError>;
 }
 
 /// An oblivious transfer sender.
 #[async_trait]
-pub trait OTSender<T>: ProtocolMessage
+pub trait OTSender<T>
 where
     T: Send + Sync,
 {
@@ -57,20 +46,13 @@ where
     ///
     /// # Arguments
     ///
-    /// * `sink` - The IO sink to the receiver.
-    /// * `stream` - The IO stream from the receiver.
     /// * `msgs` - The messages to obliviously transfer.
-    async fn send<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        msgs: &[T],
-    ) -> Result<(), OTError>;
+    async fn send(&mut self, msgs: &[T]) -> Result<(), OTError>;
 }
 
 /// A correlated oblivious transfer sender.
 #[async_trait]
-pub trait COTSender<T>: ProtocolMessage
+pub trait COTSender<T>
 where
     T: Send + Sync,
 {
@@ -78,23 +60,13 @@ where
     ///
     /// # Arguments
     ///
-    /// * `sink` - The IO sink to the receiver.
-    /// * `stream` - The IO stream from the receiver.
     /// * `msgs` - The `0`-bit messages to use during the oblivious transfer.
-    async fn send_correlated<
-        Si: IoSink<Self::Msg> + Send + Unpin,
-        St: IoStream<Self::Msg> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        msgs: &[T],
-    ) -> Result<(), OTError>;
+    async fn send_correlated(&mut self, msgs: &[T]) -> Result<(), OTError>;
 }
 
 /// A random OT sender.
 #[async_trait]
-pub trait RandomOTSender<T>: ProtocolMessage
+pub trait RandomOTSender<T>
 where
     T: Send + Sync,
 {
@@ -102,23 +74,13 @@ where
     ///
     /// # Arguments
     ///
-    /// * `sink` - The IO sink to the receiver.
-    /// * `stream` - The IO stream from the receiver.
     /// * `count` - The number of pairs of random messages to output.
-    async fn send_random<
-        Si: IoSink<Self::Msg> + Send + Unpin,
-        St: IoStream<Self::Msg> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        count: usize,
-    ) -> Result<Vec<T>, OTError>;
+    async fn send_random(&mut self, count: usize) -> Result<Vec<T>, OTError>;
 }
 
 /// A random correlated oblivious transfer sender.
 #[async_trait]
-pub trait RandomCOTSender<T>: ProtocolMessage
+pub trait RandomCOTSender<T>
 where
     T: Send + Sync,
 {
@@ -128,23 +90,13 @@ where
     ///
     /// # Arguments
     ///
-    /// * `sink` - The IO sink to the receiver.
-    /// * `stream` - The IO stream from the receiver.
     /// * `count` - The number of correlated messages to obliviously transfer.
-    async fn send_random_correlated<
-        Si: IoSink<Self::Msg> + Send + Unpin,
-        St: IoStream<Self::Msg> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        count: usize,
-    ) -> Result<Vec<T>, OTError>;
+    async fn send_random_correlated(&mut self, count: usize) -> Result<Vec<T>, OTError>;
 }
 
 /// An oblivious transfer receiver.
 #[async_trait]
-pub trait OTReceiver<T, U>: ProtocolMessage
+pub trait OTReceiver<T, U>
 where
     T: Send + Sync,
     U: Send + Sync,
@@ -153,20 +105,13 @@ where
     ///
     /// # Arguments
     ///
-    /// * `sink` - The IO sink to the sender.
-    /// * `stream` - The IO stream from the sender.
     /// * `choices` - The choices made by the receiver.
-    async fn receive<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        choices: &[T],
-    ) -> Result<Vec<U>, OTError>;
+    async fn receive(&mut self, choices: &[T]) -> Result<Vec<U>, OTError>;
 }
 
 /// A correlated oblivious transfer receiver.
 #[async_trait]
-pub trait COTReceiver<T, U>: ProtocolMessage
+pub trait COTReceiver<T, U>
 where
     T: Send + Sync,
     U: Send + Sync,
@@ -175,23 +120,13 @@ where
     ///
     /// # Arguments
     ///
-    /// * `sink` - The IO sink to the sender.
-    /// * `stream` - The IO stream from the sender.
     /// * `choices` - The choices made by the receiver.
-    async fn receive_correlated<
-        Si: IoSink<Self::Msg> + Send + Unpin,
-        St: IoStream<Self::Msg> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        choices: &[T],
-    ) -> Result<Vec<U>, OTError>;
+    async fn receive_correlated(&mut self, choices: &[T]) -> Result<Vec<U>, OTError>;
 }
 
 /// A random OT receiver.
 #[async_trait]
-pub trait RandomOTReceiver<T, U>: ProtocolMessage
+pub trait RandomOTReceiver<T, U>
 where
     T: Send + Sync,
     U: Send + Sync,
@@ -200,23 +135,13 @@ where
     ///
     /// # Arguments
     ///
-    /// * `sink` - The IO sink to the sender.
-    /// * `stream` - The IO stream from the sender.
     /// * `count` - The number of random messages to receive.
-    async fn receive_random<
-        Si: IoSink<Self::Msg> + Send + Unpin,
-        St: IoStream<Self::Msg> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        count: usize,
-    ) -> Result<(Vec<T>, Vec<U>), OTError>;
+    async fn receive_random(&mut self, count: usize) -> Result<(Vec<T>, Vec<U>), OTError>;
 }
 
 /// A random correlated oblivious transfer receiver.
 #[async_trait]
-pub trait RandomCOTReceiver<T, U>: ProtocolMessage
+pub trait RandomCOTReceiver<T, U>
 where
     T: Send + Sync,
     U: Send + Sync,
@@ -227,16 +152,9 @@ where
     ///
     /// # Arguments
     ///
-    /// * `sink` - The IO sink to the sender.
-    /// * `stream` - The IO stream from the sender.
     /// * `count` - The number of correlated messages to obliviously receive.
-    async fn receive_random_correlated<
-        Si: IoSink<Self::Msg> + Send + Unpin,
-        St: IoStream<Self::Msg> + Send + Unpin,
-    >(
+    async fn receive_random_correlated(
         &mut self,
-        sink: &mut Si,
-        stream: &mut St,
         count: usize,
     ) -> Result<(Vec<T>, Vec<U>), OTError>;
 }
@@ -253,16 +171,7 @@ where
     /// # Warning
     ///
     /// Obviously, you should be sure you want to do this before calling this function!
-    ///
-    /// # Arguments
-    ///
-    /// * `sink` - The IO sink to the receiver.
-    /// * `stream` - The IO stream from the receiver.
-    async fn reveal<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<(), OTError>;
+    async fn reveal(&mut self) -> Result<(), OTError>;
 }
 
 /// An oblivious transfer sender that can verify the receiver's choices.
@@ -272,19 +181,7 @@ where
     U: Send + Sync,
 {
     /// Receives the purported choices made by the receiver and verifies them.
-    ///
-    /// # Arguments
-    ///
-    /// * `sink` - The IO sink to the receiver.
-    /// * `stream` - The IO stream from the receiver.
-    async fn verify_choices<
-        Si: IoSink<Self::Msg> + Send + Unpin,
-        St: IoStream<Self::Msg> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<Vec<T>, OTError>;
+    async fn verify_choices(&mut self) -> Result<Vec<T>, OTError>;
 }
 
 /// An oblivious transfer receiver that is committed to its choices and can reveal them
@@ -300,19 +197,7 @@ where
     /// # Warning
     ///
     /// Obviously, you should be sure you want to do this before calling this function!
-    ///
-    /// # Arguments
-    ///
-    /// * `sink` - The IO sink to the sender.
-    /// * `stream` - The IO stream from the sender.
-    async fn reveal_choices<
-        Si: IoSink<Self::Msg> + Send + Unpin,
-        St: IoStream<Self::Msg> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<(), OTError>;
+    async fn reveal_choices(&mut self) -> Result<(), OTError>;
 }
 
 /// An oblivious transfer receiver that can verify the sender's messages.
@@ -327,17 +212,9 @@ where
     ///
     /// # Arguments
     ///
-    /// * `sink` - The IO sink to the sender.
-    /// * `stream` - The IO stream from the sender.
     /// * `id` - The transfer id of the messages to verify.
     /// * `msgs` - The purported messages sent by the sender.
-    async fn verify<Si: IoSink<Self::Msg> + Send + Unpin, St: IoStream<Self::Msg> + Send + Unpin>(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        id: usize,
-        msgs: &[V],
-    ) -> Result<(), OTError>;
+    async fn verify(&mut self, id: usize, msgs: &[V]) -> Result<(), OTError>;
 }
 
 // ########################################################################
