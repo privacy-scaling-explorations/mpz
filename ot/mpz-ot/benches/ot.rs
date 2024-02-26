@@ -1,5 +1,4 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use futures_util::StreamExt;
 use mpz_core::Block;
 use mpz_ot::{
     chou_orlandi::{Receiver, ReceiverConfig, Sender, SenderConfig},
@@ -16,24 +15,17 @@ fn chou_orlandi(c: &mut Criterion) {
             let choices = vec![false; n];
             b.to_async(&rt).iter(|| async {
                 let (sender_channel, receiver_channel) = MemoryDuplex::new();
-                let (mut sender_sink, mut sender_stream) = sender_channel.split();
-                let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
 
-                let mut sender = Sender::new(SenderConfig::default());
-                let mut receiver = Receiver::new(ReceiverConfig::default());
+                let mut sender = Sender::new(SenderConfig::default(), sender_channel);
+                let mut receiver = Receiver::new(ReceiverConfig::default(), receiver_channel);
 
-                let (sender_res, receiver_res) = futures::join!(
-                    sender.setup(&mut sender_sink, &mut sender_stream),
-                    receiver.setup(&mut receiver_sink, &mut receiver_stream)
-                );
+                let (sender_res, receiver_res) = futures::join!(sender.setup(), receiver.setup());
 
                 sender_res.unwrap();
                 receiver_res.unwrap();
 
-                let (sender_res, receiver_res) = futures::join!(
-                    sender.send(&mut sender_sink, &mut sender_stream, &msgs),
-                    receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
-                );
+                let (sender_res, receiver_res) =
+                    futures::join!(sender.send(&msgs), receiver.receive(&choices));
 
                 sender_res.unwrap();
                 let received = receiver_res.unwrap();

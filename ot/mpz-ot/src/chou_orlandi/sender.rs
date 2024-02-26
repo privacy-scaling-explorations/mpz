@@ -2,15 +2,15 @@ use crate::{chou_orlandi::SenderError, OTError, OTSender, OTSetup, VerifiableOTS
 
 use async_trait::async_trait;
 use futures_util::SinkExt;
-use mpz_core::{cointoss, Block, ProtocolMessage};
+use mpz_core::{cointoss, Block};
 use mpz_ot_core::chou_orlandi::{
     msgs::Message, sender_state as state, Sender as SenderCore, SenderConfig,
 };
 use rand::{thread_rng, Rng};
 use utils_aio::{
+    duplex::Duplex,
     non_blocking_backend::{Backend, NonBlockingBackend},
-    sink::IoSink,
-    stream::{ExpectStreamExt, IoStream},
+    stream::ExpectStreamExt,
 };
 
 use enum_try_as_inner::EnumTryAsInner;
@@ -26,21 +26,26 @@ pub(crate) enum State {
 
 /// Chou-Orlandi sender.
 #[derive(Debug)]
-pub struct Sender {
+pub struct Sender<Io> {
+    io: Io,
     state: State,
     /// The coin toss receiver after revealing one's own seed but before receiving a decommitment
     /// from the coin toss sender.
     cointoss_receiver: Option<cointoss::Receiver<cointoss::receiver_state::Received>>,
 }
 
-impl Sender {
+impl<Io> Sender<Io>
+where
+    Io: Duplex<Message>,
+{
     /// Creates a new Sender
     ///
     /// # Arguments
     ///
     /// * `config` - The sender's configuration
-    pub fn new(config: SenderConfig) -> Self {
+    pub fn new(config: SenderConfig, io: Io) -> Self {
         Self {
+            io,
             state: State::Initialized(SenderCore::new(config)),
             cointoss_receiver: None,
         }
@@ -52,8 +57,9 @@ impl Sender {
     ///
     /// * `config` - The sender's configuration
     /// * `seed` - The RNG seed used to generate the sender's keys
-    pub fn new_with_seed(config: SenderConfig, seed: [u8; 32]) -> Self {
+    pub fn new_with_seed(config: SenderConfig, io: Io, seed: [u8; 32]) -> Self {
         Self {
+            io,
             state: State::Initialized(SenderCore::new_with_seed(config, seed)),
             cointoss_receiver: None,
         }
@@ -61,12 +67,11 @@ impl Sender {
 }
 
 #[async_trait]
-impl OTSetup for Sender {
-    async fn setup<Si: IoSink<Message> + Send + Unpin, St: IoStream<Message> + Send + Unpin>(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<(), OTError> {
+impl<Io> OTSetup for Sender<Io>
+where
+    Io: Duplex<Message>,
+{
+    async fn setup(&mut self) -> Result<(), OTError> {
         if self.state.is_setup() {
             return Ok(());
         }
@@ -77,12 +82,12 @@ impl OTSetup for Sender {
 
         // If the receiver is committed, we run the cointoss protocol
         if sender.config().receiver_commit() {
-            self.cointoss_receiver = Some(execute_cointoss(sink, stream).await?);
+            self.cointoss_receiver = Some(execute_cointoss(&mut self.io).await?);
         }
 
         let (msg, sender) = sender.setup();
 
-        sink.send(Message::SenderSetup(msg)).await?;
+        self.io.send(Message::SenderSetup(msg)).await?;
 
         self.state = State::Setup(sender);
 
@@ -92,44 +97,35 @@ impl OTSetup for Sender {
 
 /// Executes the coin toss protocol as the receiver up until the point when the sender should send
 /// a decommitment. The decommitment will be sent later during verification.
-async fn execute_cointoss<
-    Si: IoSink<Message> + Send + Unpin,
-    St: IoStream<Message> + Send + Unpin,
->(
-    sink: &mut Si,
-    stream: &mut St,
+async fn execute_cointoss<Io: Duplex<Message>>(
+    io: &mut Io,
 ) -> Result<cointoss::Receiver<cointoss::receiver_state::Received>, SenderError> {
     let receiver = cointoss::Receiver::new(vec![thread_rng().gen()]);
 
-    let commitment = stream
+    let commitment = io
         .expect_next()
         .await?
         .try_into_cointoss_sender_commitment()?;
 
     let (receiver, payload) = receiver.reveal(commitment)?;
 
-    sink.send(Message::CointossReceiverPayload(payload)).await?;
+    io.send(Message::CointossReceiverPayload(payload)).await?;
 
     Ok(receiver)
 }
 
-impl ProtocolMessage for Sender {
-    type Msg = Message;
-}
-
 #[async_trait]
-impl OTSender<[Block; 2]> for Sender {
-    async fn send<Si: IoSink<Message> + Send + Unpin, St: IoStream<Message> + Send + Unpin>(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        input: &[[Block; 2]],
-    ) -> Result<(), OTError> {
+impl<Io> OTSender<[Block; 2]> for Sender<Io>
+where
+    Io: Duplex<Message>,
+{
+    async fn send(&mut self, input: &[[Block; 2]]) -> Result<(), OTError> {
         let mut sender = std::mem::replace(&mut self.state, State::Error)
             .try_into_setup()
             .map_err(SenderError::from)?;
 
-        let receiver_payload = stream
+        let receiver_payload = self
+            .io
             .expect_next()
             .await?
             .try_into_receiver_payload()
@@ -144,7 +140,7 @@ impl OTSender<[Block; 2]> for Sender {
 
         let payload = payload.map_err(SenderError::from)?;
 
-        sink.send(Message::SenderPayload(payload)).await?;
+        self.io.send(Message::SenderPayload(payload)).await?;
 
         self.state = State::Setup(sender);
 
@@ -153,15 +149,11 @@ impl OTSender<[Block; 2]> for Sender {
 }
 
 #[async_trait]
-impl VerifiableOTSender<bool, [Block; 2]> for Sender {
-    async fn verify_choices<
-        Si: IoSink<Message> + Send + Unpin,
-        St: IoStream<Message> + Send + Unpin,
-    >(
-        &mut self,
-        _sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<Vec<bool>, OTError> {
+impl<Io> VerifiableOTSender<bool, [Block; 2]> for Sender<Io>
+where
+    Io: Duplex<Message>,
+{
+    async fn verify_choices(&mut self) -> Result<Vec<bool>, OTError> {
         let sender = std::mem::replace(&mut self.state, State::Error)
             .try_into_setup()
             .map_err(SenderError::from)?;
@@ -172,13 +164,15 @@ impl VerifiableOTSender<bool, [Block; 2]> for Sender {
             ))?
         };
 
-        let cointoss_payload = stream
+        let cointoss_payload = self
+            .io
             .expect_next()
             .await?
             .try_into_cointoss_sender_payload()
             .map_err(SenderError::from)?;
 
-        let receiver_reveal = stream
+        let receiver_reveal = self
+            .io
             .expect_next()
             .await?
             .try_into_receiver_reveal()
