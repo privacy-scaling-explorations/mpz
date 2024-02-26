@@ -7,8 +7,6 @@ use futures::{
     channel::{mpsc, oneshot},
     StreamExt,
 };
-use mpz_core::ProtocolMessage;
-use utils_aio::{sink::IoSink, stream::IoStream};
 
 /// Ideal OT sender.
 #[derive(Debug)]
@@ -24,14 +22,6 @@ pub struct IdealOTReceiver<T> {
     receiver: mpsc::Receiver<Vec<[T; 2]>>,
     choices: Vec<bool>,
     choices_sender: Option<oneshot::Sender<Vec<bool>>>,
-}
-
-impl<T> ProtocolMessage for IdealOTSender<T> {
-    type Msg = ();
-}
-
-impl<T> ProtocolMessage for IdealOTReceiver<T> {
-    type Msg = ();
 }
 
 /// Creates a pair of ideal OT sender and receiver.
@@ -58,11 +48,7 @@ impl<T> OTSetup for IdealOTSender<T>
 where
     T: Send + Sync,
 {
-    async fn setup<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-    ) -> Result<(), OTError> {
+    async fn setup(&mut self) -> Result<(), OTError> {
         Ok(())
     }
 }
@@ -72,12 +58,7 @@ impl<T> OTSender<[T; 2]> for IdealOTSender<T>
 where
     T: Send + Sync + Clone + 'static,
 {
-    async fn send<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-        msgs: &[[T; 2]],
-    ) -> Result<(), OTError> {
+    async fn send(&mut self, msgs: &[[T; 2]]) -> Result<(), OTError> {
         self.msgs.extend(msgs.iter().cloned());
 
         self.sender
@@ -93,11 +74,7 @@ impl<T> OTSetup for IdealOTReceiver<T>
 where
     T: Send + Sync,
 {
-    async fn setup<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-    ) -> Result<(), OTError> {
+    async fn setup(&mut self) -> Result<(), OTError> {
         Ok(())
     }
 }
@@ -107,12 +84,7 @@ impl<T> OTReceiver<bool, T> for IdealOTReceiver<T>
 where
     T: Send + Sync + 'static,
 {
-    async fn receive<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-        choices: &[bool],
-    ) -> Result<Vec<T>, OTError> {
+    async fn receive(&mut self, choices: &[bool]) -> Result<Vec<T>, OTError> {
         self.choices.extend(choices.iter().copied());
 
         let payload = self
@@ -142,13 +114,7 @@ where
     U: Send + Sync + 'static,
     V: Send + Sync + 'static,
 {
-    async fn verify<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-        _index: usize,
-        _msgs: &[V],
-    ) -> Result<(), OTError> {
+    async fn verify(&mut self, _index: usize, _msgs: &[V]) -> Result<(), OTError> {
         Ok(())
     }
 }
@@ -158,11 +124,7 @@ impl<T> CommittedOTSender<[T; 2]> for IdealOTSender<T>
 where
     T: Send + Sync + Clone + 'static,
 {
-    async fn reveal<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-    ) -> Result<(), OTError> {
+    async fn reveal(&mut self) -> Result<(), OTError> {
         Ok(())
     }
 }
@@ -172,11 +134,7 @@ impl<T> CommittedOTReceiver<bool, T> for IdealOTReceiver<T>
 where
     T: Send + Sync + 'static,
 {
-    async fn reveal_choices<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-    ) -> Result<(), OTError> {
+    async fn reveal_choices(&mut self) -> Result<(), OTError> {
         self.choices_sender
             .take()
             .expect("choices should not be revealed twice")
@@ -192,11 +150,7 @@ impl<T> VerifiableOTSender<bool, [T; 2]> for IdealOTSender<T>
 where
     T: Send + Sync + Clone + 'static,
 {
-    async fn verify_choices<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-    ) -> Result<Vec<bool>, OTError> {
+    async fn verify_choices(&mut self) -> Result<Vec<bool>, OTError> {
         Ok(self
             .choices_receiver
             .take()
@@ -208,31 +162,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use utils_aio::duplex::MemoryDuplex;
-
     use super::*;
 
     // Test that the sender and receiver can be used to send and receive values
     #[tokio::test]
     async fn test_ideal_ot_owned() {
-        let (send_channel, recv_channel) = MemoryDuplex::<()>::new();
-
-        let (mut send_sink, mut send_stream) = send_channel.split();
-        let (mut recv_sink, mut recv_stream) = recv_channel.split();
-
         let values = vec![[0, 1], [2, 3]];
         let choices = vec![false, true];
         let (mut sender, mut receiver) = ideal_ot_pair::<u8>();
 
-        sender
-            .send(&mut send_sink, &mut send_stream, &values)
-            .await
-            .unwrap();
+        sender.send(&values).await.unwrap();
 
-        let received = receiver
-            .receive(&mut recv_sink, &mut recv_stream, &choices)
-            .await
-            .unwrap();
+        let received = receiver.receive(&choices).await.unwrap();
 
         assert_eq!(received, vec![0, 3]);
     }

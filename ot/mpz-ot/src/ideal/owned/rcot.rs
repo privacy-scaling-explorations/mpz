@@ -1,11 +1,10 @@
 use crate::{OTError, OTSetup, RandomCOTReceiver, RandomCOTSender};
 use async_trait::async_trait;
 use futures::{channel::mpsc, StreamExt};
-use mpz_core::{Block, ProtocolMessage};
+use mpz_core::Block;
 use rand::Rng;
 use rand_chacha::ChaCha12Rng;
 use rand_core::SeedableRng;
-use utils_aio::{sink::IoSink, stream::IoStream};
 
 /// Ideal random OT sender.
 #[derive(Debug)]
@@ -20,14 +19,6 @@ pub struct IdealRandomCOTSender<T = Block> {
 pub struct IdealRandomCOTReceiver<T = Block> {
     receiver: mpsc::Receiver<Vec<[T; 2]>>,
     rng: ChaCha12Rng,
-}
-
-impl<T> ProtocolMessage for IdealRandomCOTSender<T> {
-    type Msg = ();
-}
-
-impl<T> ProtocolMessage for IdealRandomCOTReceiver<T> {
-    type Msg = ();
 }
 
 /// Creates a pair of ideal random COT sender and receiver.
@@ -55,26 +46,14 @@ impl<T> OTSetup for IdealRandomCOTSender<T>
 where
     T: Send + Sync,
 {
-    async fn setup<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-    ) -> Result<(), OTError> {
+    async fn setup(&mut self) -> Result<(), OTError> {
         Ok(())
     }
 }
 
 #[async_trait]
 impl RandomCOTSender<Block> for IdealRandomCOTSender<Block> {
-    async fn send_random_correlated<
-        Si: IoSink<()> + Send + Unpin,
-        St: IoStream<()> + Send + Unpin,
-    >(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-        count: usize,
-    ) -> Result<Vec<Block>, OTError> {
+    async fn send_random_correlated(&mut self, count: usize) -> Result<Vec<Block>, OTError> {
         let low = (0..count)
             .map(|_| Block::random(&mut self.rng))
             .collect::<Vec<_>>();
@@ -96,24 +75,16 @@ impl<T> OTSetup for IdealRandomCOTReceiver<T>
 where
     T: Send + Sync,
 {
-    async fn setup<Si: IoSink<()> + Send + Unpin, St: IoStream<()> + Send + Unpin>(
-        &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
-    ) -> Result<(), OTError> {
+    async fn setup(&mut self) -> Result<(), OTError> {
         Ok(())
     }
 }
 
 #[async_trait]
 impl RandomCOTReceiver<bool, Block> for IdealRandomCOTReceiver<Block> {
-    async fn receive_random_correlated<
-        Si: IoSink<()> + Send + Unpin,
-        St: IoStream<()> + Send + Unpin,
-    >(
+    async fn receive_random_correlated(
         &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
+
         count: usize,
     ) -> Result<(Vec<bool>, Vec<Block>), OTError> {
         let payload = self
@@ -144,31 +115,19 @@ impl RandomCOTReceiver<bool, Block> for IdealRandomCOTReceiver<Block> {
 
 #[cfg(test)]
 mod tests {
-    use utils_aio::duplex::MemoryDuplex;
-
     use super::*;
 
     // Test that the sender and receiver can be used to send and receive values
     #[tokio::test]
     async fn test_ideal_random_cot_owned() {
         let seed = [0u8; 32];
-        let (send_channel, recv_channel) = MemoryDuplex::<()>::new();
-
-        let (mut send_sink, mut send_stream) = send_channel.split();
-        let (mut recv_sink, mut recv_stream) = recv_channel.split();
 
         let delta = Block::from([42u8; 16]);
         let (mut sender, mut receiver) = ideal_random_cot_pair::<Block>(seed, delta);
 
-        let values = sender
-            .send_random_correlated(&mut send_sink, &mut send_stream, 8)
-            .await
-            .unwrap();
+        let values = sender.send_random_correlated(8).await.unwrap();
 
-        let (choices, received) = receiver
-            .receive_random_correlated(&mut recv_sink, &mut recv_stream, 8)
-            .await
-            .unwrap();
+        let (choices, received) = receiver.receive_random_correlated(8).await.unwrap();
 
         let expected = values
             .into_iter()
