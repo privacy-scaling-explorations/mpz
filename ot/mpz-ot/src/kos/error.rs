@@ -43,8 +43,8 @@ impl From<mpz_ot_core::kos::SenderError> for OTError {
     }
 }
 
-impl<BaseMsg> From<MessageError<BaseMsg>> for SenderError {
-    fn from(err: MessageError<BaseMsg>) -> Self {
+impl From<MessageError> for SenderError {
+    fn from(err: MessageError) -> Self {
         SenderError::from(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             err.to_string(),
@@ -95,8 +95,8 @@ impl From<mpz_ot_core::kos::ReceiverError> for OTError {
     }
 }
 
-impl<BaseMsg> From<MessageError<BaseMsg>> for ReceiverError {
-    fn from(err: MessageError<BaseMsg>) -> Self {
+impl From<MessageError> for ReceiverError {
+    fn from(err: MessageError) -> Self {
         ReceiverError::from(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             err.to_string(),

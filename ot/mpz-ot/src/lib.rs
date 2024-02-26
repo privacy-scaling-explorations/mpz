@@ -9,7 +9,7 @@
 pub mod chou_orlandi;
 #[cfg(feature = "ideal")]
 pub mod ideal;
-//pub mod kos;
+pub mod kos;
 use async_trait::async_trait;
 
 /// An oblivious transfer error.

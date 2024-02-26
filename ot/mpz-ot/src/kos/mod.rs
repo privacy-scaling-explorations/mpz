@@ -5,7 +5,6 @@ mod receiver;
 mod sender;
 
 pub use error::{ReceiverError, ReceiverVerifyError, SenderError};
-use futures_util::{SinkExt, StreamExt};
 pub use receiver::Receiver;
 pub use sender::Sender;
 
@@ -16,7 +15,6 @@ pub use mpz_ot_core::kos::{
     msgs, PayloadRecord, ReceiverConfig, ReceiverConfigBuilder, ReceiverConfigBuilderError,
     ReceiverKeys, SenderConfig, SenderConfigBuilder, SenderConfigBuilderError, SenderKeys,
 };
-use utils_aio::{sink::IoSink, stream::IoStream};
 
 // If we're testing we use a smaller chunk size to make sure the chunking code paths are tested.
 cfg_if::cfg_if! {
@@ -28,29 +26,9 @@ cfg_if::cfg_if! {
     }
 }
 
-/// Converts a sink of KOS messages into a sink of base OT messages.
-pub(crate) fn into_base_sink<'a, Si: IoSink<msgs::Message<T>> + Send + Unpin, T: Send + 'a>(
-    sink: &'a mut Si,
-) -> impl IoSink<T> + Send + Unpin + 'a {
-    Box::pin(SinkExt::with(sink, |msg| async move {
-        Ok(msgs::Message::BaseMsg(msg))
-    }))
-}
-
-/// Converts a stream of KOS messages into a stream of base OT messages.
-pub(crate) fn into_base_stream<'a, St: IoStream<msgs::Message<T>> + Send + Unpin, T: Send + 'a>(
-    stream: &'a mut St,
-) -> impl IoStream<T> + Send + Unpin + 'a {
-    StreamExt::map(stream, |msg| match msg {
-        Ok(msg) => msg.try_into_base_msg().map_err(From::from),
-        Err(err) => Err(err),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_util::StreamExt;
     use rstest::*;
 
     use itybity::ToBits;
@@ -59,7 +37,7 @@ mod tests {
     use rand::Rng;
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
-    use utils_aio::{duplex::MemoryDuplex, sink::IoSink, stream::IoStream};
+    use utils_aio::duplex::MemoryDuplex;
 
     use crate::{
         ideal::{ideal_ot_pair, IdealOTReceiver, IdealOTSender},
@@ -88,38 +66,27 @@ mod tests {
             .map(|([zero, one], choice)| if choice { one } else { zero })
     }
 
-    async fn setup<
-        Si: IoSink<Message<()>> + Send + Unpin,
-        St: IoStream<Message<()>> + Send + Unpin,
-    >(
+    async fn setup(
         sender_config: SenderConfig,
         receiver_config: ReceiverConfig,
-        sender_sink: &mut Si,
-        sender_stream: &mut St,
-        receiver_sink: &mut Si,
-        receiver_stream: &mut St,
         count: usize,
     ) -> (
-        Sender<IdealOTReceiver<Block>>,
-        Receiver<IdealOTSender<Block>>,
+        Sender<MemoryDuplex<Message>, IdealOTReceiver<Block>>,
+        Receiver<MemoryDuplex<Message>, IdealOTSender<Block>>,
     ) {
+        let (sender_channel, receiver_channel) = MemoryDuplex::new();
+
         let (base_sender, base_receiver) = ideal_ot_pair();
 
-        let mut sender = Sender::new(sender_config, base_receiver);
-        let mut receiver = Receiver::new(receiver_config, base_sender);
+        let mut sender = Sender::new(sender_config, sender_channel, base_receiver);
+        let mut receiver = Receiver::new(receiver_config, receiver_channel, base_sender);
 
-        let (sender_res, receiver_res) = tokio::join!(
-            sender.setup(sender_sink, sender_stream),
-            receiver.setup(receiver_sink, receiver_stream)
-        );
+        let (sender_res, receiver_res) = tokio::join!(sender.setup(), receiver.setup());
 
         sender_res.unwrap();
         receiver_res.unwrap();
 
-        let (sender_res, receiver_res) = tokio::join!(
-            sender.extend(sender_sink, sender_stream, count),
-            receiver.extend(receiver_sink, receiver_stream, count)
-        );
+        let (sender_res, receiver_res) = tokio::join!(sender.extend(count), receiver.extend(count));
 
         sender_res.unwrap();
         receiver_res.unwrap();
@@ -130,26 +97,15 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MemoryDuplex::new();
-
-        let (mut sender_sink, mut sender_stream) = sender_channel.split();
-        let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
-
         let (mut sender, mut receiver) = setup(
             SenderConfig::default(),
             ReceiverConfig::default(),
-            &mut sender_sink,
-            &mut sender_stream,
-            &mut receiver_sink,
-            &mut receiver_stream,
             data.len(),
         )
         .await;
 
-        let (sender_res, receiver_res) = tokio::join!(
-            sender.send(&mut sender_sink, &mut sender_stream, &data),
-            receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
-        );
+        let (sender_res, receiver_res) =
+            tokio::join!(sender.send(&data), receiver.receive(&choices));
 
         sender_res.unwrap();
         let received: Vec<Block> = receiver_res.unwrap();
@@ -161,30 +117,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_kos_random() {
-        let (sender_channel, receiver_channel) = MemoryDuplex::new();
-
-        let (mut sender_sink, mut sender_stream) = sender_channel.split();
-        let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
-
-        let (mut sender, mut receiver) = setup(
-            SenderConfig::default(),
-            ReceiverConfig::default(),
-            &mut sender_sink,
-            &mut sender_stream,
-            &mut receiver_sink,
-            &mut receiver_stream,
-            10,
-        )
-        .await;
+        let (mut sender, mut receiver) =
+            setup(SenderConfig::default(), ReceiverConfig::default(), 10).await;
 
         let (sender_res, receiver_res) = tokio::join!(
-            RandomOTSender::send_random(&mut sender, &mut sender_sink, &mut sender_stream, 10),
-            RandomOTReceiver::receive_random(
-                &mut receiver,
-                &mut receiver_sink,
-                &mut receiver_stream,
-                10
-            )
+            RandomOTSender::send_random(&mut sender, 10),
+            RandomOTReceiver::receive_random(&mut receiver, 10)
         );
 
         let sender_output: Vec<[Block; 2]> = sender_res.unwrap();
@@ -202,18 +140,9 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos_bytes(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MemoryDuplex::new();
-
-        let (mut sender_sink, mut sender_stream) = sender_channel.split();
-        let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
-
         let (mut sender, mut receiver) = setup(
             SenderConfig::default(),
             ReceiverConfig::default(),
-            &mut sender_sink,
-            &mut sender_stream,
-            &mut receiver_sink,
-            &mut receiver_stream,
             data.len(),
         )
         .await;
@@ -223,10 +152,8 @@ mod tests {
             .map(|[a, b]| [a.to_bytes(), b.to_bytes()])
             .collect();
 
-        let (sender_res, receiver_res) = tokio::join!(
-            sender.send(&mut sender_sink, &mut sender_stream, &data),
-            receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
-        );
+        let (sender_res, receiver_res) =
+            tokio::join!(sender.send(&data), receiver.receive(&choices));
 
         sender_res.unwrap();
         let received: Vec<[u8; 16]> = receiver_res.unwrap();
@@ -239,26 +166,15 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos_committed_sender(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MemoryDuplex::new();
-
-        let (mut sender_sink, mut sender_stream) = sender_channel.split();
-        let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
-
         let (mut sender, mut receiver) = setup(
             SenderConfig::builder().sender_commit().build().unwrap(),
             ReceiverConfig::builder().sender_commit().build().unwrap(),
-            &mut sender_sink,
-            &mut sender_stream,
-            &mut receiver_sink,
-            &mut receiver_stream,
             data.len(),
         )
         .await;
 
-        let (sender_res, receiver_res) = tokio::join!(
-            sender.send(&mut sender_sink, &mut sender_stream, &data),
-            receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
-        );
+        let (sender_res, receiver_res) =
+            tokio::join!(sender.send(&data), receiver.receive(&choices));
 
         sender_res.unwrap();
         let received: Vec<Block> = receiver_res.unwrap();
@@ -267,10 +183,7 @@ mod tests {
 
         assert_eq!(received, expected);
 
-        let (sender_res, receiver_res) = tokio::join!(
-            sender.reveal(&mut sender_sink, &mut sender_stream),
-            receiver.verify(&mut receiver_sink, &mut receiver_stream, 0, &data)
-        );
+        let (sender_res, receiver_res) = tokio::join!(sender.reveal(), receiver.verify(0, &data));
 
         sender_res.unwrap();
         receiver_res.unwrap();

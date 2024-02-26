@@ -16,8 +16,7 @@ use crate::msgs::Derandomize;
 #[derive(Debug, Clone, EnumTryAsInner, Serialize, Deserialize)]
 #[derive_err(Debug)]
 #[allow(missing_docs)]
-pub enum Message<BaseMsg> {
-    BaseMsg(BaseMsg),
+pub enum Message {
     StartExtend(StartExtend),
     Extend(Extend),
     Check(Check),
@@ -26,12 +25,6 @@ pub enum Message<BaseMsg> {
     CointossCommit(SenderCommitment),
     CointossReceiverPayload(CointossReceiverPayload),
     CointossSenderPayload(CointossSenderPayload),
-}
-
-impl<BaseMsg> From<MessageError<BaseMsg>> for std::io::Error {
-    fn from(err: MessageError<BaseMsg>) -> Self {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string())
-    }
 }
 
 /// Extension message sent by the receiver to agree upon the number of OTs to set up.
