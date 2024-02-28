@@ -123,7 +123,6 @@ impl Encoder for ChaChaEncoder {
 
 #[cfg(test)]
 mod test {
-    use crate::encoding::{state, EncodedValue};
     use std::marker::PhantomData;
 
     use super::*;

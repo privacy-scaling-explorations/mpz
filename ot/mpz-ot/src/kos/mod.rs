@@ -50,7 +50,6 @@ pub(crate) fn into_base_stream<'a, St: IoStream<msgs::Message<T>> + Send + Unpin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_util::StreamExt;
     use rstest::*;
 
     use itybity::ToBits;
@@ -59,7 +58,7 @@ mod tests {
     use rand::Rng;
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
-    use utils_aio::{duplex::MemoryDuplex, sink::IoSink, stream::IoStream};
+    use utils_aio::duplex::MemoryDuplex;
 
     use crate::{
         ideal::{ideal_ot_pair, IdealOTReceiver, IdealOTSender},
