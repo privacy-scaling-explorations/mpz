@@ -69,7 +69,7 @@ impl IdealSpcot {
         (SpcotMsgForSender { v }, SpcotMsgForReceiver { w })
     }
 
-    /// Checks if the outputs statisfy the relation with Delta, this is only used for test.
+    /// Checks if the outputs satisfy the relation with Delta, this is only used for test.
     ///
     /// # Arguments
     ///

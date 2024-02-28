@@ -110,7 +110,7 @@ pub(crate) fn const_wrapping_sub_nbit<const N: usize>(
         diff_n
     });
 
-    // underflow occured if b_out is 0
+    // underflow occurred if b_out is 0
     let underflow = state.add_inv_gate(b_out);
 
     (diff, underflow)
@@ -142,7 +142,7 @@ pub(crate) fn wrapping_sub_nbit(
         })
         .collect();
 
-    // underflow occured if b_out is 0
+    // underflow occurred if b_out is 0
     let underflow = state.add_inv_gate(b_out);
 
     (diff, underflow)
