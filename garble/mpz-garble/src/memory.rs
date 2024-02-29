@@ -452,7 +452,7 @@ mod tests {
 
     use super::*;
 
-    use mpz_circuits::types::{StaticValueType, ValueType};
+    use mpz_circuits::types::StaticValueType;
     use mpz_garble_core::{encoding_state, ChaChaEncoder, Encoder};
     use rstest::*;
 

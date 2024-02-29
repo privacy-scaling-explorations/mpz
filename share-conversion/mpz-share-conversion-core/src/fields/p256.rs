@@ -144,9 +144,8 @@ mod tests {
 
     use super::*;
 
-    use crate::fields::{
-        tests::{test_field_basic, test_field_bit_ops, test_field_compute_product_repeated},
-        Field,
+    use crate::fields::tests::{
+        test_field_basic, test_field_bit_ops, test_field_compute_product_repeated,
     };
 
     #[test]

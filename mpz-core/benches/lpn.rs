@@ -14,6 +14,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         prg.random_blocks(&mut x);
         prg.random_blocks(&mut y);
         bench.iter(|| {
+            #[allow(clippy::unit_arg)]
             black_box(lpn.compute(&mut y, &x));
         });
     });
@@ -29,6 +30,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         prg.random_blocks(&mut x);
         prg.random_blocks(&mut y);
         bench.iter(|| {
+            #[allow(clippy::unit_arg)]
             black_box(lpn.compute(&mut y, &x));
         });
     });
@@ -44,6 +46,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         prg.random_blocks(&mut x);
         prg.random_blocks(&mut y);
         bench.iter(|| {
+            #[allow(clippy::unit_arg)]
             black_box(lpn.compute(&mut y, &x));
         });
     });

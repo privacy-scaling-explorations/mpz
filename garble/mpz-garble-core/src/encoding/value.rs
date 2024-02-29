@@ -780,13 +780,12 @@ define_encoding_commitment_variant!(U128Commitment, U128, 128);
 #[cfg(test)]
 mod tests {
     use crate::{ChaChaEncoder, Encoder};
-    use mpz_circuits::types::StaticValueType;
 
     use std::marker::PhantomData;
 
     use rand::{
         distributions::{Distribution, Standard},
-        Rng, SeedableRng,
+        SeedableRng,
     };
     use rand_chacha::ChaCha12Rng;
     use rstest::*;
@@ -811,12 +810,10 @@ mod tests {
     #[case::u32_array(PhantomData::<[u32; 16]>)]
     #[case::u64_array(PhantomData::<[u64; 16]>)]
     #[case::u128_array(PhantomData::<[u128; 16]>)]
-    fn test_encoding<T: StaticValueType + Default>(
-        encoder: ChaChaEncoder,
-        #[case] _pd: PhantomData<T>,
-    ) where
+    fn test_encoding<T>(encoder: ChaChaEncoder, #[case] _pd: PhantomData<T>)
+    where
         Standard: Distribution<T>,
-        T: Into<Value> + Copy,
+        T: StaticValueType + Default + Into<Value> + Copy,
     {
         let mut rng = ChaCha12Rng::from_seed([0u8; 32]);
 

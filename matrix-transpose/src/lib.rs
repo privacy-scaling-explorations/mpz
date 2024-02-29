@@ -75,10 +75,7 @@ pub enum TransposeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{
-        distributions::{Distribution, Standard},
-        prelude::*,
-    };
+    use rand::{distributions::Standard, prelude::*};
 
     fn random_vec<T>(elements: usize) -> Vec<T>
     where
@@ -96,7 +93,10 @@ mod tests {
         let row_count = bits.len();
 
         let mut bits_: Vec<Vec<bool>> = vec![vec![false; row_count]; col_count];
+
+        #[allow(clippy::needless_range_loop)]
         for j in 0..row_count {
+            #[allow(clippy::needless_range_loop)]
             for i in 0..col_count {
                 bits_[i][j] = bits[j][i];
             }

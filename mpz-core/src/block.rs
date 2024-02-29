@@ -7,7 +7,6 @@ use generic_array::{typenum::consts::U16, GenericArray};
 use itybity::{BitIterable, BitLength, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
-use std::convert::From;
 
 /// A block of 128 bits
 #[repr(transparent)]

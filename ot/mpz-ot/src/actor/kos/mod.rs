@@ -42,10 +42,7 @@ mod tests {
     use msgs::Message;
 
     use super::*;
-    use futures::{
-        stream::{SplitSink, SplitStream},
-        StreamExt,
-    };
+    use futures::stream::{SplitSink, SplitStream};
     use rstest::*;
 
     use mpz_core::Block;

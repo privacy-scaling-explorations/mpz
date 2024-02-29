@@ -1,10 +1,7 @@
 #![allow(clippy::all)]
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use rand::{
-    distributions::{Distribution, Standard},
-    prelude::*,
-};
+use rand::{distributions::Standard, prelude::*};
 
 fn random_vec<T>(elements: usize) -> Vec<T>
 where

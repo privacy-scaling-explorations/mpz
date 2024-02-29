@@ -98,11 +98,9 @@ mod tests {
 
     use std::marker::PhantomData;
 
-    use crate::config::{ReceiverConfig, SenderConfig};
-
     use mpz_ot::ideal::{ideal_ot_shared_pair, IdealSharedOTReceiver, IdealSharedOTSender};
     use mpz_share_conversion_core::{
-        fields::{gf2_128::Gf2_128, p256::P256, Field},
+        fields::{gf2_128::Gf2_128, p256::P256},
         ShareType,
     };
     use rand::SeedableRng;
