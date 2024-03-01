@@ -4,8 +4,8 @@ use std::sync::Mutex;
 
 use futures::{Stream, StreamExt};
 
+use mpz_fields::Field;
 use mpz_share_conversion_core::{
-    fields::Field,
     msgs::{SenderRecordings, ShareConversionMessage},
     Share,
 };

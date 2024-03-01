@@ -29,10 +29,8 @@ pub use converter::{
     ConverterReceiver, ConverterReceiverHandle, ConverterSender, ConverterSenderHandle,
 };
 pub use error::{ShareConversionError, TapeVerificationError};
-pub use mpz_share_conversion_core::{
-    fields::{gf2_128::Gf2_128, p256::P256, Field},
-    msgs::ShareConversionMessage,
-};
+pub use mpz_fields::{gf2_128::Gf2_128, p256::P256, Field};
+pub use mpz_share_conversion_core::msgs::ShareConversionMessage;
 pub use ot::{OTReceiveElement, OTSendElement};
 pub use receiver::GilboaReceiver;
 pub use sender::GilboaSender;
@@ -98,11 +96,9 @@ mod tests {
 
     use std::marker::PhantomData;
 
+    use mpz_fields::{gf2_128::Gf2_128, p256::P256};
     use mpz_ot::ideal::{ideal_ot_shared_pair, IdealSharedOTReceiver, IdealSharedOTSender};
-    use mpz_share_conversion_core::{
-        fields::{gf2_128::Gf2_128, p256::P256},
-        ShareType,
-    };
+    use mpz_share_conversion_core::ShareType;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 

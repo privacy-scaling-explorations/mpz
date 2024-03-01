@@ -7,24 +7,12 @@ edition = "2021"
 name = "mpz_share_conversion_core"
 
 [dependencies]
-mpz-core.workspace = true
+mpz-fields.workspace = true
 
-thiserror.workspace = true
 rand.workspace = true
-ark-ff.workspace = true
-ark-secp256r1.workspace = true
-ark-serialize.workspace = true
-num-bigint.workspace = true
-opaque-debug.workspace = true
 serde.workspace = true
 itybity.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
 rand_chacha.workspace = true
-ghash_rc.workspace = true
-criterion.workspace = true
-
-[[bench]]
-name = "inverse_gf2_128"
-harness = false

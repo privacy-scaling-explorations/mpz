@@ -1,6 +1,7 @@
 //! Message types used in share conversion protocols
 
-use crate::{Field, Share};
+use crate::Share;
+use mpz_fields::Field;
 
 use serde::{Deserialize, Serialize};
 
