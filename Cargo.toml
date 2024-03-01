@@ -5,6 +5,7 @@ members = [
     "ot/*",
     "mpz-circuits",
     "mpz-circuits-macros",
+    "mpz-fields",
     "share-conversion/*",
     "matrix-transpose",
     "clmul",
