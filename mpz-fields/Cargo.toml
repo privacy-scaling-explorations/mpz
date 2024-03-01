@@ -9,7 +9,6 @@ name = "mpz_fields"
 [dependencies]
 mpz-core.workspace = true
 
-thiserror.workspace = true
 rand.workspace = true
 ark-ff.workspace = true
 ark-secp256r1.workspace = true
@@ -20,7 +19,6 @@ serde.workspace = true
 itybity.workspace = true
 
 [dev-dependencies]
-rstest.workspace = true
 ghash_rc.workspace = true
 criterion.workspace = true
 
