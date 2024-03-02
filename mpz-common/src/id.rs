@@ -19,9 +19,9 @@ impl ThreadId {
         Self(vec![id].into())
     }
 
-    /// Returns the ID of the thread.
+    /// Returns the thread ID as a byte slice.
     #[inline]
-    pub fn id(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
 
@@ -41,5 +41,12 @@ impl ThreadId {
         id[0..self.0.len()].copy_from_slice(&self.0);
 
         Self(id.into())
+    }
+}
+
+impl AsRef<[u8]> for ThreadId {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
     }
 }
