@@ -8,7 +8,9 @@ members = [
     "share-conversion/*",
     "matrix-transpose",
     "clmul",
+    "mpz-common",
 ]
+
 
 [workspace.dependencies]
 mpz-core = { path = "mpz-core" }
