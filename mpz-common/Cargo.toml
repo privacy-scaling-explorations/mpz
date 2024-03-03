@@ -3,6 +3,13 @@ name = "mpz-common"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["test-utils"]
+test-utils = []
+
 [dependencies]
+mpz-core.workspace = true
+
 futures.workspace = true
 thiserror.workspace = true
+serio.workspace = true

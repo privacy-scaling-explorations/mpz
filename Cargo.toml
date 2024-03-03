@@ -11,9 +11,9 @@ members = [
     "mpz-common",
 ]
 
-
 [workspace.dependencies]
 mpz-core = { path = "mpz-core" }
+mpz-common = { path = "mpz-common" }
 mpz-circuits = { path = "mpz-circuits" }
 mpz-ot-core = { path = "ot/mpz-ot-core" }
 mpz-ot = { path = "ot/mpz-ot" }
@@ -24,8 +24,8 @@ mpz-share-conversion = { path = "share-conversion/mpz-share-conversion" }
 clmul = { path = "clmul" }
 matrix-transpose = { path = "matrix-transpose" }
 
-tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "51f313d" }
-tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "51f313d" }
+tlsn-utils = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "d6db714" }
+tlsn-utils-aio = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "d6db714" }
 
 # rand
 rand_chacha = "0.3"
@@ -65,6 +65,7 @@ prost-build = "0.9"
 bytes = "1"
 yamux = "0.10"
 bytemuck = { version = "1.13", features = ["derive"] }
+serio = { git = "https://github.com/tlsnotary/tlsn-utils", rev = "d6db714" }
 
 # testing
 prost = "0.9"

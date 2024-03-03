@@ -14,6 +14,7 @@ ideal = []
 
 [dependencies]
 mpz-core.workspace = true
+mpz-common.workspace = true
 mpz-ot-core.workspace = true
 tlsn-utils-aio.workspace = true
 async-trait.workspace = true
@@ -32,6 +33,7 @@ itybity.workspace = true
 enum-try-as-inner.workspace = true
 opaque-debug.workspace = true
 serde = { workspace = true, optional = true }
+serio.workspace = true
 cfg-if.workspace = true
 
 [dev-dependencies]

@@ -32,8 +32,8 @@
 //! let messages = vec![[Block::ZERO, Block::ONES], [Block::ZERO, Block::ONES]];
 //!
 //! let (sender_res, receiver_res) = futures::join!(
-//!     sender.send(&mut sender_sink, &mut sender_stream, &messages),
-//!     receiver.receive(&mut receiver_sink, &mut receiver_stream, &[true, false])
+//!     sender.send(&mut sender_ctx &messages),
+//!     receiver.receive(&mut receiver_ctx, &[true, false])
 //! );
 //!
 //! sender_res.unwrap();
@@ -82,8 +82,8 @@
 //! let messages = vec![[Block::ZERO, Block::ONES], [Block::ZERO, Block::ONES]];
 //!
 //! let (sender_res, receiver_res) = futures::join!(
-//!     sender.send(&mut sender_sink, &mut sender_stream, &messages),
-//!     receiver.receive(&mut receiver_sink, &mut receiver_stream, &[true, false])
+//!     sender.send(&mut sender_ctx &messages),
+//!     receiver.receive(&mut receiver_ctx, &[true, false])
 //! );
 //!
 //! sender_res.unwrap();
@@ -119,14 +119,12 @@ pub use mpz_ot_core::chou_orlandi::{
 
 #[cfg(test)]
 mod tests {
-    use futures_util::StreamExt;
     use itybity::ToBits;
+    use mpz_common::context::{test_st_context, Context};
     use mpz_core::Block;
-    use mpz_ot_core::chou_orlandi::msgs::Message;
     use rand::Rng;
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
-    use utils_aio::{duplex::MemoryDuplex, sink::IoSink, stream::IoStream};
 
     use crate::{CommittedOTReceiver, OTReceiver, OTSender, OTSetup, VerifiableOTSender};
 
@@ -155,24 +153,16 @@ mod tests {
             .map(|([zero, one], choice)| if choice { one } else { zero })
     }
 
-    async fn setup<Si: IoSink<Message> + Send + Unpin, St: IoStream<Message> + Send + Unpin>(
+    async fn setup(
         sender_config: SenderConfig,
         receiver_config: ReceiverConfig,
-        sender_sink: &mut Si,
-        sender_stream: &mut St,
-        receiver_sink: &mut Si,
-        receiver_stream: &mut St,
+        sender_ctx: &mut impl Context,
+        receiver_ctx: &mut impl Context,
     ) -> (Sender, Receiver) {
         let mut sender = Sender::new(sender_config);
         let mut receiver = Receiver::new(receiver_config);
 
-        let (sender_res, receiver_res) = tokio::join!(
-            sender.setup(sender_sink, sender_stream),
-            receiver.setup(receiver_sink, receiver_stream)
-        );
-
-        sender_res.unwrap();
-        receiver_res.unwrap();
+        tokio::try_join!(sender.setup(sender_ctx), receiver.setup(receiver_ctx)).unwrap();
 
         (sender, receiver)
     }
@@ -180,24 +170,18 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_chou_orlandi(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MemoryDuplex::new();
-
-        let (mut sender_sink, mut sender_stream) = sender_channel.split();
-        let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
-
+        let (mut sender_ctx, mut receiver_ctx) = test_st_context(8);
         let (mut sender, mut receiver) = setup(
             SenderConfig::default(),
             ReceiverConfig::default(),
-            &mut sender_sink,
-            &mut sender_stream,
-            &mut receiver_sink,
-            &mut receiver_stream,
+            &mut sender_ctx,
+            &mut receiver_ctx,
         )
         .await;
 
         let (sender_res, receiver_res) = tokio::join!(
-            sender.send(&mut sender_sink, &mut sender_stream, &data),
-            receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
+            sender.send(&mut sender_ctx, &data),
+            receiver.receive(&mut receiver_ctx, &choices)
         );
 
         sender_res.unwrap();
@@ -211,36 +195,26 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_chou_orlandi_committed_receiver(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (sender_channel, receiver_channel) = MemoryDuplex::new();
-
-        let (mut sender_sink, mut sender_stream) = sender_channel.split();
-        let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
-
+        let (mut sender_ctx, mut receiver_ctx) = test_st_context(8);
         let (mut sender, mut receiver) = setup(
             SenderConfig::builder().receiver_commit().build().unwrap(),
             ReceiverConfig::builder().receiver_commit().build().unwrap(),
-            &mut sender_sink,
-            &mut sender_stream,
-            &mut receiver_sink,
-            &mut receiver_stream,
+            &mut sender_ctx,
+            &mut receiver_ctx,
         )
         .await;
 
-        let (sender_res, receiver_res) = tokio::join!(
-            sender.send(&mut sender_sink, &mut sender_stream, &data),
-            receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
-        );
+        tokio::try_join!(
+            sender.send(&mut sender_ctx, &data),
+            receiver.receive(&mut receiver_ctx, &choices)
+        )
+        .unwrap();
 
-        sender_res.unwrap();
-        _ = receiver_res.unwrap();
-
-        let (sender_res, receiver_res) = tokio::join!(
-            sender.verify_choices(&mut sender_sink, &mut sender_stream),
-            receiver.reveal_choices(&mut receiver_sink, &mut receiver_stream)
-        );
-
-        let verified_choices = sender_res.unwrap();
-        receiver_res.unwrap();
+        let (verified_choices, _) = tokio::try_join!(
+            sender.verify_choices(&mut sender_ctx),
+            receiver.reveal_choices(&mut receiver_ctx)
+        )
+        .unwrap();
 
         assert_eq!(verified_choices, choices);
     }

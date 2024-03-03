@@ -1,24 +1,20 @@
 use async_trait::async_trait;
-use futures::SinkExt;
 use itybity::{FromBitIterator, IntoBitIterator};
-use mpz_core::{cointoss, prg::Prg, Block, ProtocolMessage};
+use mpz_common::context::Context;
+use mpz_common::protocol::cointoss;
+use mpz_core::{prg::Prg, Block};
 use mpz_ot_core::kos::{
-    msgs::{Message, StartExtend},
-    pad_ot_count, receiver_state as state, Receiver as ReceiverCore, ReceiverConfig, CSP,
+    msgs::StartExtend, pad_ot_count, receiver_state as state, Receiver as ReceiverCore,
+    ReceiverConfig, CSP,
 };
 
 use enum_try_as_inner::EnumTryAsInner;
 use rand::{thread_rng, Rng};
 use rand_core::{RngCore, SeedableRng};
-use utils_aio::{
-    non_blocking_backend::{Backend, NonBlockingBackend},
-    sink::IoSink,
-    stream::{ExpectStreamExt, IoStream},
-};
+use serio::{stream::IoStreamExt as _, SinkExt as _};
+use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 
-use super::{
-    into_base_sink, into_base_stream, ReceiverError, ReceiverVerifyError, EXTEND_CHUNK_SIZE,
-};
+use super::{ReceiverError, ReceiverVerifyError, EXTEND_CHUNK_SIZE};
 use crate::{
     OTError, OTReceiver, OTSender, OTSetup, RandomOTReceiver, VerifiableOTReceiver,
     VerifiableOTSender,
@@ -44,7 +40,7 @@ pub struct Receiver<BaseOT> {
 
 impl<BaseOT> Receiver<BaseOT>
 where
-    BaseOT: OTSender<[Block; 2]> + Send,
+    BaseOT: Send,
 {
     /// Creates a new receiver.
     ///
@@ -81,13 +77,9 @@ where
     /// * `sink` - The sink to send messages to the sender
     /// * `stream` - The stream to receive messages from the sender
     /// * `count` - The number of OTs to extend
-    pub async fn extend<
-        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
-        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
-    >(
+    pub async fn extend<Ctx: Context>(
         &mut self,
-        sink: &mut Si,
-        stream: &mut St,
+        ctx: &mut Ctx,
         count: usize,
     ) -> Result<(), ReceiverError> {
         let mut ext_receiver =
@@ -105,31 +97,23 @@ where
 
         let extend = extend?;
 
-        // Commit to coin toss seed
+        // Commit to coin-toss seed
         let seed: Block = thread_rng().gen();
-        let (cointoss_sender, cointoss_commitment) = cointoss::Sender::new(vec![seed]).send();
+        let cointoss_sender = cointoss::Sender::new(vec![seed]).send(ctx).await?;
 
         // Send the extend message and cointoss commitment
-        sink.feed(Message::StartExtend(StartExtend { count }))
-            .await?;
+        ctx.io_mut().feed(StartExtend { count }).await?;
         for extend in extend.into_chunks(EXTEND_CHUNK_SIZE) {
-            sink.feed(Message::Extend(extend)).await?;
+            ctx.io_mut().feed(extend).await?;
         }
-        sink.feed(Message::CointossCommit(cointoss_commitment))
-            .await?;
-        sink.flush().await?;
+        ctx.io_mut().flush().await?;
 
-        // Receive coin toss
-        let cointoss_payload = stream
-            .expect_next()
-            .await?
-            .try_into_cointoss_receiver_payload()?;
-
-        // Open commitment
-        let (mut seeds, payload) = cointoss_sender.finalize(cointoss_payload)?;
-        let chi_seed = seeds.pop().expect("seed is present");
+        // Finalize coin-toss
+        let (seeds, cointoss_sender) = cointoss_sender.receive(ctx).await?;
+        cointoss_sender.finalize(ctx).await?;
 
         // Compute consistency check
+        let chi_seed = seeds[0];
         let (ext_receiver, check) = Backend::spawn(move || {
             let check = ext_receiver.check(chi_seed);
 
@@ -140,9 +124,8 @@ where
         let check = check?;
 
         // Send coin toss decommitment and correlation check value.
-        sink.feed(Message::CointossSenderPayload(payload)).await?;
-        sink.feed(Message::Check(check)).await?;
-        sink.flush().await?;
+        ctx.io_mut().feed(check).await?;
+        ctx.io_mut().flush().await?;
 
         self.state = State::Extension(ext_receiver);
 
@@ -152,25 +135,18 @@ where
 
 impl<BaseOT> Receiver<BaseOT>
 where
-    BaseOT: VerifiableOTSender<bool, [Block; 2]> + ProtocolMessage + Send,
+    BaseOT: Send,
 {
-    pub(crate) async fn verify_delta<
-        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
-        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
-    >(
+    pub(crate) async fn verify_delta<Ctx: Context>(
         &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<(), ReceiverError> {
+        ctx: &mut Ctx,
+    ) -> Result<(), ReceiverError>
+    where
+        BaseOT: VerifiableOTSender<Ctx, bool, [Block; 2]>,
+    {
         let receiver = std::mem::replace(&mut self.state, State::Error).try_into_extension()?;
 
         // Finalize coin toss to determine expected delta
-        let cointoss_payload = stream
-            .expect_next()
-            .await?
-            .try_into_cointoss_sender_payload()
-            .map_err(ReceiverError::from)?;
-
         let Some(cointoss_receiver) = self.cointoss_receiver.take() else {
             return Err(ReceiverError::ConfigError(
                 "committed sender not configured".to_string(),
@@ -178,14 +154,12 @@ where
         };
 
         let expected_delta = cointoss_receiver
-            .finalize(cointoss_payload)
+            .finalize(ctx)
+            .await
             .map_err(ReceiverError::from)?[0];
 
         // Receive delta by verifying the sender's base OT choices.
-        let choices = self
-            .base
-            .verify_choices(&mut into_base_sink(sink), &mut into_base_stream(stream))
-            .await?;
+        let choices = self.base.verify_choices(ctx).await?;
 
         let actual_delta = <[u8; 16]>::from_lsb0_iter(choices).into();
 
@@ -199,26 +173,13 @@ where
     }
 }
 
-impl<BaseOT> ProtocolMessage for Receiver<BaseOT>
-where
-    BaseOT: ProtocolMessage,
-{
-    type Msg = Message<BaseOT::Msg>;
-}
-
 #[async_trait]
-impl<BaseOT> OTSetup for Receiver<BaseOT>
+impl<Ctx, BaseOT> OTSetup<Ctx> for Receiver<BaseOT>
 where
-    BaseOT: OTSetup + OTSender<[Block; 2]> + Send,
+    Ctx: Context,
+    BaseOT: OTSetup<Ctx> + OTSender<Ctx, [Block; 2]> + Send,
 {
-    async fn setup<
-        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
-        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-    ) -> Result<(), OTError> {
+    async fn setup(&mut self, ctx: &mut Ctx) -> Result<(), OTError> {
         if self.state.is_extension() {
             return Ok(());
         }
@@ -229,36 +190,22 @@ where
 
         // If the sender is committed, we run a coin toss
         if ext_receiver.config().sender_commit() {
-            let commitment = stream
-                .expect_next()
-                .await?
-                .try_into_cointoss_commit()
+            let cointoss_seed = thread_rng().gen();
+            let cointoss_receiver = cointoss::Receiver::new(vec![cointoss_seed])
+                .receive(ctx)
+                .await
                 .map_err(ReceiverError::from)?;
-
-            let (cointoss_receiver, payload) = cointoss::Receiver::new(vec![thread_rng().gen()])
-                .reveal(commitment)
-                .map_err(ReceiverError::from)?;
-
-            sink.send(Message::CointossReceiverPayload(payload)).await?;
 
             self.cointoss_receiver = Some(cointoss_receiver);
         }
 
         // Set up base OT
-        self.base
-            .setup(&mut into_base_sink(sink), &mut into_base_stream(stream))
-            .await?;
+        self.base.setup(ctx).await?;
 
         let seeds: [[Block; 2]; CSP] = std::array::from_fn(|_| thread_rng().gen());
 
         // Send seeds to sender
-        self.base
-            .send(
-                &mut into_base_sink(sink),
-                &mut into_base_stream(stream),
-                &seeds,
-            )
-            .await?;
+        self.base.send(ctx, &seeds).await?;
 
         let ext_receiver = ext_receiver.setup(seeds);
 
@@ -269,19 +216,12 @@ where
 }
 
 #[async_trait]
-impl<BaseOT> OTReceiver<bool, Block> for Receiver<BaseOT>
+impl<Ctx, BaseOT> OTReceiver<Ctx, bool, Block> for Receiver<BaseOT>
 where
-    BaseOT: ProtocolMessage + Send,
+    Ctx: Context,
+    BaseOT: Send,
 {
-    async fn receive<
-        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
-        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        choices: &[bool],
-    ) -> Result<Vec<Block>, OTError> {
+    async fn receive(&mut self, ctx: &mut Ctx, choices: &[bool]) -> Result<Vec<Block>, OTError> {
         let receiver = self
             .state
             .try_as_extension_mut()
@@ -295,14 +235,10 @@ where
             .map_err(ReceiverError::from)?;
 
         // Send derandomize message
-        sink.send(Message::Derandomize(derandomize)).await?;
+        ctx.io_mut().send(derandomize).await?;
 
         // Receive payload
-        let payload = stream
-            .expect_next()
-            .await?
-            .try_into_sender_payload()
-            .map_err(ReceiverError::from)?;
+        let payload = ctx.io_mut().expect_next().await?;
 
         let received = Backend::spawn(move || {
             receiver_keys
@@ -316,17 +252,14 @@ where
 }
 
 #[async_trait]
-impl<BaseOT> RandomOTReceiver<bool, Block> for Receiver<BaseOT>
+impl<Ctx, BaseOT> RandomOTReceiver<Ctx, bool, Block> for Receiver<BaseOT>
 where
-    BaseOT: ProtocolMessage + Send,
+    Ctx: Context,
+    BaseOT: Send,
 {
-    async fn receive_random<
-        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
-        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
-    >(
+    async fn receive_random(
         &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
+        _ctx: &mut Ctx,
         count: usize,
     ) -> Result<(Vec<bool>, Vec<Block>), OTError> {
         let receiver = self
@@ -344,19 +277,12 @@ where
 }
 
 #[async_trait]
-impl<const N: usize, BaseOT> OTReceiver<bool, [u8; N]> for Receiver<BaseOT>
+impl<Ctx, const N: usize, BaseOT> OTReceiver<Ctx, bool, [u8; N]> for Receiver<BaseOT>
 where
-    BaseOT: ProtocolMessage + Send,
+    Ctx: Context,
+    BaseOT: Send,
 {
-    async fn receive<
-        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
-        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
-    >(
-        &mut self,
-        sink: &mut Si,
-        stream: &mut St,
-        choices: &[bool],
-    ) -> Result<Vec<[u8; N]>, OTError> {
+    async fn receive(&mut self, ctx: &mut Ctx, choices: &[bool]) -> Result<Vec<[u8; N]>, OTError> {
         let receiver = self
             .state
             .try_as_extension_mut()
@@ -370,14 +296,10 @@ where
             .map_err(ReceiverError::from)?;
 
         // Send derandomize message
-        sink.send(Message::Derandomize(derandomize)).await?;
+        ctx.io_mut().send(derandomize).await?;
 
         // Receive payload
-        let payload = stream
-            .expect_next()
-            .await?
-            .try_into_sender_payload()
-            .map_err(ReceiverError::from)?;
+        let payload = ctx.io_mut().expect_next().await?;
 
         let received = Backend::spawn(move || {
             receiver_keys
@@ -391,17 +313,14 @@ where
 }
 
 #[async_trait]
-impl<const N: usize, BaseOT> RandomOTReceiver<bool, [u8; N]> for Receiver<BaseOT>
+impl<Ctx, const N: usize, BaseOT> RandomOTReceiver<Ctx, bool, [u8; N]> for Receiver<BaseOT>
 where
-    BaseOT: ProtocolMessage + Send,
+    Ctx: Context,
+    BaseOT: Send,
 {
-    async fn receive_random<
-        Si: IoSink<Message<BaseOT::Msg>> + Send + Unpin,
-        St: IoStream<Message<BaseOT::Msg>> + Send + Unpin,
-    >(
+    async fn receive_random(
         &mut self,
-        _sink: &mut Si,
-        _stream: &mut St,
+        _ctx: &mut Ctx,
         count: usize,
     ) -> Result<(Vec<bool>, Vec<[u8; N]>), OTError> {
         let receiver = self
@@ -430,23 +349,20 @@ where
 }
 
 #[async_trait]
-impl<BaseOT> VerifiableOTReceiver<bool, Block, [Block; 2]> for Receiver<BaseOT>
+impl<Ctx, BaseOT> VerifiableOTReceiver<Ctx, bool, Block, [Block; 2]> for Receiver<BaseOT>
 where
-    BaseOT: VerifiableOTSender<bool, [Block; 2]> + ProtocolMessage + Send,
+    Ctx: Context,
+    BaseOT: VerifiableOTSender<Ctx, bool, [Block; 2]> + Send,
 {
-    async fn verify<
-        Si: IoSink<Self::Msg> + Send + Unpin,
-        St: IoStream<Self::Msg> + Send + Unpin,
-    >(
+    async fn verify(
         &mut self,
-        sink: &mut Si,
-        stream: &mut St,
+        ctx: &mut Ctx,
         id: usize,
         msgs: &[[Block; 2]],
     ) -> Result<(), OTError> {
         // Verify delta if we haven't yet.
         if self.state.is_extension() {
-            self.verify_delta(sink, stream).await?;
+            self.verify_delta(ctx).await?;
         }
 
         let receiver = self.state.try_as_verify().map_err(ReceiverError::from)?;

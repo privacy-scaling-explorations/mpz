@@ -12,8 +12,8 @@ pub enum SenderError {
     CoreError(#[from] mpz_ot_core::kos::SenderError),
     #[error(transparent)]
     BaseOTError(#[from] crate::OTError),
-    #[error(transparent)]
-    CointossError(#[from] mpz_core::cointoss::CointossError),
+    #[error("coin-toss error: {0}")]
+    CointossError(#[from] mpz_common::protocol::cointoss::CointossError),
     #[error("{0}")]
     StateError(String),
     #[error("configuration error: {0}")]
@@ -62,8 +62,8 @@ pub enum ReceiverError {
     CoreError(#[from] mpz_ot_core::kos::ReceiverError),
     #[error(transparent)]
     BaseOTError(#[from] crate::OTError),
-    #[error(transparent)]
-    CointossError(#[from] mpz_core::cointoss::CointossError),
+    #[error("coin-toss error: {0}")]
+    CointossError(#[from] mpz_common::protocol::cointoss::CointossError),
     #[error("{0}")]
     StateError(String),
     #[error("configuration error: {0}")]
