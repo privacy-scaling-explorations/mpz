@@ -3,10 +3,14 @@
 mod error;
 mod receiver;
 mod sender;
+mod shared_receiver;
+mod shared_sender;
 
 pub use error::{ReceiverError, ReceiverVerifyError, SenderError};
 pub use receiver::Receiver;
 pub use sender::Sender;
+pub use shared_receiver::SharedReceiver;
+pub use shared_sender::SharedSender;
 
 pub(crate) use receiver::StateError as ReceiverStateError;
 pub(crate) use sender::StateError as SenderStateError;
@@ -211,5 +215,36 @@ mod tests {
                 .map_err(OTError::from)
         )
         .unwrap();
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_shared_kos(data: Vec<[Block; 2]>, choices: Vec<bool>) {
+        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (sender, receiver) = setup(
+            SenderConfig::default(),
+            ReceiverConfig::default(),
+            &mut ctx_sender,
+            &mut ctx_receiver,
+            data.len(),
+        )
+        .await;
+
+        let (mut receiver, stream) = SharedReceiver::new(receiver);
+        let (mut sender, broker) = SharedSender::new(sender, stream);
+
+        tokio::spawn(broker);
+
+        let (_, received): (_, Vec<Block>) = tokio::try_join!(
+            sender.send(&mut ctx_sender, &data).map_err(OTError::from),
+            receiver
+                .receive(&mut ctx_receiver, &choices)
+                .map_err(OTError::from)
+        )
+        .unwrap();
+
+        let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
+
+        assert_eq!(received, expected);
     }
 }

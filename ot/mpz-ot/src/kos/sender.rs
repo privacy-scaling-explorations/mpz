@@ -7,7 +7,7 @@ use mpz_core::{prg::Prg, Block};
 use mpz_ot_core::kos::{
     extension_matrix_size,
     msgs::{Extend, StartExtend},
-    pad_ot_count, sender_state as state, Sender as SenderCore, SenderConfig, CSP,
+    pad_ot_count, sender_state as state, Sender as SenderCore, SenderConfig, SenderKeys, CSP,
 };
 use rand::{thread_rng, Rng};
 use rand_core::{RngCore, SeedableRng};
@@ -60,6 +60,14 @@ impl<BaseOT: Send> Sender<BaseOT> {
     /// Returns a mutable reference to the inner sender state.
     pub(crate) fn state_mut(&mut self) -> &mut State {
         &mut self.state
+    }
+
+    /// Returns the provided number of keys.
+    pub(crate) fn take_keys(&mut self, count: usize) -> Result<SenderKeys, SenderError> {
+        self.state
+            .try_as_extension_mut()?
+            .keys(count)
+            .map_err(SenderError::from)
     }
 
     /// Performs the base OT setup with the provided delta.

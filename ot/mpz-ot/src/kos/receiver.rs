@@ -5,7 +5,7 @@ use mpz_common::protocol::cointoss;
 use mpz_core::{prg::Prg, Block};
 use mpz_ot_core::kos::{
     msgs::StartExtend, pad_ot_count, receiver_state as state, Receiver as ReceiverCore,
-    ReceiverConfig, CSP,
+    ReceiverConfig, ReceiverKeys, CSP,
 };
 
 use enum_try_as_inner::EnumTryAsInner;
@@ -69,6 +69,14 @@ where
     /// Returns a mutable reference to the inner receiver state.
     pub(crate) fn state_mut(&mut self) -> &mut State {
         &mut self.state
+    }
+
+    /// Returns the provided number of keys.
+    pub(crate) fn take_keys(&mut self, count: usize) -> Result<ReceiverKeys, ReceiverError> {
+        self.state
+            .try_as_extension_mut()?
+            .keys(count)
+            .map_err(ReceiverError::from)
     }
 
     /// Performs OT extension.
