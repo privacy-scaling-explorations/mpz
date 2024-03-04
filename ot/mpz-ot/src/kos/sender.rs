@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use enum_try_as_inner::EnumTryAsInner;
-use futures::TryFutureExt as _;
 use itybity::IntoBits;
 use mpz_common::context::Context;
 use mpz_common::protocol::cointoss;
@@ -12,6 +11,7 @@ use mpz_ot_core::kos::{
 };
 use rand::{thread_rng, Rng};
 use rand_core::{RngCore, SeedableRng};
+use scoped_futures::ScopedFutureExt;
 use serio::{stream::IoStreamExt as _, SinkExt as _};
 use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 
@@ -152,19 +152,10 @@ impl<BaseOT: Send> Sender<BaseOT> {
 
         // Execute coin-toss protocol for consistency check.
         let seed: Block = thread_rng().gen();
-        let cointoss_receiver = cointoss::Receiver::new(vec![seed])
-            .receive(ctx)
-            .await
-            .map_err(SenderError::from)?;
+        let chi_seed = cointoss::cointoss_receiver(vec![seed], ctx).await?[0];
 
-        // Receive consistency check from the receiver.
+        // Receive the receiver's check.
         let receiver_check = ctx.io_mut().expect_next().await?;
-
-        // Derive chi seed for the consistency check.
-        let chi_seed = cointoss_receiver
-            .finalize(ctx)
-            .await
-            .map_err(SenderError::from)?[0];
 
         // Check consistency of extension.
         let ext_sender = Backend::spawn(move || {
@@ -210,7 +201,7 @@ impl<BaseOT: Send> Sender<BaseOT> {
 impl<Ctx, BaseOT> OTSetup<Ctx> for Sender<BaseOT>
 where
     Ctx: Context,
-    BaseOT: OTSetup<Ctx> + OTReceiver<Ctx, bool, Block> + Send,
+    BaseOT: OTSetup<Ctx> + OTReceiver<Ctx, bool, Block> + Send + 'static,
 {
     async fn setup(&mut self, ctx: &mut Ctx) -> Result<(), OTError> {
         if self.state.is_extension() {
@@ -224,23 +215,25 @@ where
         // If the sender is committed, we sample delta using a coin toss.
         let delta = if sender.config().sender_commit() {
             let cointoss_seed = thread_rng().gen();
-
+            let base = &mut self.base;
             // Execute coin-toss protocol and base OT setup concurrently.
             let ((seeds, cointoss_sender), _) = ctx
                 .maybe_try_join(
                     |ctx| {
-                        Box::pin(
-                            async move {
-                                cointoss::Sender::new(vec![cointoss_seed])
-                                    .send(ctx)
-                                    .await?
-                                    .receive(ctx)
-                                    .await
-                            }
-                            .map_err(SenderError::from),
-                        )
+                        async move {
+                            cointoss::Sender::new(vec![cointoss_seed])
+                                .commit(ctx)
+                                .await?
+                                .receive(ctx)
+                                .await
+                                .map_err(SenderError::from)
+                        }
+                        .scope_boxed()
                     },
-                    |ctx| Box::pin(self.base.setup(ctx).map_err(SenderError::from)),
+                    |ctx| {
+                        async move { base.setup(ctx).await.map_err(SenderError::from) }
+                            .scope_boxed()
+                    },
                 )
                 .await?;
 

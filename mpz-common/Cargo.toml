@@ -11,5 +11,7 @@ test-utils = []
 mpz-core.workspace = true
 
 futures.workspace = true
+async-trait.workspace = true
+scoped-futures.workspace = true
 thiserror.workspace = true
 serio.workspace = true

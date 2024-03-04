@@ -34,7 +34,7 @@ impl Sender {
     }
 
     /// Sends the coin-toss commitment.
-    pub async fn send(
+    pub async fn commit(
         self,
         ctx: &mut impl Context,
     ) -> Result<Sender<sender_state::Committed>, CointossError> {
@@ -45,7 +45,7 @@ impl Sender {
 
     /// Executes the coin-toss protocol to completion.
     pub async fn execute(self, ctx: &mut impl Context) -> Result<Vec<Block>, CointossError> {
-        let (seeds, sender) = self.send(ctx).await?.receive(ctx).await?;
+        let (seeds, sender) = self.commit(ctx).await?.receive(ctx).await?;
         sender.finalize(ctx).await?;
         Ok(seeds)
     }

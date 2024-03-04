@@ -1,11 +1,12 @@
-use std::pin::Pin;
+use async_trait::async_trait;
 
-use futures::Future;
+use scoped_futures::ScopedBoxFuture;
 use serio::{IoSink, IoStream};
 
 use crate::ThreadId;
 
 /// A thread context.
+#[async_trait]
 pub trait Context: Send {
     /// The type of I/O channel used by the thread.
     type Io: IoSink + IoStream + Send + Unpin + 'static;
@@ -20,12 +21,12 @@ pub trait Context: Send {
     ///
     /// Implementations may not be able to fork, in which case the closures are executed
     /// sequentially.
-    fn maybe_join<A, B, RA, RB>(&mut self, a: A, b: B) -> impl Future<Output = (RA, RB)> + Send
+    async fn maybe_join<'a, A, B, RA, RB>(&'a mut self, a: A, b: B) -> (RA, RB)
     where
-        A: for<'a> FnOnce(&'a mut Self) -> Pin<Box<dyn Future<Output = RA> + Send + 'a>> + Send,
-        B: for<'a> FnOnce(&'a mut Self) -> Pin<Box<dyn Future<Output = RB> + Send + 'a>> + Send,
-        RA: Send,
-        RB: Send;
+        A: for<'b> FnOnce(&'b mut Self) -> ScopedBoxFuture<'a, 'b, RA> + Send + 'a,
+        B: for<'b> FnOnce(&'b mut Self) -> ScopedBoxFuture<'a, 'b, RB> + Send + 'a,
+        RA: Send + 'a,
+        RB: Send + 'a;
 
     /// Maybe forks the thread and executes the provided closures concurrently, returning an error
     /// if one of the closures fails.
@@ -35,19 +36,13 @@ pub trait Context: Send {
     ///
     /// Implementations may not be able to fork, in which case the closures are executed
     /// sequentially.
-    fn maybe_try_join<A, B, RA, RB, E>(
-        &mut self,
-        a: A,
-        b: B,
-    ) -> impl Future<Output = Result<(RA, RB), E>> + Send
+    async fn maybe_try_join<'a, A, B, RA, RB, E>(&'a mut self, a: A, b: B) -> Result<(RA, RB), E>
     where
-        A: for<'a> FnOnce(&'a mut Self) -> Pin<Box<dyn Future<Output = Result<RA, E>> + Send + 'a>>
-            + Send,
-        B: for<'a> FnOnce(&'a mut Self) -> Pin<Box<dyn Future<Output = Result<RB, E>> + Send + 'a>>
-            + Send,
-        RA: Send,
-        RB: Send,
-        E: Send;
+        A: for<'b> FnOnce(&'b mut Self) -> ScopedBoxFuture<'a, 'b, Result<RA, E>> + Send + 'a,
+        B: for<'b> FnOnce(&'b mut Self) -> ScopedBoxFuture<'a, 'b, Result<RB, E>> + Send + 'a,
+        RA: Send + 'a,
+        RB: Send + 'a,
+        E: Send + 'a;
 }
 
 /// A single-threaded context.
@@ -66,6 +61,7 @@ impl<Io> STContext<Io> {
     }
 }
 
+#[async_trait]
 impl<Io> Context for STContext<Io>
 where
     Io: IoSink + IoStream + Send + Unpin + 'static,
@@ -80,39 +76,29 @@ where
         &mut self.io
     }
 
-    fn maybe_join<A, B, RA, RB>(&mut self, a: A, b: B) -> impl Future<Output = (RA, RB)> + Send
+    async fn maybe_join<'a, A, B, RA, RB>(&'a mut self, a: A, b: B) -> (RA, RB)
     where
-        A: for<'a> FnOnce(&'a mut Self) -> Pin<Box<dyn Future<Output = RA> + Send + 'a>> + Send,
-        B: for<'a> FnOnce(&'a mut Self) -> Pin<Box<dyn Future<Output = RB> + Send + 'a>> + Send,
-        RA: Send,
-        RB: Send,
+        A: for<'b> FnOnce(&'b mut Self) -> ScopedBoxFuture<'a, 'b, RA> + Send + 'a,
+        B: for<'b> FnOnce(&'b mut Self) -> ScopedBoxFuture<'a, 'b, RB> + Send + 'a,
+        RA: Send + 'a,
+        RB: Send + 'a,
     {
-        async move {
-            let a = a(self).await;
-            let b = b(self).await;
-            (a, b)
-        }
+        let a = a(self).await;
+        let b = b(self).await;
+        (a, b)
     }
 
-    fn maybe_try_join<A, B, RA, RB, E>(
-        &mut self,
-        a: A,
-        b: B,
-    ) -> impl Future<Output = Result<(RA, RB), E>> + Send
+    async fn maybe_try_join<'a, A, B, RA, RB, E>(&'a mut self, a: A, b: B) -> Result<(RA, RB), E>
     where
-        A: for<'a> FnOnce(&'a mut Self) -> Pin<Box<dyn Future<Output = Result<RA, E>> + Send + 'a>>
-            + Send,
-        B: for<'a> FnOnce(&'a mut Self) -> Pin<Box<dyn Future<Output = Result<RB, E>> + Send + 'a>>
-            + Send,
-        RA: Send,
-        RB: Send,
-        E: Send,
+        A: for<'b> FnOnce(&'b mut Self) -> ScopedBoxFuture<'a, 'b, Result<RA, E>> + Send + 'a,
+        B: for<'b> FnOnce(&'b mut Self) -> ScopedBoxFuture<'a, 'b, Result<RB, E>> + Send + 'a,
+        RA: Send + 'a,
+        RB: Send + 'a,
+        E: Send + 'a,
     {
-        async move {
-            let a = a(self).await?;
-            let b = b(self).await?;
-            Ok((a, b))
-        }
+        let a = a(self).await?;
+        let b = b(self).await?;
+        Ok((a, b))
     }
 }
 
@@ -136,9 +122,30 @@ pub use test_utils::*;
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on;
+    use scoped_futures::ScopedFutureExt;
     use serio::channel::duplex;
 
     use super::*;
+
+    #[derive(Debug)]
+    struct Test {
+        a: (),
+        b: (),
+    }
+
+    impl Test {
+        async fn foo<Ctx: Context>(&mut self, ctx: &mut Ctx) {
+            let a = &mut self.a;
+            let b = &mut self.b;
+            ctx.maybe_join(
+                |ctx| async move { println!("{:?}:{:?}", ctx.id(), a) }.scope_boxed(),
+                |ctx| async move { println!("{:?}:{:?}", ctx.id(), b) }.scope_boxed(),
+            )
+            .await;
+
+            println!("{:?}", self);
+        }
+    }
 
     #[test]
     fn test_st_context_maybe_join() {
@@ -146,13 +153,9 @@ mod tests {
 
         let mut ctx = STContext::new(io);
 
-        assert_eq!(
-            block_on(ctx.maybe_join(
-                |ctx| Box::pin(async { ctx.id().clone() }),
-                |ctx| Box::pin(async { ctx.id().clone() }),
-            )),
-            (ThreadId::default(), ThreadId::default())
-        );
+        let mut test = Test { a: (), b: () };
+
+        block_on(test.foo(&mut ctx));
     }
 
     #[test]

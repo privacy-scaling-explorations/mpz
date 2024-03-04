@@ -11,6 +11,7 @@ use mpz_ot_core::kos::{
 use enum_try_as_inner::EnumTryAsInner;
 use rand::{thread_rng, Rng};
 use rand_core::{RngCore, SeedableRng};
+use scoped_futures::ScopedFutureExt;
 use serio::{stream::IoStreamExt as _, SinkExt as _};
 use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 
@@ -89,17 +90,11 @@ where
 
         // Extend the OTs.
         let (mut ext_receiver, extend) = Backend::spawn(move || {
-            let extend = ext_receiver.extend(count);
-
-            (ext_receiver, extend)
+            ext_receiver
+                .extend(count)
+                .map(|extend| (ext_receiver, extend))
         })
-        .await;
-
-        let extend = extend?;
-
-        // Commit to coin-toss seed
-        let seed: Block = thread_rng().gen();
-        let cointoss_sender = cointoss::Sender::new(vec![seed]).send(ctx).await?;
+        .await?;
 
         // Send the extend message and cointoss commitment
         ctx.io_mut().feed(StartExtend { count }).await?;
@@ -108,20 +103,17 @@ where
         }
         ctx.io_mut().flush().await?;
 
-        // Finalize coin-toss
-        let (seeds, cointoss_sender) = cointoss_sender.receive(ctx).await?;
-        cointoss_sender.finalize(ctx).await?;
+        // Commit to coin-toss seed
+        let seed = thread_rng().gen();
+        let chi_seed = cointoss::cointoss_sender(vec![seed], ctx).await?[0];
 
         // Compute consistency check
-        let chi_seed = seeds[0];
         let (ext_receiver, check) = Backend::spawn(move || {
-            let check = ext_receiver.check(chi_seed);
-
-            (ext_receiver, check)
+            ext_receiver
+                .check(chi_seed)
+                .map(|check| (ext_receiver, check))
         })
-        .await;
-
-        let check = check?;
+        .await?;
 
         // Send coin toss decommitment and correlation check value.
         ctx.io_mut().feed(check).await?;
@@ -191,16 +183,30 @@ where
         // If the sender is committed, we run a coin toss
         if ext_receiver.config().sender_commit() {
             let cointoss_seed = thread_rng().gen();
-            let cointoss_receiver = cointoss::Receiver::new(vec![cointoss_seed])
-                .receive(ctx)
-                .await
-                .map_err(ReceiverError::from)?;
+            let base = &mut self.base;
+
+            let (cointoss_receiver, _) = ctx
+                .maybe_try_join(
+                    |ctx| {
+                        async move {
+                            cointoss::Receiver::new(vec![cointoss_seed])
+                                .receive(ctx)
+                                .await
+                                .map_err(ReceiverError::from)
+                        }
+                        .scope_boxed()
+                    },
+                    |ctx| {
+                        async move { base.setup(ctx).await.map_err(ReceiverError::from) }
+                            .scope_boxed()
+                    },
+                )
+                .await?;
 
             self.cointoss_receiver = Some(cointoss_receiver);
+        } else {
+            self.base.setup(ctx).await?;
         }
-
-        // Set up base OT
-        self.base.setup(ctx).await?;
 
         let seeds: [[Block; 2]; CSP] = std::array::from_fn(|_| thread_rng().gen());
 

@@ -1,12 +1,12 @@
 use crate::{chou_orlandi::SenderError, OTError, OTSender, OTSetup, VerifiableOTSender};
 
 use async_trait::async_trait;
-use futures::TryFutureExt;
 use mpz_common::context::Context;
 use mpz_common::protocol::cointoss;
 use mpz_core::Block;
 use mpz_ot_core::chou_orlandi::{sender_state as state, Sender as SenderCore, SenderConfig};
 use rand::{thread_rng, Rng};
+use scoped_futures::ScopedFutureExt;
 use serio::{stream::IoStreamExt, SinkExt as _};
 use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 
@@ -139,8 +139,19 @@ impl<Ctx: Context> VerifiableOTSender<Ctx, bool, [Block; 2]> for Sender {
 
         let (seed, receiver_reveal) = ctx
             .maybe_try_join(
-                |ctx| Box::pin(cointoss_receiver.finalize(ctx).map_err(SenderError::from)),
-                |ctx| Box::pin(ctx.io_mut().expect_next().map_err(SenderError::from)),
+                |ctx| {
+                    async move {
+                        cointoss_receiver
+                            .finalize(ctx)
+                            .await
+                            .map_err(SenderError::from)
+                    }
+                    .scope_boxed()
+                },
+                |ctx| {
+                    async move { ctx.io_mut().expect_next().await.map_err(SenderError::from) }
+                        .scope_boxed()
+                },
             )
             .await?;
 

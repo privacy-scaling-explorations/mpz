@@ -26,232 +26,190 @@ cfg_if::cfg_if! {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use futures_util::StreamExt;
-//     use rstest::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
 
-//     use itybity::ToBits;
-//     use mpz_core::Block;
-//     use mpz_ot_core::kos::msgs::Message;
-//     use rand::Rng;
-//     use rand_chacha::ChaCha12Rng;
-//     use rand_core::SeedableRng;
-//     use utils_aio::{duplex::MemoryDuplex, sink::IoSink, stream::IoStream};
+    use futures::TryFutureExt;
+    use itybity::ToBits;
+    use mpz_common::context::{test_st_context, Context};
+    use mpz_core::Block;
+    use rand::Rng;
+    use rand_chacha::ChaCha12Rng;
+    use rand_core::SeedableRng;
 
-//     use crate::{
-//         ideal::ot::{ideal_ot_pair, IdealOTReceiver, IdealOTSender},
-//         OTReceiver, OTSender, OTSetup, RandomOTReceiver, RandomOTSender, VerifiableOTReceiver,
-//     };
+    use crate::{
+        ideal::ot::{ideal_ot_pair, IdealOTReceiver, IdealOTSender},
+        OTError, OTReceiver, OTSender, OTSetup, RandomOTReceiver, RandomOTSender,
+        VerifiableOTReceiver,
+    };
 
-//     #[fixture]
-//     fn choices() -> Vec<bool> {
-//         let mut rng = ChaCha12Rng::seed_from_u64(0);
-//         (0..128).map(|_| rng.gen()).collect()
-//     }
+    #[fixture]
+    fn choices() -> Vec<bool> {
+        let mut rng = ChaCha12Rng::seed_from_u64(0);
+        (0..128).map(|_| rng.gen()).collect()
+    }
 
-//     #[fixture]
-//     fn data() -> Vec<[Block; 2]> {
-//         let mut rng = ChaCha12Rng::seed_from_u64(0);
-//         (0..128)
-//             .map(|_| [rng.gen::<[u8; 16]>().into(), rng.gen::<[u8; 16]>().into()])
-//             .collect()
-//     }
+    #[fixture]
+    fn data() -> Vec<[Block; 2]> {
+        let mut rng = ChaCha12Rng::seed_from_u64(0);
+        (0..128)
+            .map(|_| [rng.gen::<[u8; 16]>().into(), rng.gen::<[u8; 16]>().into()])
+            .collect()
+    }
 
-//     fn choose<T>(
-//         data: impl Iterator<Item = [T; 2]>,
-//         choices: impl Iterator<Item = bool>,
-//     ) -> impl Iterator<Item = T> {
-//         data.zip(choices)
-//             .map(|([zero, one], choice)| if choice { one } else { zero })
-//     }
+    fn choose<T>(
+        data: impl Iterator<Item = [T; 2]>,
+        choices: impl Iterator<Item = bool>,
+    ) -> impl Iterator<Item = T> {
+        data.zip(choices)
+            .map(|([zero, one], choice)| if choice { one } else { zero })
+    }
 
-//     async fn setup<
-//         Si: IoSink<Message<()>> + Send + Unpin,
-//         St: IoStream<Message<()>> + Send + Unpin,
-//     >(
-//         sender_config: SenderConfig,
-//         receiver_config: ReceiverConfig,
-//         sender_sink: &mut Si,
-//         sender_stream: &mut St,
-//         receiver_sink: &mut Si,
-//         receiver_stream: &mut St,
-//         count: usize,
-//     ) -> (
-//         Sender<IdealOTReceiver<Block>>,
-//         Receiver<IdealOTSender<Block>>,
-//     ) {
-//         let (base_sender, base_receiver) = ideal_ot_pair();
+    async fn setup<Ctx: Context>(
+        sender_config: SenderConfig,
+        receiver_config: ReceiverConfig,
+        ctx_sender: &mut Ctx,
+        ctx_receiver: &mut Ctx,
+        count: usize,
+    ) -> (
+        Sender<IdealOTReceiver<Block>>,
+        Receiver<IdealOTSender<Block>>,
+    ) {
+        let (base_sender, base_receiver) = ideal_ot_pair();
 
-//         let mut sender = Sender::new(sender_config, base_receiver);
-//         let mut receiver = Receiver::new(receiver_config, base_sender);
+        let mut sender = Sender::new(sender_config, base_receiver);
+        let mut receiver = Receiver::new(receiver_config, base_sender);
 
-//         let (sender_res, receiver_res) = tokio::join!(
-//             sender.setup(sender_sink, sender_stream),
-//             receiver.setup(receiver_sink, receiver_stream)
-//         );
+        tokio::try_join!(sender.setup(ctx_sender), receiver.setup(ctx_receiver)).unwrap();
+        tokio::try_join!(
+            sender.extend(ctx_sender, count).map_err(OTError::from),
+            receiver.extend(ctx_receiver, count).map_err(OTError::from)
+        )
+        .unwrap();
 
-//         sender_res.unwrap();
-//         receiver_res.unwrap();
+        (sender, receiver)
+    }
 
-//         let (sender_res, receiver_res) = tokio::join!(
-//             sender.extend(sender_sink, sender_stream, count),
-//             receiver.extend(receiver_sink, receiver_stream, count)
-//         );
+    #[rstest]
+    #[tokio::test]
+    async fn test_kos(data: Vec<[Block; 2]>, choices: Vec<bool>) {
+        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut sender, mut receiver) = setup(
+            SenderConfig::default(),
+            ReceiverConfig::default(),
+            &mut ctx_sender,
+            &mut ctx_receiver,
+            data.len(),
+        )
+        .await;
 
-//         sender_res.unwrap();
-//         receiver_res.unwrap();
+        let (_, received): (_, Vec<Block>) = tokio::try_join!(
+            sender.send(&mut ctx_sender, &data).map_err(OTError::from),
+            receiver
+                .receive(&mut ctx_receiver, &choices)
+                .map_err(OTError::from)
+        )
+        .unwrap();
 
-//         (sender, receiver)
-//     }
+        let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
 
-//     #[rstest]
-//     #[tokio::test]
-//     async fn test_kos(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-//         let (sender_channel, receiver_channel) = MemoryDuplex::new();
+        assert_eq!(received, expected);
+    }
 
-//         let (mut sender_sink, mut sender_stream) = sender_channel.split();
-//         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
+    #[tokio::test]
+    async fn test_kos_random() {
+        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut sender, mut receiver) = setup(
+            SenderConfig::default(),
+            ReceiverConfig::default(),
+            &mut ctx_sender,
+            &mut ctx_receiver,
+            10,
+        )
+        .await;
 
-//         let (mut sender, mut receiver) = setup(
-//             SenderConfig::default(),
-//             ReceiverConfig::default(),
-//             &mut sender_sink,
-//             &mut sender_stream,
-//             &mut receiver_sink,
-//             &mut receiver_stream,
-//             data.len(),
-//         )
-//         .await;
+        let (sender_output, (choices, receiver_output)): (
+            Vec<[Block; 2]>,
+            (Vec<bool>, Vec<Block>),
+        ) = tokio::try_join!(
+            RandomOTSender::send_random(&mut sender, &mut ctx_sender, 10),
+            RandomOTReceiver::receive_random(&mut receiver, &mut ctx_receiver, 10)
+        )
+        .unwrap();
 
-//         let (sender_res, receiver_res) = tokio::join!(
-//             sender.send(&mut sender_sink, &mut sender_stream, &data),
-//             receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
-//         );
+        let expected = sender_output
+            .into_iter()
+            .zip(choices)
+            .map(|(output, choice)| output[choice as usize])
+            .collect::<Vec<_>>();
 
-//         sender_res.unwrap();
-//         let received: Vec<Block> = receiver_res.unwrap();
+        assert_eq!(receiver_output, expected);
+    }
 
-//         let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
+    #[rstest]
+    #[tokio::test]
+    async fn test_kos_bytes(data: Vec<[Block; 2]>, choices: Vec<bool>) {
+        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut sender, mut receiver) = setup(
+            SenderConfig::default(),
+            ReceiverConfig::default(),
+            &mut ctx_sender,
+            &mut ctx_receiver,
+            data.len(),
+        )
+        .await;
 
-//         assert_eq!(received, expected);
-//     }
+        let data: Vec<_> = data
+            .into_iter()
+            .map(|[a, b]| [a.to_bytes(), b.to_bytes()])
+            .collect();
 
-//     #[tokio::test]
-//     async fn test_kos_random() {
-//         let (sender_channel, receiver_channel) = MemoryDuplex::new();
+        let (_, received): (_, Vec<[u8; 16]>) = tokio::try_join!(
+            sender.send(&mut ctx_sender, &data).map_err(OTError::from),
+            receiver
+                .receive(&mut ctx_receiver, &choices)
+                .map_err(OTError::from)
+        )
+        .unwrap();
 
-//         let (mut sender_sink, mut sender_stream) = sender_channel.split();
-//         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
+        let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
 
-//         let (mut sender, mut receiver) = setup(
-//             SenderConfig::default(),
-//             ReceiverConfig::default(),
-//             &mut sender_sink,
-//             &mut sender_stream,
-//             &mut receiver_sink,
-//             &mut receiver_stream,
-//             10,
-//         )
-//         .await;
+        assert_eq!(received, expected);
+    }
 
-//         let (sender_res, receiver_res) = tokio::join!(
-//             RandomOTSender::send_random(&mut sender, &mut sender_sink, &mut sender_stream, 10),
-//             RandomOTReceiver::receive_random(
-//                 &mut receiver,
-//                 &mut receiver_sink,
-//                 &mut receiver_stream,
-//                 10
-//             )
-//         );
+    #[rstest]
+    #[tokio::test]
+    async fn test_kos_committed_sender(data: Vec<[Block; 2]>, choices: Vec<bool>) {
+        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut sender, mut receiver) = setup(
+            SenderConfig::builder().sender_commit().build().unwrap(),
+            ReceiverConfig::builder().sender_commit().build().unwrap(),
+            &mut ctx_sender,
+            &mut ctx_receiver,
+            data.len(),
+        )
+        .await;
 
-//         let sender_output: Vec<[Block; 2]> = sender_res.unwrap();
-//         let (choices, receiver_output): (Vec<bool>, Vec<Block>) = receiver_res.unwrap();
+        let (_, received): (_, Vec<Block>) = tokio::try_join!(
+            sender.send(&mut ctx_sender, &data).map_err(OTError::from),
+            receiver
+                .receive(&mut ctx_receiver, &choices)
+                .map_err(OTError::from)
+        )
+        .unwrap();
 
-//         let expected = sender_output
-//             .into_iter()
-//             .zip(choices)
-//             .map(|(output, choice)| output[choice as usize])
-//             .collect::<Vec<_>>();
+        let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
 
-//         assert_eq!(receiver_output, expected);
-//     }
+        assert_eq!(received, expected);
 
-//     #[rstest]
-//     #[tokio::test]
-//     async fn test_kos_bytes(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-//         let (sender_channel, receiver_channel) = MemoryDuplex::new();
-
-//         let (mut sender_sink, mut sender_stream) = sender_channel.split();
-//         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
-
-//         let (mut sender, mut receiver) = setup(
-//             SenderConfig::default(),
-//             ReceiverConfig::default(),
-//             &mut sender_sink,
-//             &mut sender_stream,
-//             &mut receiver_sink,
-//             &mut receiver_stream,
-//             data.len(),
-//         )
-//         .await;
-
-//         let data: Vec<_> = data
-//             .into_iter()
-//             .map(|[a, b]| [a.to_bytes(), b.to_bytes()])
-//             .collect();
-
-//         let (sender_res, receiver_res) = tokio::join!(
-//             sender.send(&mut sender_sink, &mut sender_stream, &data),
-//             receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
-//         );
-
-//         sender_res.unwrap();
-//         let received: Vec<[u8; 16]> = receiver_res.unwrap();
-
-//         let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
-
-//         assert_eq!(received, expected);
-//     }
-
-//     #[rstest]
-//     #[tokio::test]
-//     async fn test_kos_committed_sender(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-//         let (sender_channel, receiver_channel) = MemoryDuplex::new();
-
-//         let (mut sender_sink, mut sender_stream) = sender_channel.split();
-//         let (mut receiver_sink, mut receiver_stream) = receiver_channel.split();
-
-//         let (mut sender, mut receiver) = setup(
-//             SenderConfig::builder().sender_commit().build().unwrap(),
-//             ReceiverConfig::builder().sender_commit().build().unwrap(),
-//             &mut sender_sink,
-//             &mut sender_stream,
-//             &mut receiver_sink,
-//             &mut receiver_stream,
-//             data.len(),
-//         )
-//         .await;
-
-//         let (sender_res, receiver_res) = tokio::join!(
-//             sender.send(&mut sender_sink, &mut sender_stream, &data),
-//             receiver.receive(&mut receiver_sink, &mut receiver_stream, &choices)
-//         );
-
-//         sender_res.unwrap();
-//         let received: Vec<Block> = receiver_res.unwrap();
-
-//         let expected = choose(data.iter().copied(), choices.iter_lsb0()).collect::<Vec<_>>();
-
-//         assert_eq!(received, expected);
-
-//         let (sender_res, receiver_res) = tokio::join!(
-//             sender.reveal(&mut sender_sink, &mut sender_stream),
-//             receiver.verify(&mut receiver_sink, &mut receiver_stream, 0, &data)
-//         );
-
-//         sender_res.unwrap();
-//         receiver_res.unwrap();
-//     }
-// }
+        tokio::try_join!(
+            sender.reveal(&mut ctx_sender).map_err(OTError::from),
+            receiver
+                .verify(&mut ctx_receiver, 0, &data)
+                .map_err(OTError::from)
+        )
+        .unwrap();
+    }
+}

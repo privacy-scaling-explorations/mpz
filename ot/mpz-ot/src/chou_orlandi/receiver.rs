@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 
-use futures::TryFutureExt;
 use itybity::BitIterable;
 use mpz_common::context::Context;
 use mpz_common::protocol::cointoss;
@@ -11,6 +10,7 @@ use mpz_ot_core::chou_orlandi::{
 
 use enum_try_as_inner::EnumTryAsInner;
 use rand::{thread_rng, Rng};
+use scoped_futures::ScopedFutureExt;
 use serio::{stream::IoStreamExt as _, SinkExt as _};
 use utils_aio::non_blocking_backend::{Backend, NonBlockingBackend};
 
@@ -102,18 +102,25 @@ impl<Ctx: Context> OTSetup<Ctx> for Receiver {
             let ((seeds, cointoss_sender), receiver_setup) = ctx
                 .maybe_try_join(
                     |ctx| {
-                        Box::pin(
-                            async move {
-                                cointoss::Sender::new(vec![cointoss_seed])
-                                    .send(ctx)
-                                    .await?
-                                    .receive(ctx)
-                                    .await
-                            }
-                            .map_err(ReceiverError::from),
-                        )
+                        async move {
+                            cointoss::Sender::new(vec![cointoss_seed])
+                                .commit(ctx)
+                                .await?
+                                .receive(ctx)
+                                .await
+                                .map_err(ReceiverError::from)
+                        }
+                        .scope_boxed()
                     },
-                    |ctx| Box::pin(ctx.io_mut().expect_next().map_err(ReceiverError::from)),
+                    |ctx| {
+                        async move {
+                            ctx.io_mut()
+                                .expect_next()
+                                .await
+                                .map_err(ReceiverError::from)
+                        }
+                        .scope_boxed()
+                    },
                 )
                 .await?;
 
