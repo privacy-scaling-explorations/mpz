@@ -1,4 +1,4 @@
-//! This module implements the extension field GF(2^128)
+//! This module implements the extension field GF(2^128).
 
 use std::ops::{Add, Mul, Neg};
 
@@ -10,7 +10,7 @@ use mpz_core::Block;
 
 use super::Field;
 
-/// A type for holding field elements of Gf(2^128)
+/// A type for holding field elements of Gf(2^128).
 #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Gf2_128(pub(crate) u128);
 
@@ -18,14 +18,14 @@ opaque_debug::implement!(Gf2_128);
 
 impl Gf2_128 {
     /// Creates a new field element from a u128,
-    /// mapping the integer to the corresponding polynomial
+    /// mapping the integer to the corresponding polynomial.
     ///
-    /// For example, 5u128 is mapped to the polynomial `1 + x^2`
+    /// For example, 5u128 is mapped to the polynomial `1 + x^2`.
     pub fn new(input: u128) -> Self {
         Gf2_128(input)
     }
 
-    /// Returns the field element as a u128
+    /// Returns the field element as a u128.
     pub fn to_inner(self) -> u128 {
         self.0
     }
@@ -61,14 +61,14 @@ impl Add for Gf2_128 {
 impl Mul for Gf2_128 {
     type Output = Self;
 
-    /// Galois field multiplication of two 128-bit blocks reduced by the GCM polynomial
+    /// Galois field multiplication of two 128-bit blocks reduced by the GCM polynomial.
     fn mul(self, rhs: Self) -> Self::Output {
-        // See NIST SP 800-38D, Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC
+        // See NIST SP 800-38D, Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC.
         //
         // Note that the NIST specification uses a different representation of the polynomial, where the bits are
-        // reversed. This "bit reflection" is discussed in Intel® Carry-Less Multiplication Instruction and its Usage for Computing the GCM Mode
+        // reversed. This "bit reflection" is discussed in Intel® Carry-Less Multiplication Instruction and its Usage for Computing the GCM Mode.
         //
-        // The irreducible polynomial is the same, ie `x^128 + x^7 + x^2 + x + 1`
+        // The irreducible polynomial is the same, ie `x^128 + x^7 + x^2 + x + 1`.
 
         const R: u128 = 0x00000000000000000000000000000087;
 
@@ -78,7 +78,7 @@ impl Mul for Gf2_128 {
 
         // https://en.wikipedia.org/wiki/Finite_field_arithmetic#C_programming_example
         //
-        // TODO: Use RustCrypto polyval crate
+        // TODO: Use RustCrypto polyval crate.
         while (x != 0) && (y != 0) {
             z ^= (y & 1) * x;
             x = (x << 1) ^ ((x >> 127) * R);
@@ -112,7 +112,7 @@ impl Field for Gf2_128 {
         Self(1 << rhs)
     }
 
-    /// Galois field inversion of 128-bit block
+    /// Galois field inversion of 128-bit block.
     fn inverse(self) -> Self {
         let mut a = self;
         let mut out = Self::one();
@@ -161,7 +161,7 @@ impl FromBitIterator for Gf2_128 {
 #[cfg(test)]
 mod tests {
     use super::Gf2_128;
-    use crate::fields::{
+    use crate::{
         tests::{test_field_basic, test_field_bit_ops, test_field_compute_product_repeated},
         Field,
     };
@@ -169,9 +169,8 @@ mod tests {
         universal_hash::{NewUniversalHash, UniversalHash},
         GHash,
     };
-    use mpz_core::Block;
+    use mpz_core::{prg::Prg, Block};
     use rand::SeedableRng;
-    use rand_chacha::ChaCha12Rng;
 
     #[test]
     fn test_gf2_128_basic() {
@@ -192,15 +191,15 @@ mod tests {
 
     #[test]
     fn test_gf2_128_mul() {
-        // Naive multiplication is the same here
+        // Naive multiplication is the same here.
         let a = Gf2_128::new(3);
         let b = Gf2_128::new(5);
 
-        // Here we cannot calculate naively
+        // Here we cannot calculate naively.
         let c = Gf2_128::new(3);
         let d = Gf2_128::new(7);
 
-        // Test vector from Intel® Carry-Less Multiplication Instruction and its Usage for Computing the GCM Mode
+        // Test vector from Intel® Carry-Less Multiplication Instruction and its Usage for Computing the GCM Mode.
         let e = Gf2_128::new(0x7b5b54657374566563746f725d53475d);
         let f = Gf2_128::new(0x48692853686179295b477565726f6e5d);
 
@@ -211,9 +210,9 @@ mod tests {
     }
 
     #[test]
-    // Test multiplication against RustCrypto
+    // Test multiplication against RustCrypto.
     fn test_gf2_128_against_ghash_impl() {
-        let mut rng = ChaCha12Rng::seed_from_u64(0);
+        let mut rng = Prg::from_seed(Block::ZERO);
 
         let a = Block::random(&mut rng);
         let b = Block::random(&mut rng);
@@ -223,7 +222,7 @@ mod tests {
         let expected = Block::from(g.finalize().into_bytes());
 
         // GHASH reverses the bits of the blocks before performing multiplication
-        // then reverses the output
+        // then reverses the output.
         let a: Gf2_128 = a.reverse_bits().into();
         let b: Gf2_128 = b.reverse_bits().into();
         let output: Block = (a * b).into();

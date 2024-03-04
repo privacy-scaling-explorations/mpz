@@ -1,10 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mpz_share_conversion_core::fields::{gf2_128::Gf2_128, Field};
+use mpz_core::{prg::Prg, Block};
+use mpz_fields::{gf2_128::Gf2_128, Field};
 use rand::{Rng, SeedableRng};
-use rand_chacha::ChaCha12Rng;
 
 fn bench_gf2_128_inverse(c: &mut Criterion) {
-    let mut rng = ChaCha12Rng::seed_from_u64(0);
+    let mut rng = Prg::from_seed(Block::ZERO);
     let a: Gf2_128 = rng.gen();
 
     c.bench_function("inverse", move |bench| {

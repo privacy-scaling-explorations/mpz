@@ -5,6 +5,7 @@ members = [
     "ot/*",
     "mpz-circuits",
     "mpz-circuits-macros",
+    "mpz-fields",
     "share-conversion/*",
     "matrix-transpose",
     "clmul",
@@ -19,6 +20,7 @@ mpz-garble-core = { path = "garble/mpz-garble-core" }
 mpz-garble = { path = "garble/mpz-garble" }
 mpz-share-conversion-core = { path = "share-conversion/mpz-share-conversion-core" }
 mpz-share-conversion = { path = "share-conversion/mpz-share-conversion" }
+mpz-fields = { path = "mpz-fields" }
 clmul = { path = "clmul" }
 matrix-transpose = { path = "matrix-transpose" }
 

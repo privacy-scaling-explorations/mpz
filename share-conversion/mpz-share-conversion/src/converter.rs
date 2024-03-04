@@ -1,7 +1,8 @@
 use std::sync::{Arc, Weak};
 
 use async_trait::async_trait;
-use mpz_share_conversion_core::{Field, Share};
+use mpz_fields::Field;
+use mpz_share_conversion_core::Share;
 
 use crate::{
     AdditiveToMultiplicative, GilboaReceiver, GilboaSender, MultiplicativeToAdditive,

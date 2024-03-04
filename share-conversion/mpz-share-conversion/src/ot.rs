@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use mpz_core::Block;
-use mpz_share_conversion_core::fields::{gf2_128::Gf2_128, p256::P256, Field};
+use mpz_fields::{gf2_128::Gf2_128, p256::P256, Field};
 
 /// A trait for sending field elements via oblivious transfer.
 #[async_trait]

@@ -1,6 +1,7 @@
 use crate::TapeVerificationError;
 
-use mpz_share_conversion_core::{fields::Field, Share};
+use mpz_fields::Field;
+use mpz_share_conversion_core::Share;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 

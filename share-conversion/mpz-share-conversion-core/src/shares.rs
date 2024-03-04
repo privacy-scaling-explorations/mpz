@@ -1,6 +1,6 @@
 //! Types for representing shares of field elements.
 
-use crate::fields::Field;
+use mpz_fields::Field;
 
 use itybity::IntoBits;
 use rand::{CryptoRng, Rng};

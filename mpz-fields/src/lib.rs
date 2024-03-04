@@ -1,4 +1,8 @@
-//! Types for working with finite fields
+//! This crate provides types for working with finite fields.
+
+#![deny(missing_docs, unreachable_pub, unused_must_use)]
+#![deny(clippy::all)]
+#![forbid(unsafe_code)]
 
 pub mod gf2_128;
 pub mod p256;
@@ -11,7 +15,7 @@ use std::{
 use itybity::{BitLength, FromBitIterator, GetBit, Lsb0, Msb0};
 use rand::{distributions::Standard, prelude::Distribution, Rng};
 
-/// A trait for finite fields
+/// A trait for finite fields.
 pub trait Field:
     Add<Output = Self>
     + Mul<Output = Self>
@@ -32,34 +36,34 @@ pub trait Field:
     + GetBit<Msb0>
     + BitLength
 {
-    /// The number of bits of a field element
+    /// The number of bits of a field element.
     const BIT_SIZE: u32;
 
-    /// Return the additive identity element
+    /// Return the additive identity element.
     fn zero() -> Self;
 
-    /// Return the multiplicative identity element
+    /// Return the multiplicative identity element.
     fn one() -> Self;
 
     /// Return a field element from a power of two.
     fn two_pow(rhs: u32) -> Self;
 
-    /// Return the multiplicative inverse
+    /// Return the multiplicative inverse.
     fn inverse(self) -> Self;
 
-    /// Return field element as little-endian bytes
+    /// Return field element as little-endian bytes.
     fn to_le_bytes(&self) -> Vec<u8>;
 
-    /// Return field element as big-endian bytes
+    /// Return field element as big-endian bytes.
     fn to_be_bytes(&self) -> Vec<u8>;
 }
 
-/// A trait for sampling random elements of the field
+/// A trait for sampling random elements of the field.
 ///
 /// This is helpful, because we do not need to import other traits since this is a supertrait of
-/// field (which is not possible with `Standard` and `Distribution`)
+/// field (which is not possible with `Standard` and `Distribution`).
 pub trait UniformRand: Sized {
-    /// Return a random field element
+    /// Return a random field element.
     fn rand<R: Rng + ?Sized>(rng: &mut R) -> Self;
 }
 
@@ -73,14 +77,14 @@ where
     }
 }
 
-/// Iteratively multiplies some field element with another field element
+/// Iteratively multiplies some field element with another field element.
 ///
 /// This function multiplies the last element in `powers` with some other field element `factor`
 /// and appends the result to `powers`. This process is repeated `count` times.
 ///
-/// * `powers` - The vector to which the new higher powers get pushed
-/// * `factor` - The field element with which the last element of the vector is multiplied
-/// * `count` - How many products are computed
+/// * `powers` - The vector to which the new higher powers get pushed.
+/// * `factor` - The field element with which the last element of the vector is multiplied.
+/// * `count` - How many products are computed.
 pub fn compute_product_repeated<T: Field>(powers: &mut Vec<T>, factor: T, count: usize) {
     for _ in 0..count {
         let last_power = *powers
@@ -94,11 +98,11 @@ pub fn compute_product_repeated<T: Field>(powers: &mut Vec<T>, factor: T, count:
 mod tests {
     use super::{compute_product_repeated, Field};
     use itybity::{GetBit, Lsb0};
+    use mpz_core::{prg::Prg, Block};
     use rand::SeedableRng;
-    use rand_chacha::ChaCha12Rng;
 
     pub(crate) fn test_field_basic<T: Field>() {
-        let mut rng = ChaCha12Rng::from_seed([0; 32]);
+        let mut rng = Prg::from_seed(Block::ZERO);
         let a = T::rand(&mut rng);
 
         let zero = T::zero();
@@ -113,7 +117,7 @@ mod tests {
     }
 
     pub(crate) fn test_field_compute_product_repeated<T: Field>() {
-        let mut rng = ChaCha12Rng::from_seed([0; 32]);
+        let mut rng = Prg::from_seed(Block::ZERO);
         let a = T::rand(&mut rng);
 
         let mut powers = vec![a];

@@ -3,8 +3,8 @@
 use crate::{OTReceiveElement, OTSendElement};
 
 use super::{ConverterReceiver, ConverterSender, ReceiverConfig, SenderConfig};
+use mpz_fields::Field;
 use mpz_ot::ideal::{ideal_ot_shared_pair, IdealSharedOTReceiver, IdealSharedOTSender};
-use mpz_share_conversion_core::fields::Field;
 use utils_aio::duplex::MemoryDuplex;
 
 /// A mock converter sender

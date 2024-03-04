@@ -1,4 +1,4 @@
-//! This module implements the prime field of P256
+//! This module implements the prime field of P256.
 
 use std::ops::{Add, Mul, Neg};
 
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Field;
 
-/// A type for holding field elements of P256
+/// A type for holding field elements of P256.
 #[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(into = "[u8; 32]")]
 #[serde(try_from = "[u8; 32]")]
@@ -140,13 +140,11 @@ impl FromBitIterator for P256 {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use mpz_core::{prg::Prg, Block};
     use rand::{Rng, SeedableRng};
 
-    use super::*;
-
-    use crate::fields::tests::{
-        test_field_basic, test_field_bit_ops, test_field_compute_product_repeated,
-    };
+    use crate::tests::{test_field_basic, test_field_bit_ops, test_field_compute_product_repeated};
 
     #[test]
     fn test_p256_basic() {
@@ -167,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_p256_serialize() {
-        let mut rng = rand_chacha::ChaCha20Rng::from_seed([0; 32]);
+        let mut rng = Prg::from_seed(Block::ZERO);
 
         for _ in 0..32 {
             let a = P256(rng.gen());

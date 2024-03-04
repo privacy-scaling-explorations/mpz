@@ -18,16 +18,14 @@
 #![deny(clippy::all)]
 #![deny(unsafe_code)]
 
-pub mod fields;
 pub mod msgs;
 mod shares;
 
-pub use fields::Field;
 pub use shares::{AddShare, MulShare, Share, ShareType};
 
 #[cfg(test)]
 mod tests {
-    use crate::fields::{gf2_128::Gf2_128, p256::P256};
+    use mpz_fields::{gf2_128::Gf2_128, p256::P256, Field};
 
     use std::marker::PhantomData;
 
