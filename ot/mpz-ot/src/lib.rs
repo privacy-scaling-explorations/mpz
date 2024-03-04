@@ -4,8 +4,6 @@
 #![deny(unsafe_code)]
 #![deny(clippy::all)]
 
-// #[cfg(feature = "actor")]
-// pub mod actor;
 pub mod chou_orlandi;
 #[cfg(feature = "ideal")]
 pub mod ideal;
