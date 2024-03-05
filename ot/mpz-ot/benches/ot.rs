@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use mpz_common::context::test_st_context;
+use mpz_common::executor::test_st_executor;
 use mpz_core::Block;
 use mpz_ot::{
     chou_orlandi::{Receiver, Sender},
@@ -14,7 +14,7 @@ fn chou_orlandi(c: &mut Criterion) {
             let msgs = vec![[Block::ONES; 2]; n];
             let choices = vec![false; n];
             b.to_async(&rt).iter(|| async {
-                let (mut sender_ctx, mut receiver_ctx) = test_st_context(8);
+                let (mut sender_ctx, mut receiver_ctx) = test_st_executor(8);
 
                 let mut sender = Sender::default();
                 let mut receiver = Receiver::default();
