@@ -1,15 +1,10 @@
 //! Synchronized mutex.
 
-use std::{
-    collections::HashMap,
-    pin::Pin,
-    sync::{Arc, Mutex as StdMutex, MutexGuard},
-    task::{ready, Context, Poll, Waker},
-};
+use std::sync::{LockResult, Mutex as StdMutex, MutexGuard};
 
-use futures::{channel::mpsc::Sender, Future, Stream, StreamExt};
+use crate::{context::Context, sync::Syncer};
 
-use crate::ThreadId;
+use super::SyncError;
 
 /// A mutex which synchronizes exclusive access to a resource across logical threads.
 ///
@@ -27,7 +22,8 @@ use crate::ThreadId;
 /// threads can acquire a lock.
 #[derive(Debug)]
 pub struct Mutex<T> {
-    inner: MutexInner<T>,
+    inner: StdMutex<T>,
+    syncer: Syncer,
 }
 
 impl<T> Mutex<T> {
@@ -36,13 +32,10 @@ impl<T> Mutex<T> {
     /// # Arguments
     ///
     /// * `value` - The value protected by the mutex.
-    /// * `sender` - The sender to broadcast ordering messages.
-    pub fn new_leader(value: T, sender: Sender<ThreadId>) -> Self {
+    pub fn new_leader(value: T) -> Self {
         Self {
-            inner: MutexInner::Leader(Leader {
-                mutex: StdMutex::new(value),
-                sender: Arc::new(StdMutex::new(sender)),
-            }),
+            inner: StdMutex::new(value),
+            syncer: Syncer::new_leader(),
         }
     }
 
@@ -51,253 +44,60 @@ impl<T> Mutex<T> {
     /// # Arguments
     ///
     /// * `value` - The value protected by the mutex.
-    /// * `stream` - The stream to receive ordering messages.
-    pub fn new_follower<St>(value: T, stream: St) -> (Self, MutexBroker<St>) {
-        let queue = Arc::new(StdMutex::new(Queue {
-            next: None,
-            ready: None,
-            waiting: HashMap::new(),
-        }));
-
-        let broker = MutexBroker {
-            stream,
-            queue: queue.clone(),
-        };
-
-        (
-            Self {
-                inner: MutexInner::Follower(Follower {
-                    mutex: StdMutex::new(value),
-                    queue,
-                }),
-            },
-            broker,
-        )
+    pub fn new_follower(value: T) -> Self {
+        Self {
+            inner: StdMutex::new(value),
+            syncer: Syncer::new_follower(),
+        }
     }
 
-    /// Returns a future that resolves once a lock has been acquired.
-    pub fn lock<'a>(&'a self, id: &'a ThreadId) -> Lock<'a, T> {
-        Lock {
-            inner: &self.inner,
-            id,
-        }
+    /// Returns a lock on the mutex.
+    pub async fn lock<Ctx: Context>(&self, ctx: &mut Ctx) -> Result<MutexGuard<'_, T>, MutexError> {
+        self.syncer
+            .sync(ctx.io_mut(), || self.inner.lock())
+            .await?
+            .map_err(|_| MutexError::Poisoned)
     }
 
     /// Returns the inner value, consuming the mutex.
-    pub fn into_inner(self) -> T {
-        match self.inner {
-            MutexInner::Leader(leader) => leader.mutex.into_inner().unwrap(),
-            MutexInner::Follower(follower) => follower.mutex.into_inner().unwrap(),
-        }
+    pub fn into_inner(self) -> LockResult<T> {
+        self.inner.into_inner()
     }
 }
 
-/// Future for the [`lock`](`Mutex::lock`) method.
-#[derive(Debug)]
-#[must_use = "futures do nothing unless you `.await` or poll them"]
-pub struct Lock<'a, T> {
-    inner: &'a MutexInner<T>,
-    id: &'a ThreadId,
-}
-
-impl<'a, T> Future for Lock<'a, T> {
-    type Output = Result<MutexGuard<'a, T>, MutexError>;
-
-    #[inline]
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        match &self.inner {
-            MutexInner::Leader(leader) => leader.poll_lock(cx, &self.id),
-            MutexInner::Follower(follower) => follower.poll_lock(cx, &self.id),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct MutexError;
-
-#[derive(Debug)]
-enum MutexInner<T> {
-    Leader(Leader<T>),
-    Follower(Follower<T>),
-}
-
-#[derive(Debug)]
-struct Leader<T> {
-    mutex: StdMutex<T>,
-    sender: Arc<StdMutex<Sender<ThreadId>>>,
-}
-
-impl<T> Leader<T> {
-    fn poll_lock(
-        &self,
-        cx: &mut Context,
-        id: &ThreadId,
-    ) -> Poll<Result<MutexGuard<'_, T>, MutexError>> {
-        let mut sender = self.sender.lock().unwrap();
-        ready!(sender.poll_ready(cx)).unwrap();
-        sender.start_send(id.clone()).unwrap();
-
-        let guard = self.mutex.lock().unwrap();
-
-        // Make sure to free the sender lock *after* acquiring the mutex lock.
-        // Otherwise a competing thread might budge in line.
-        drop(sender);
-
-        Poll::Ready(Ok(guard))
-    }
-}
-
-#[derive(Debug)]
-struct Follower<T> {
-    mutex: StdMutex<T>,
-    queue: Arc<StdMutex<Queue>>,
-}
-
-impl<T> Follower<T> {
-    fn poll_lock(
-        &self,
-        cx: &mut Context,
-        id: &ThreadId,
-    ) -> Poll<Result<MutexGuard<'_, T>, MutexError>> {
-        let mut queue = self.queue.lock().unwrap();
-        if queue.next.as_ref().map(|next| next == id).unwrap_or(false) {
-            queue.next.take();
-            queue.ready.take().map(|waker| waker.wake());
-            let guard = self.mutex.lock().unwrap();
-
-            // Make sure to free the queue lock *after* acquiring the mutex lock.
-            // Otherwise a competing thread might budge in line.
-            drop(queue);
-
-            Poll::Ready(Ok(guard))
-        } else {
-            queue.waiting.insert(id.clone(), cx.waker().clone());
-            Poll::Pending
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Queue {
-    next: Option<ThreadId>,
-    ready: Option<Waker>,
-    waiting: HashMap<ThreadId, Waker>,
-}
-
-/// A broker for a follower mutex.
-///
-/// A broker is a future which forwards messages from the leader mutex to the follower mutex.
-/// It must be polled continuously in order to make progress, and resolves when the stream of
-/// messages is exhausted.
-#[derive(Debug)]
-pub struct MutexBroker<T> {
-    stream: T,
-    queue: Arc<StdMutex<Queue>>,
-}
-
-impl<T> MutexBroker<T> {
-    /// Returns whether the queue is ready to accept the next lock request.
-    fn is_ready(&self) -> bool {
-        self.queue.lock().unwrap().next.is_none()
-    }
-
-    /// Sets the next thread to acquire the lock.
-    fn set_next(&self, cx: &mut Context<'_>, id: ThreadId) {
-        let mut queue = self.queue.lock().unwrap();
-        // Wake up the waiting thread.
-        queue.waiting.remove(&id).map(|waker| waker.wake());
-        // Set the next thread to acquire the lock.
-        queue.next = Some(id);
-        // Set the ready waker.
-        queue.ready = Some(cx.waker().clone());
-    }
-}
-
-impl<T> Future for MutexBroker<T>
-where
-    T: Stream<Item = ThreadId> + Unpin,
-{
-    type Output = ();
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.is_ready() {
-            return Poll::Pending;
-        }
-
-        let Some(next) = ready!(self.stream.poll_next_unpin(cx)) else {
-            return Poll::Ready(());
-        };
-
-        self.set_next(cx, next);
-
-        Poll::Pending
-    }
+/// An error returned when a mutex operation fails.
+#[derive(Debug, thiserror::Error)]
+pub enum MutexError {
+    #[error("sync error: {0}")]
+    Sync(#[from] SyncError),
+    #[error("mutex was poisoned")]
+    Poisoned,
 }
 
 #[cfg(test)]
 mod tests {
-    use futures::channel::mpsc::Receiver;
+    use std::sync::Arc;
 
     use super::*;
 
-    pub fn mutex<T, U>(
-        leader_value: T,
-        follower_value: U,
-        buffer: usize,
-    ) -> (Mutex<T>, Mutex<U>, MutexBroker<Receiver<ThreadId>>) {
-        let (sender, receiver) = futures::channel::mpsc::channel(buffer);
-
-        let leader_mutex = Mutex::new_leader(leader_value, sender);
-        let (follower_mutex, broker) = Mutex::new_follower(follower_value, receiver);
-
-        (leader_mutex, follower_mutex, broker)
-    }
-
     #[test]
-    fn test_mutex() {
-        let (leader_mutex, follower_mutex, broker) = mutex((), (), 10);
+    fn test_mutex_st() {
+        let leader_mutex = Arc::new(Mutex::new_leader(()));
+        let follower_mutex = Arc::new(Mutex::new_follower(()));
 
-        let leader_mutex = Arc::new(leader_mutex);
-        let follower_mutex = Arc::new(follower_mutex);
-
-        let id_0 = ThreadId::new(0);
-        let id_1 = ThreadId::new(1);
-        let id_2 = ThreadId::new(2);
+        let (mut ctx_a, mut ctx_b) = crate::executor::test_st_executor(8);
 
         futures::executor::block_on(async {
             futures::join!(
-                broker,
                 async {
-                    drop(leader_mutex.lock(&id_0).await.unwrap());
-                    drop(leader_mutex.lock(&id_1).await.unwrap());
-                    drop(leader_mutex.lock(&id_2).await.unwrap());
-                    drop(leader_mutex);
-                },
-                async { drop(follower_mutex.lock(&id_2).await.unwrap()) },
-                async { drop(follower_mutex.lock(&id_1).await.unwrap()) },
-                async { drop(follower_mutex.lock(&id_0).await.unwrap()) },
-            );
-        });
-    }
-
-    #[test]
-    fn test_follower() {
-        let id_0 = ThreadId::new(0);
-        let id_1 = ThreadId::new(1);
-
-        let (mutex, broker) =
-            Mutex::new_follower((), futures::stream::iter(vec![id_0.clone(), id_1.clone()]));
-
-        let mutex = Arc::new(mutex);
-
-        futures::executor::block_on(async {
-            futures::join!(
-                broker,
-                async {
-                    drop(mutex.clone().lock(&id_1).await.unwrap());
+                    drop(leader_mutex.lock(&mut ctx_a).await.unwrap());
+                    drop(leader_mutex.lock(&mut ctx_a).await.unwrap());
+                    drop(leader_mutex.lock(&mut ctx_a).await.unwrap());
                 },
                 async {
-                    drop(mutex.clone().lock(&id_0).await.unwrap());
+                    drop(follower_mutex.lock(&mut ctx_b).await.unwrap());
+                    drop(follower_mutex.lock(&mut ctx_b).await.unwrap());
+                    drop(follower_mutex.lock(&mut ctx_b).await.unwrap());
                 },
             );
         });

@@ -99,7 +99,7 @@ impl<Ctx: Context> COTReceiver<Ctx, bool, Block> for IdealCOTReceiver<Block> {
 #[cfg(test)]
 mod tests {
     use itybity::IntoBits;
-    use mpz_common::context::test_st_context;
+    use mpz_common::executor::test_st_executor;
     use rand::Rng;
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
@@ -110,7 +110,7 @@ mod tests {
     #[tokio::test]
     async fn test_ideal_cot_owned() {
         let mut rng = ChaCha12Rng::seed_from_u64(0);
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
 
         let values = Block::random_vec(&mut rng, 8);
         let choices = rng.gen::<u8>().into_lsb0_vec();

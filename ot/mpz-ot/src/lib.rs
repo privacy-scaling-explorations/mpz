@@ -18,6 +18,8 @@ use mpz_common::context::Context;
 pub enum OTError {
     #[error(transparent)]
     IOError(#[from] std::io::Error),
+    #[error("mutex error: {0}")]
+    Mutex(#[from] mpz_common::sync::MutexError),
     #[error("sender error: {0}")]
     SenderError(Box<dyn std::error::Error + Send + Sync>),
     #[error("receiver error: {0}")]

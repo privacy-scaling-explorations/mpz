@@ -124,7 +124,7 @@ impl<Ctx: Context> RandomCOTReceiver<Ctx, bool, Block> for IdealRandomCOTReceive
 
 #[cfg(test)]
 mod tests {
-    use mpz_common::context::test_st_context;
+    use mpz_common::executor::test_st_executor;
 
     use super::*;
 
@@ -132,7 +132,7 @@ mod tests {
     #[tokio::test]
     async fn test_ideal_random_cot_owned() {
         let seed = [0u8; 32];
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
 
         let delta = Block::from([42u8; 16]);
         let (mut sender, mut receiver) = ideal_random_cot_pair::<Block>(seed, delta);

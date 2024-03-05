@@ -7,9 +7,8 @@ edition = "2021"
 name = "mpz_ot"
 
 [features]
-default = ["ideal", "rayon", "actor"]
+default = ["ideal", "rayon"]
 rayon = ["mpz-ot-core/rayon"]
-actor = ["dep:serde"]
 ideal = []
 
 [dependencies]

@@ -1,12 +1,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures::Stream;
-use mpz_common::{
-    context::Context,
-    sync::{Lock, Mutex, MutexBroker},
-    ThreadId,
-};
+
+use mpz_common::{context::Context, sync::Mutex};
 use mpz_core::Block;
 use serio::{stream::IoStreamExt as _, SinkExt as _};
 
@@ -23,23 +19,11 @@ pub struct SharedSender<BaseOT> {
 
 impl<BaseOT> SharedSender<BaseOT> {
     /// Creates a new shared sender.
-    pub fn new<St: Stream<Item = ThreadId>>(
-        sender: Sender<BaseOT>,
-        stream: St,
-    ) -> (Self, MutexBroker<St>) {
-        let (sender, broker) = Mutex::new_follower(sender, stream);
-        (
-            Self {
-                // KOS sender is always the follower.
-                inner: Arc::new(sender),
-            },
-            broker,
-        )
-    }
-
-    /// Returns a future that resolves when a lock has been obtained.
-    pub fn lock<'a>(&'a self, id: &'a ThreadId) -> Lock<'a, Sender<BaseOT>> {
-        self.inner.lock(id)
+    pub fn new(sender: Sender<BaseOT>) -> Self {
+        Self {
+            // KOS sender is always the follower.
+            inner: Arc::new(Mutex::new_follower(sender)),
+        }
     }
 }
 
@@ -50,12 +34,7 @@ where
     BaseOT: OTReceiver<Ctx, bool, Block> + Send + 'static,
 {
     async fn send(&mut self, ctx: &mut Ctx, msgs: &[[Block; 2]]) -> Result<(), OTError> {
-        let mut keys = self
-            .inner
-            .lock(ctx.id())
-            .await
-            .unwrap()
-            .take_keys(msgs.len())?;
+        let mut keys = self.inner.lock(ctx).await.unwrap().take_keys(msgs.len())?;
 
         let derandomize = ctx.io_mut().expect_next().await?;
 

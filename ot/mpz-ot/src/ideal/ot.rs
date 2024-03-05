@@ -173,14 +173,14 @@ where
 
 #[cfg(test)]
 mod tests {
-    use mpz_common::context::test_st_context;
+    use mpz_common::executor::test_st_executor;
 
     use super::*;
 
     // Test that the sender and receiver can be used to send and receive values
     #[tokio::test]
     async fn test_ideal_ot_owned() {
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
 
         let values = vec![[0, 1], [2, 3]];
         let choices = vec![false, true];

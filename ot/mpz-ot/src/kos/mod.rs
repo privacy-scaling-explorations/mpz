@@ -37,7 +37,7 @@ mod tests {
 
     use futures::TryFutureExt;
     use itybity::ToBits;
-    use mpz_common::context::{test_st_context, Context};
+    use mpz_common::{context::Context, executor::test_st_executor};
     use mpz_core::Block;
     use rand::Rng;
     use rand_chacha::ChaCha12Rng;
@@ -99,7 +99,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
         let (mut sender, mut receiver) = setup(
             SenderConfig::default(),
             ReceiverConfig::default(),
@@ -124,7 +124,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_kos_random() {
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
         let (mut sender, mut receiver) = setup(
             SenderConfig::default(),
             ReceiverConfig::default(),
@@ -155,7 +155,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos_bytes(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
         let (mut sender, mut receiver) = setup(
             SenderConfig::default(),
             ReceiverConfig::default(),
@@ -186,7 +186,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_kos_committed_sender(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
         let (mut sender, mut receiver) = setup(
             SenderConfig::builder().sender_commit().build().unwrap(),
             ReceiverConfig::builder().sender_commit().build().unwrap(),
@@ -220,7 +220,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_shared_kos(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
         let (sender, receiver) = setup(
             SenderConfig::default(),
             ReceiverConfig::default(),
@@ -230,10 +230,8 @@ mod tests {
         )
         .await;
 
-        let (mut receiver, stream) = SharedReceiver::new(receiver);
-        let (mut sender, broker) = SharedSender::new(sender, stream);
-
-        tokio::spawn(broker);
+        let mut receiver = SharedReceiver::new(receiver);
+        let mut sender = SharedSender::new(sender);
 
         let (_, received): (_, Vec<Block>) = tokio::try_join!(
             sender.send(&mut ctx_sender, &data).map_err(OTError::from),

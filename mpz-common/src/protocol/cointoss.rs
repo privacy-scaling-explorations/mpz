@@ -142,11 +142,11 @@ mod tests {
 
     use futures::executor::block_on;
 
-    use crate::context::test_st_context;
+    use crate::executor::test_st_executor;
 
     #[test]
     fn test_cointoss() {
-        let (mut ctx_a, mut ctx_b) = test_st_context(8);
+        let (mut ctx_a, mut ctx_b) = test_st_executor(8);
         block_on(async {
             futures::try_join!(
                 cointoss_sender(vec![Block::ZERO, Block::ONES], &mut ctx_a),

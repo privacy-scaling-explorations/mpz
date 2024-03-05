@@ -186,12 +186,12 @@ impl<Ctx: Context, const N: usize> RandomOTReceiver<Ctx, bool, [u8; N]>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mpz_common::context::test_st_context;
+    use mpz_common::executor::test_st_executor;
 
     #[tokio::test]
     async fn test_ideal_random_ot_owned_block() {
         let seed = [0u8; 32];
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
         let (mut sender, mut receiver) = ideal_random_ot_pair::<Block>(seed);
 
         let values = RandomOTSender::send_random(&mut sender, &mut ctx_sender, 8)
@@ -215,7 +215,7 @@ mod tests {
     #[tokio::test]
     async fn test_ideal_random_ot_owned_array() {
         let seed = [0u8; 32];
-        let (mut ctx_sender, mut ctx_receiver) = test_st_context(8);
+        let (mut ctx_sender, mut ctx_receiver) = test_st_executor(8);
         let (mut sender, mut receiver) = ideal_random_ot_pair::<[u8; 64]>(seed);
 
         let values = RandomOTSender::send_random(&mut sender, &mut ctx_sender, 8)

@@ -120,7 +120,8 @@ pub use mpz_ot_core::chou_orlandi::{
 #[cfg(test)]
 mod tests {
     use itybity::ToBits;
-    use mpz_common::context::{test_st_context, Context};
+    use mpz_common::context::Context;
+    use mpz_common::executor::test_st_executor;
     use mpz_core::Block;
     use rand::Rng;
     use rand_chacha::ChaCha12Rng;
@@ -170,7 +171,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_chou_orlandi(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (mut sender_ctx, mut receiver_ctx) = test_st_context(8);
+        let (mut sender_ctx, mut receiver_ctx) = test_st_executor(8);
         let (mut sender, mut receiver) = setup(
             SenderConfig::default(),
             ReceiverConfig::default(),
@@ -195,7 +196,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_chou_orlandi_committed_receiver(data: Vec<[Block; 2]>, choices: Vec<bool>) {
-        let (mut sender_ctx, mut receiver_ctx) = test_st_context(8);
+        let (mut sender_ctx, mut receiver_ctx) = test_st_executor(8);
         let (mut sender, mut receiver) = setup(
             SenderConfig::builder().receiver_commit().build().unwrap(),
             ReceiverConfig::builder().receiver_commit().build().unwrap(),
