@@ -5,7 +5,7 @@ mod st;
 pub use st::STExecutor;
 
 #[cfg(any(test, feature = "test-utils"))]
-pub mod test_utils {
+mod test_utils {
     use serio::channel::{duplex, MemoryDuplex};
 
     use super::*;
