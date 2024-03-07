@@ -6,6 +6,9 @@ edition = "2021"
 [lib]
 name = "mpz_core"
 
+[lints]
+workspace = true
+
 [features]
 default = ["cointoss", "rayon"]
 cointoss = ["dep:rand_chacha"]
