@@ -124,7 +124,9 @@ impl Follower {
 
 #[derive(Debug, Default)]
 struct Queue {
+    // The current ticket.
     tick: Ticket,
+    // Tasks waiting for their ticket to be accepted.
     waiting: HashMap<Ticket, Waker>,
 }
 

@@ -78,12 +78,12 @@ mod tests {
     use super::*;
 
     #[derive(Debug, Default)]
-    struct Test {
+    struct LifetimeTest {
         a: ThreadId,
         b: ThreadId,
     }
 
-    impl Test {
+    impl LifetimeTest {
         // This test is to ensure that the compiler is satisfied with the lifetimes
         // of the async closures passed to `join`.
         async fn foo<Ctx: Context>(&mut self, ctx: &mut Ctx) {
@@ -115,7 +115,7 @@ mod tests {
     fn test_st_executor_join() {
         let (io, _) = duplex(1);
         let mut ctx = STExecutor::new(io);
-        let mut test = Test::default();
+        let mut test = LifetimeTest::default();
 
         block_on(test.foo(&mut ctx));
     }
