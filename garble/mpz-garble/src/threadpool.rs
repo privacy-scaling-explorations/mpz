@@ -99,8 +99,26 @@ where
     T: Thread + 'static,
 {
     /// Creates a new thread pool.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of threads is zero.
     pub(crate) fn new(threads: Vec<T>) -> Self {
+        assert!(
+            !threads.is_empty(),
+            "thread pool must have at least one thread"
+        );
         Self { threads }
+    }
+
+    /// Returns a reference to the first thread in the pool.
+    pub fn get(&self) -> &T {
+        &self.threads[0]
+    }
+
+    /// Returns a mutable reference to the first thread in the pool.
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut self.threads[0]
     }
 
     /// Returns a new thread pool scope.

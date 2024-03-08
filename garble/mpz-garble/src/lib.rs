@@ -52,6 +52,8 @@ pub enum VmError {
     VerifyError(#[from] VerifyError),
     #[error(transparent)]
     DecodeError(#[from] DecodeError),
+    #[error("thread pools must have at least one thread")]
+    ThreadPoolEmpty,
     #[error("thread already exists: {0}")]
     ThreadAlreadyExists(String),
     #[error("vm is shutdown")]
@@ -161,11 +163,17 @@ pub trait Vm {
     async fn new_thread(&mut self, id: &str) -> Result<Self::Thread, VmError>;
 
     /// Creates a new thread pool.
+    ///
+    /// A thread pool must have at least one thread.
     async fn new_thread_pool(
         &mut self,
         id: &str,
         thread_count: usize,
     ) -> Result<ThreadPool<Self::Thread>, VmError> {
+        if thread_count == 0 {
+            return Err(VmError::ThreadPoolEmpty);
+        }
+
         let mut id = NestedId::new(id).append_counter();
         let mut threads = Vec::with_capacity(thread_count);
         for _ in 0..thread_count {
