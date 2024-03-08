@@ -5,7 +5,7 @@
 #![deny(clippy::all)]
 
 use async_trait::async_trait;
-use mpz_common::Context;
+use mpz_common::{sync::MutexError, Context};
 use mpz_fields::Field;
 use mpz_ole_core::OLECoreError;
 use mpz_ot::OTError;
@@ -29,6 +29,8 @@ pub enum OLEError {
     OLECoreError(#[from] OLECoreError),
     #[error(transparent)]
     Message(Box<dyn Error + Send + 'static>),
+    #[error(transparent)]
+    Lock(#[from] MutexError),
 }
 
 impl<F: Field> From<OLEeMessageError<F>> for OLEError {
