@@ -3,6 +3,9 @@ name = "mpz-circuits-macros"
 version = "0.1.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [lib]
 name = "mpz_circuits_macros"
 proc-macro = true

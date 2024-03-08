@@ -4,6 +4,9 @@ version = "0.1.0"
 rust-version = "1.56"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 cfg-if.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }

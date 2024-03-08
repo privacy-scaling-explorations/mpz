@@ -3,6 +3,9 @@ name = "mpz-share-conversion"
 version = "0.1.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [lib]
 name = "mpz_share_conversion"
 
