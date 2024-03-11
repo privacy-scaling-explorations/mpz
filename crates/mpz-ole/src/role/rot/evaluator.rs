@@ -6,6 +6,7 @@ use mpz_ole_core::role::ot::ROLEeEvaluator as ROLEeCoreEvaluator;
 use mpz_ot::RandomOTReceiver;
 use serde::{de::DeserializeOwned, Serialize};
 use serio::{stream::IoStreamExt, SinkExt};
+use std::fmt::Debug;
 use std::{marker::PhantomData, sync::Arc};
 
 /// An evaluator for ROLE with errors.
@@ -14,6 +15,12 @@ pub struct ROLEeEvaluator<const N: usize, T, F, C> {
     role_core: ROLEeCoreEvaluator<N, F>,
     buffer: (Vec<F>, Vec<F>),
     context: PhantomData<C>,
+}
+
+impl<const N: usize, T, F, C> Debug for ROLEeEvaluator<N, T, F, C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ROLEeEvaluator {{ .. }}")
+    }
 }
 
 impl<const N: usize, T, F: Field, C> ROLEeEvaluator<N, T, F, C> {
@@ -113,6 +120,7 @@ where
 }
 
 /// A shared ROLEe evaluator.
+#[derive(Debug, Clone)]
 pub struct SharedROLEeEvaluator<const N: usize, T, F, C> {
     inner: Arc<Mutex<ROLEeEvaluator<N, T, F, C>>>,
 }

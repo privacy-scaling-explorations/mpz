@@ -3,6 +3,7 @@ use mpz_fields::Field;
 use std::marker::PhantomData;
 
 /// A provider for OLE with errors.
+#[derive(Debug)]
 pub struct OLEeProvider<F>(PhantomData<F>);
 
 impl<F: Field> OLEeProvider<F> {

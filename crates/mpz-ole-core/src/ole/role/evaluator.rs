@@ -3,6 +3,7 @@ use mpz_fields::Field;
 use std::marker::PhantomData;
 
 /// An evaluator for OLE with errors.
+#[derive(Debug)]
 pub struct OLEeEvaluator<F>(PhantomData<F>);
 
 impl<F: Field> OLEeEvaluator<F> {

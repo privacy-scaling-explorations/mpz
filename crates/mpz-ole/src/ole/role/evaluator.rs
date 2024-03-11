@@ -5,11 +5,27 @@ use mpz_fields::Field;
 use mpz_ole_core::ole::role::OLEeEvaluator as OLEeCoreEvaluator;
 use serde::{de::DeserializeOwned, Serialize};
 use serio::{stream::IoStreamExt, SinkExt};
+use std::fmt::Debug;
 
 /// An evaluator for OLE with errors.
 pub struct OLEeEvaluator<const N: usize, T, F> {
     role_evaluator: T,
     ole_core: OLEeCoreEvaluator<F>,
+}
+
+impl<const N: usize, T, F> Debug for OLEeEvaluator<N, T, F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OLEeEvaluator {{ .. }}")
+    }
+}
+
+impl<const N: usize, T: Clone, F: Field> Clone for OLEeEvaluator<N, T, F> {
+    fn clone(&self) -> Self {
+        Self {
+            role_evaluator: self.role_evaluator.clone(),
+            ole_core: OLEeCoreEvaluator::<F>::default(),
+        }
+    }
 }
 
 impl<const N: usize, T, F: Field> OLEeEvaluator<N, T, F> {

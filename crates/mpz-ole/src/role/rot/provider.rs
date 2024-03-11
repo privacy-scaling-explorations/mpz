@@ -6,6 +6,7 @@ use mpz_ole_core::role::ot::ROLEeProvider as ROLEeCoreProvider;
 use mpz_ot::RandomOTSender;
 use serde::{de::DeserializeOwned, Serialize};
 use serio::{stream::IoStreamExt, SinkExt};
+use std::fmt::Debug;
 use std::{marker::PhantomData, sync::Arc};
 
 /// A provider for ROLE with errors.
@@ -14,6 +15,12 @@ pub struct ROLEeProvider<const N: usize, T, F, C> {
     role_core: ROLEeCoreProvider<N, F>,
     buffer: (Vec<F>, Vec<F>),
     context: PhantomData<C>,
+}
+
+impl<const N: usize, T, F, C> Debug for ROLEeProvider<N, T, F, C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ROLEeProvider {{ .. }}")
+    }
 }
 
 impl<const N: usize, T, F: Field, C> ROLEeProvider<N, T, F, C> {
@@ -114,6 +121,7 @@ where
 }
 
 /// A shared ROLEe provider.
+#[derive(Debug, Clone)]
 pub struct SharedROLEeProvider<const N: usize, T, F, C> {
     inner: Arc<Mutex<ROLEeProvider<N, T, F, C>>>,
 }

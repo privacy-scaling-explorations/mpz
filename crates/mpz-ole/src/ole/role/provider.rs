@@ -5,11 +5,27 @@ use mpz_fields::Field;
 use mpz_ole_core::ole::role::OLEeProvider as OLEeCoreProvider;
 use serde::{de::DeserializeOwned, Serialize};
 use serio::{stream::IoStreamExt, SinkExt};
+use std::fmt::Debug;
 
 /// A provider for OLE with errors.
 pub struct OLEeProvider<const N: usize, T, F> {
     role_provider: T,
     ole_core: OLEeCoreProvider<F>,
+}
+
+impl<const N: usize, T, F> Debug for OLEeProvider<N, T, F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OLEeProvider {{ .. }}")
+    }
+}
+
+impl<const N: usize, T: Clone, F: Field> Clone for OLEeProvider<N, T, F> {
+    fn clone(&self) -> Self {
+        Self {
+            role_provider: self.role_provider.clone(),
+            ole_core: OLEeCoreProvider::<F>::default(),
+        }
+    }
 }
 
 impl<const N: usize, T, F: Field> OLEeProvider<N, T, F> {
