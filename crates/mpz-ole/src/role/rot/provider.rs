@@ -5,10 +5,8 @@ use mpz_fields::Field;
 use mpz_ole_core::role::ot::ROLEeProvider as ROLEeCoreProvider;
 use mpz_ot::RandomOTSender;
 use serde::{de::DeserializeOwned, Serialize};
-use serio::stream::IoStreamExt;
-use serio::SinkExt;
-use std::marker::PhantomData;
-use std::sync::Arc;
+use serio::{stream::IoStreamExt, SinkExt};
+use std::{marker::PhantomData, sync::Arc};
 
 /// A provider for ROLE with errors.
 pub struct ROLEeProvider<const N: usize, T, F, C> {
@@ -121,14 +119,14 @@ pub struct SharedROLEeProvider<const N: usize, T, F, C> {
 }
 
 impl<const N: usize, T, F, C> SharedROLEeProvider<N, T, F, C> {
-    /// Creates a new instance as a leader.
+    /// Creates a new shared instance as a leader.
     pub fn new_leader(role_provider: ROLEeProvider<N, T, F, C>) -> Self {
         Self {
             inner: Arc::new(Mutex::new_leader(role_provider)),
         }
     }
 
-    /// Creates a new instance as a follower.
+    /// Creates a new shared instance as a follower.
     pub fn new_follower(role_provider: ROLEeProvider<N, T, F, C>) -> Self {
         Self {
             inner: Arc::new(Mutex::new_follower(role_provider)),
