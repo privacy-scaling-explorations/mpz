@@ -31,6 +31,8 @@ pub enum OLEError {
     Message(Box<dyn Error + Send + 'static>),
     #[error(transparent)]
     Lock(#[from] MutexError),
+    #[error("Not enough values available in buffer.")]
+    Preprocess,
 }
 
 impl<F: Field> From<OLEeMessageError<F>> for OLEError {

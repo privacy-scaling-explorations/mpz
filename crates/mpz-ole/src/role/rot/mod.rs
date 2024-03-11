@@ -4,7 +4,7 @@ mod evaluator;
 mod provider;
 
 pub use evaluator::ROLEeEvaluator;
-pub use provider::ROLEeProvider;
+pub use provider::{ROLEeProvider, SharedROLEeProvider};
 
 #[cfg(test)]
 mod tests {
