@@ -1,6 +1,10 @@
 [![CI](https://github.com/privacy-scaling-explorations/mpz/actions/workflows/rust.yml/badge.svg)](https://github.com/privacy-scaling-explorations/mpz/actions)
 
-# MPZ
+<p align="center">
+    <img src="./mpz-banner.png" width=1280 />
+</p>
+
+# mpz
 
 mpz is a collection of multi-party computation libraries written in Rust 🦀.
 
