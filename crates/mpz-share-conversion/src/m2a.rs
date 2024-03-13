@@ -20,12 +20,9 @@ impl<C: Context, F: Field, T: OLEeProvide<C, F> + Send> M2A<C, F, Provide> for T
         ctx: &mut C,
         mul_shares: Vec<F>,
     ) -> Result<Vec<F>, ShareConversionError> {
-        let mut add_shares = self
-            .provide(ctx, mul_shares)
-            .await
-            .map_err(ShareConversionError::from)?;
-
+        let mut add_shares = self.provide(ctx, mul_shares).await?;
         add_shares.iter_mut().for_each(|share| *share = -*share);
+
         Ok(add_shares)
     }
 }
