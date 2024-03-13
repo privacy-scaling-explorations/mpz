@@ -9,7 +9,7 @@ members = [
     "mpz-cointoss-core",
     "mpz-ot",
     "mpz-ot-core",
-    "mpz-garble",
+    # "mpz-garble",
     "mpz-garble-core",
     "mpz-share-conversion",
     "mpz-share-conversion-core",
@@ -29,7 +29,7 @@ mpz-cointoss = { path = "mpz-cointoss" }
 mpz-cointoss-core = { path = "mpz-cointoss-core" }
 mpz-ot = { path = "mpz-ot" }
 mpz-ot-core = { path = "mpz-ot-core" }
-mpz-garble = { path = "mpz-garble" }
+#mpz-garble = { path = "mpz-garble" }
 mpz-garble-core = { path = "mpz-garble-core" }
 mpz-share-conversion = { path = "mpz-share-conversion" }
 mpz-share-conversion-core = { path = "mpz-share-conversion-core" }

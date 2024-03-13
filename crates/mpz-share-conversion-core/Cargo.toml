@@ -7,12 +7,3 @@ edition = "2021"
 name = "mpz_share_conversion_core"
 
 [dependencies]
-mpz-fields.workspace = true
-
-rand.workspace = true
-serde.workspace = true
-itybity.workspace = true
-
-[dev-dependencies]
-rstest.workspace = true
-rand_chacha.workspace = true
