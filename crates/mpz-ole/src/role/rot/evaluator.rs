@@ -72,12 +72,8 @@ where
             return Err(OLEError::Preprocess);
         }
 
-        let mut factors = self.buffer.0.split_off(count);
-        let mut summands = self.buffer.1.split_off(count);
-
-        // We want to consume in the same order, as they were created, hence we swap and return.
-        std::mem::swap(&mut factors, &mut self.buffer.0);
-        std::mem::swap(&mut summands, &mut self.buffer.1);
+        let factors = self.buffer.0.drain(..count).collect();
+        let summands = self.buffer.1.drain(..count).collect();
 
         Ok((factors, summands))
     }
