@@ -118,30 +118,24 @@ impl Receiver<state::Extension> {
             .state
             .u
             .iter()
-            .map(|x| {
-                if *x {
-                    bytemuck::cast(1_u128)
-                } else {
-                    Block::ZERO
-                }
-            })
+            .map(|x| if *x { Block::ONE } else { Block::ZERO })
             .collect::<Vec<Block>>();
-        let mut x = self.state.e.to_vec();
+        let mut x = self.state.e.clone();
         self.state.lpn_encoder.compute(&mut x, &u_block);
 
-        let x = x.iter().map(|a| a.lsb() == 1).collect::<Vec<bool>>();
+        let mut x = x.iter().map(|a| a.lsb() == 1).collect::<Vec<bool>>();
+
+        let x_ = x.split_off(self.state.lpn_parameters.k);
+        let z_ = z.split_off(self.state.lpn_parameters.k);
 
         // Update u, w
-        self.state.u = x[0..self.state.lpn_parameters.k].to_vec();
-
-        self.state.w = z[0..self.state.lpn_parameters.k].to_vec();
+        self.state.u = x;
+        self.state.w = z;
 
         // Update counter
         self.state.counter += 1;
-        Ok((
-            x[self.state.lpn_parameters.k..].to_vec(),
-            z[self.state.lpn_parameters.k..].to_vec(),
-        ))
+
+        Ok((x_, z_))
     }
 }
 

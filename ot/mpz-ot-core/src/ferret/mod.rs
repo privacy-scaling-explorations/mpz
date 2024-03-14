@@ -27,7 +27,7 @@ pub const LPN_PARAMETERS_REGULAR: LpnParameters = LpnParameters {
     t: 4971,
 };
 
-/// LPN parameters with unifom noise.
+/// LPN parameters with uniform noise.
 /// Derived from Table 2.
 pub const LPN_PARAMETERS_UNIFORM: LpnParameters = LpnParameters {
     n: 10616092,

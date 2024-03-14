@@ -87,13 +87,15 @@ impl Sender<state::Extension> {
         let mut y = s.to_vec();
         self.state.lpn_encoder.compute(&mut y, &self.state.v);
 
-        // Update v
-        self.state.v = y[0..self.state.lpn_parameters.k].to_vec();
+        let y_ = y.split_off(self.state.lpn_parameters.k);
+
+        // Update v to y[0..k]
+        self.state.v = y;
 
         // Update counter
         self.state.counter += 1;
 
-        Ok(y[self.state.lpn_parameters.k..].to_vec())
+        Ok(y_)
     }
 }
 
