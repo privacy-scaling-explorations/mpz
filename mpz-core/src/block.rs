@@ -18,6 +18,8 @@ impl Block {
     pub const LEN: usize = 16;
     /// A zero block
     pub const ZERO: Self = Self([0; 16]);
+    /// A one block
+    pub const ONE: Self = Self([1u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     /// A block with all bits set to 1
     pub const ONES: Self = Self([0xff; 16]);
     /// A length 2 array of zero and one blocks

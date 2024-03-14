@@ -2,6 +2,7 @@
 //! More specifically, a local linear code is a random boolean matrix with at most D non-zero values in each row.
 
 use crate::{prp::Prp, Block};
+use rand::{seq::SliceRandom, thread_rng};
 use rayon::prelude::*;
 /// An LPN encoder.
 ///
@@ -108,6 +109,48 @@ impl<const D: usize> LpnEncoder<D> {
         for i in size..y.len() {
             self.compute_one_row(y, x, i, &prp);
         }
+    }
+}
+
+/// Lpn paramters
+#[derive(Copy, Clone, Debug)]
+pub struct LpnParameters {
+    /// The length of output vecotrs.
+    pub n: usize,
+    /// The length of the secret vector
+    pub k: usize,
+    /// The Hamming Weight of error vectors
+    pub t: usize,
+}
+
+impl LpnParameters {
+    /// Create a new LpnParameters instance.
+    pub fn new(n: usize, k: usize, t: usize) -> Self {
+        assert!(t <= n);
+        LpnParameters { n, k, t }
+    }
+
+    /// Sample a uniform error vector with HW t.
+    pub fn sample_uniform_error_vector(&self) -> Vec<Block> {
+        let one: Block = bytemuck::cast(1_u128);
+        let mut res = vec![Block::ZERO; self.n];
+        res[0..self.t].iter_mut().for_each(|x| *x = one);
+        let mut rng = thread_rng();
+        res.shuffle(&mut rng);
+        res
+    }
+
+    /// Sample a regular error vector with HW t
+    pub fn sample_regular_error_vector(&self) -> Vec<Block> {
+        assert_eq!(self.n % self.t, 0);
+        let one: Block = bytemuck::cast(1_u128);
+        let mut res = vec![Block::ZERO; self.n];
+        res.chunks_exact_mut(self.n / self.t).for_each(|x| {
+            x[0] = one;
+            let mut rng = thread_rng();
+            x.shuffle(&mut rng);
+        });
+        res
     }
 }
 
