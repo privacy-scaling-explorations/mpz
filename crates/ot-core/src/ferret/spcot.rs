@@ -219,7 +219,9 @@ mod tests {
         let keys: Vec<Gf2_128> = keys.iter().map(|&key| key.into()).collect();
         let macs: Vec<Gf2_128> = macs.iter().map(|&mac| mac.into()).collect();
 
-        let cs = sender.derandomize(lengths, &keys, &derandomize.flip).unwrap();
+        let cs = sender
+            .derandomize(lengths, &keys, &derandomize.flip)
+            .unwrap();
         let cs = sender
             .expand(rng, lengths, cs, &derandomize.flip, &mut vs)
             .unwrap();

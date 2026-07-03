@@ -1,10 +1,10 @@
 //! Polynomial-constraint prover/verifier benchmark.
 //!
 //! **`mux{2,4,8,16}`**: a 1-of-`w` multiplexer over 32-bit values. Each output
-//! bit is a depth-`log2(w)` binary mux tree `a + sel·(a + b)` over the committed
-//! inputs and `log2(w)` committed selector bits, giving 32 degree-`(log2(w)+1)`
-//! constraints per multiplexer. The variants sweep the mux degree: 1-of-2
-//! (degree 2) through 1-of-16 (degree 5).
+//! bit is a depth-`log2(w)` binary mux tree `a + sel·(a + b)` over the
+//! committed inputs and `log2(w)` committed selector bits, giving 32
+//! degree-`(log2(w)+1)` constraints per multiplexer. The variants sweep the mux
+//! degree: 1-of-2 (degree 2) through 1-of-16 (degree 5).
 //!
 //! The workload uses only `lift` + `assert_zero` (no AND gates and no
 //! `materialize`), so the triple check is trivial and the measured cost is the
@@ -13,14 +13,14 @@
 //!
 //! Run with: `cargo bench -p mpz-zk-core --bench poly`
 
-use std::time::Duration;
+use std::{hint::black_box, time::Duration};
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use mpz_core::Block;
 use mpz_fields::{gf2::Gf2, gf2_128::Gf2_128};
 use mpz_ot_core::ideal::rcot::IdealRCOT;
 use mpz_zk_core::{
-    Commit, DeltaPowers, Proof, Prover, ProverOutput, Verifier, VerifierOutput,
+    Accumulate, DeltaPowers, Proof, ProverOutput, Verifier, VerifierOutput, Witness,
     poly::{Expr, PolyContext},
     vope_receiver, vope_sender,
 };
@@ -39,18 +39,19 @@ const VOPE_COST: usize = 128;
 // out as `input·32 + bit`) and output (`out`, 32 wires) are flat committed-wire
 // slices. The mux level `a + sel·(a + b)` raises the expression degree by one
 // per tree level, so the top constraint is degree `log2(w)+1`. The degree is
-// part of the `Expr` *type*, so each width is spelled out statically rather than
-// folded over a runtime-sized tree.
+// part of the `Expr` *type*, so each width is spelled out statically rather
+// than folded over a runtime-sized tree.
 
 /// 1-of-2 mux, depth 1, degree-2 constraints.
-fn mux2_u32<C>(ctx: &mut C, sel: &[Gf2_128], inputs: &[Gf2_128], out: &[Gf2_128])
+fn mux2_u32<C>(ctx: &mut C, sel: &[C::Wire], inputs: &[C::Wire], out: &[C::Wire])
 where
-    C: PolyContext<Field = Gf2, Wire = Gf2_128>,
+    C: PolyContext<Field = Gf2>,
     C::Error: std::fmt::Debug,
 {
     let s0 = ctx.lift(sel[0]);
     for bit in 0..32 {
-        let leaf: [Expr<C::Coeffs, U1>; 2] = core::array::from_fn(|n| ctx.lift(inputs[n * 32 + bit]));
+        let leaf: [Expr<C::Coeffs, U1>; 2] =
+            core::array::from_fn(|n| ctx.lift(inputs[n * 32 + bit]));
         let top = leaf[0] + s0 * (leaf[0] + leaf[1]); // degree 2
         let o = ctx.lift(out[bit]);
         ctx.assert_zero(top - o).expect("mux output");
@@ -58,14 +59,15 @@ where
 }
 
 /// 1-of-4 mux, depth 2, degree-3 constraints.
-fn mux4_u32<C>(ctx: &mut C, sel: &[Gf2_128], inputs: &[Gf2_128], out: &[Gf2_128])
+fn mux4_u32<C>(ctx: &mut C, sel: &[C::Wire], inputs: &[C::Wire], out: &[C::Wire])
 where
-    C: PolyContext<Field = Gf2, Wire = Gf2_128>,
+    C: PolyContext<Field = Gf2>,
     C::Error: std::fmt::Debug,
 {
     let s: [Expr<C::Coeffs, U1>; 2] = core::array::from_fn(|i| ctx.lift(sel[i]));
     for bit in 0..32 {
-        let leaf: [Expr<C::Coeffs, U1>; 4] = core::array::from_fn(|n| ctx.lift(inputs[n * 32 + bit]));
+        let leaf: [Expr<C::Coeffs, U1>; 4] =
+            core::array::from_fn(|n| ctx.lift(inputs[n * 32 + bit]));
         let l0: [Expr<C::Coeffs, _>; 2] =
             core::array::from_fn(|j| leaf[2 * j] + s[0] * (leaf[2 * j] + leaf[2 * j + 1]));
         let top = l0[0] + s[1] * (l0[0] + l0[1]); // degree 3
@@ -75,14 +77,15 @@ where
 }
 
 /// 1-of-8 mux, depth 3, degree-4 constraints.
-fn mux8_u32<C>(ctx: &mut C, sel: &[Gf2_128], inputs: &[Gf2_128], out: &[Gf2_128])
+fn mux8_u32<C>(ctx: &mut C, sel: &[C::Wire], inputs: &[C::Wire], out: &[C::Wire])
 where
-    C: PolyContext<Field = Gf2, Wire = Gf2_128>,
+    C: PolyContext<Field = Gf2>,
     C::Error: std::fmt::Debug,
 {
     let s: [Expr<C::Coeffs, U1>; 3] = core::array::from_fn(|i| ctx.lift(sel[i]));
     for bit in 0..32 {
-        let leaf: [Expr<C::Coeffs, U1>; 8] = core::array::from_fn(|n| ctx.lift(inputs[n * 32 + bit]));
+        let leaf: [Expr<C::Coeffs, U1>; 8] =
+            core::array::from_fn(|n| ctx.lift(inputs[n * 32 + bit]));
         let l0: [Expr<C::Coeffs, _>; 4] =
             core::array::from_fn(|j| leaf[2 * j] + s[0] * (leaf[2 * j] + leaf[2 * j + 1]));
         let l1: [Expr<C::Coeffs, _>; 2] =
@@ -94,9 +97,9 @@ where
 }
 
 /// 1-of-16 mux, depth 4, degree-5 constraints.
-fn mux16_u32<C>(ctx: &mut C, sel: &[Gf2_128], inputs: &[Gf2_128], out: &[Gf2_128])
+fn mux16_u32<C>(ctx: &mut C, sel: &[C::Wire], inputs: &[C::Wire], out: &[C::Wire])
 where
-    C: PolyContext<Field = Gf2, Wire = Gf2_128>,
+    C: PolyContext<Field = Gf2>,
     C::Error: std::fmt::Debug,
 {
     let s: [Expr<C::Coeffs, U1>; 4] = core::array::from_fn(|i| ctx.lift(sel[i]));
@@ -129,9 +132,9 @@ trait PolyCircuit {
     fn d_max(&self) -> usize;
     /// Evaluates the circuit over the committed wires (same order as the
     /// witness), emitting its constraints.
-    fn eval<C>(&self, ctx: &mut C, wires: &[Gf2_128])
+    fn eval<C>(&self, ctx: &mut C, wires: &[C::Wire])
     where
-        C: PolyContext<Field = Gf2, Wire = Gf2_128>,
+        C: PolyContext<Field = Gf2>,
         C::Error: std::fmt::Debug;
 }
 
@@ -181,9 +184,9 @@ impl PolyCircuit for MuxCircuit {
         self.depth() + 1
     }
 
-    fn eval<C>(&self, ctx: &mut C, wires: &[Gf2_128])
+    fn eval<C>(&self, ctx: &mut C, wires: &[C::Wire])
     where
-        C: PolyContext<Field = Gf2, Wire = Gf2_128>,
+        C: PolyContext<Field = Gf2>,
         C::Error: std::fmt::Debug,
     {
         let depth = self.depth();
@@ -240,14 +243,11 @@ fn set_lsb(g: Gf2_128, bit: bool) -> Gf2_128 {
 /// circuit: pre-committed input wires and a precomputed (valid) proof.
 struct PolyInputs {
     delta: Gf2_128,
-    d_max: usize,
     /// Prover input wires (MACs, LSB = committed bit).
     mac_wires: Vec<Gf2_128>,
     /// Verifier input wires (keys, pre-adjusted off-band).
     key_wires: Vec<Gf2_128>,
     chi: [u8; 32],
-    vope_choices: [bool; VOPE_COST],
-    vope_ev: [Gf2_128; VOPE_COST],
     vope_keys: [Gf2_128; VOPE_COST],
     /// Powers of `delta` for the polynomial check.
     powers: DeltaPowers,
@@ -298,13 +298,18 @@ fn setup<Circ: PolyCircuit>(circ: &Circ) -> PolyInputs {
     }
 
     // Run the prover once to produce the proof and the masked coefficients.
-    let mut commit = Commit::new(&mut []);
-    circ.eval(&mut commit, &ptr_wires(&witness));
+    let mut commit = Witness::new(&mut []);
+    circ.eval(&mut commit, &bit_wires(&witness));
     commit.finish().expect("commit finish");
 
-    let mut prover = Prover::committed(&[]).accumulate(ChaCha12Rng::from_seed(chi));
+    let mut prover = Accumulate::new(&[], ChaCha12Rng::from_seed(chi));
     circ.eval(&mut prover, &mac_wires);
-    let ProverOutput { u, v, poly, assertions } = prover.finish().expect("accumulate finish");
+    let ProverOutput {
+        u,
+        v,
+        poly,
+        assertions,
+    } = prover.finish().expect("accumulate finish");
 
     let coefficients: Vec<Gf2_128> = poly
         .coefficients(d_max)
@@ -324,12 +329,9 @@ fn setup<Circ: PolyCircuit>(circ: &Circ) -> PolyInputs {
 
     PolyInputs {
         delta,
-        d_max,
         mac_wires,
         key_wires,
         chi,
-        vope_choices,
-        vope_ev,
         vope_keys,
         powers,
         poly_vope_sum,
@@ -338,35 +340,32 @@ fn setup<Circ: PolyCircuit>(circ: &Circ) -> PolyInputs {
     }
 }
 
-/// Pointer-bit wires for the commit pass: each wire's LSB carries the bit.
-fn ptr_wires(witness: &[bool]) -> Vec<Gf2_128> {
-    witness.iter().map(|&b| Gf2_128::new(b as u128)).collect()
+/// Cleartext bit wires for the witness pass.
+fn bit_wires(witness: &[bool]) -> Vec<Gf2> {
+    witness.iter().map(|&b| Gf2(b)).collect()
 }
 
-fn run_prover<Circ: PolyCircuit>(circ: &Circ, inputs: &PolyInputs) {
-    let mut commit = Commit::new(&mut []);
-    circ.eval(&mut commit, &ptr_wires(&circ.witness()));
-    commit.finish().expect("commit finish");
+fn run_witness<Circ: PolyCircuit>(circ: &Circ, _inputs: &PolyInputs) {
+    let mut commit = Witness::new(&mut []);
+    circ.eval(&mut commit, black_box(&bit_wires(&circ.witness())));
+    commit.finish().expect("witness finish");
+}
 
-    let mut prover = Prover::committed(&[]).accumulate(ChaCha12Rng::from_seed(inputs.chi));
-    circ.eval(&mut prover, &inputs.mac_wires);
-    let ProverOutput { u, v, poly, assertions } = prover.finish().expect("accumulate finish");
-
-    let coefficients: Vec<Gf2_128> = poly.coefficients(inputs.d_max).expect("coefficients");
-    let (a_0, a_1) = vope_receiver(&inputs.vope_choices, &inputs.vope_ev);
-    let _proof = Proof {
-        assertions,
-        u: u + a_0,
-        v: v + a_1,
-        coefficients,
-    };
+fn run_accumulate<Circ: PolyCircuit>(circ: &Circ, inputs: &PolyInputs) {
+    let mut prover = Accumulate::new(&[], ChaCha12Rng::from_seed(inputs.chi));
+    circ.eval(&mut prover, black_box(&inputs.mac_wires));
+    black_box(prover.finish().expect("accumulate finish"));
 }
 
 fn run_verifier<Circ: PolyCircuit>(circ: &Circ, inputs: &PolyInputs) {
-    let verifier = Verifier::new(inputs.delta, &[], &[]).expect("new");
-    let mut verifier = verifier.accumulate(ChaCha12Rng::from_seed(inputs.chi));
+    let mut verifier =
+        Verifier::new(inputs.delta, &[], &[], ChaCha12Rng::from_seed(inputs.chi)).expect("new");
     circ.eval(&mut verifier, &inputs.key_wires);
-    let VerifierOutput { w, poly, assertions } = verifier.finish().expect("finish");
+    let VerifierOutput {
+        w,
+        poly,
+        assertions,
+    } = verifier.finish().expect("finish");
 
     poly.check(&inputs.powers, &inputs.coefficients, inputs.poly_vope_sum)
         .expect("poly check");
@@ -383,12 +382,19 @@ fn run_verifier<Circ: PolyCircuit>(circ: &Circ, inputs: &PolyInputs) {
 fn bench_circuit<Circ: PolyCircuit>(c: &mut Criterion, name: &str, circ: Circ, units: u64) {
     let inputs = setup(&circ);
 
-    let mut pg = c.benchmark_group(format!("poly_prover_{name}"));
-    pg.sample_size(10);
-    pg.measurement_time(Duration::from_secs(10));
-    pg.throughput(Throughput::Elements(units));
-    pg.bench_function("run", |b| b.iter(|| run_prover(&circ, &inputs)));
-    pg.finish();
+    let mut wg = c.benchmark_group(format!("poly_witness_{name}"));
+    wg.sample_size(10);
+    wg.measurement_time(Duration::from_secs(10));
+    wg.throughput(Throughput::Elements(units));
+    wg.bench_function("run", |b| b.iter(|| run_witness(&circ, &inputs)));
+    wg.finish();
+
+    let mut ag = c.benchmark_group(format!("poly_accumulate_{name}"));
+    ag.sample_size(10);
+    ag.measurement_time(Duration::from_secs(10));
+    ag.throughput(Throughput::Elements(units));
+    ag.bench_function("run", |b| b.iter(|| run_accumulate(&circ, &inputs)));
+    ag.finish();
 
     let mut vg = c.benchmark_group(format!("poly_verifier_{name}"));
     vg.sample_size(10);

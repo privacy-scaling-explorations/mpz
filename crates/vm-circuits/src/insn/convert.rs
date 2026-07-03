@@ -8,7 +8,7 @@ pub struct I32Extend8S;
 impl I32Extend8S {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I32<C::Wire>) -> I32<C::Wire> {
         I32::from(crate::sign_extend_low_in_place::<C, 32>(a.to_wires(), 8))
     }
 }
@@ -18,7 +18,7 @@ pub struct I32Extend16S;
 impl I32Extend16S {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I32<C::Wire>) -> I32<C::Wire> {
         I32::from(crate::sign_extend_low_in_place::<C, 32>(a.to_wires(), 16))
     }
 }
@@ -28,7 +28,7 @@ pub struct I64Extend8S;
 impl I64Extend8S {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I64<C::Wire>) -> I64<C::Wire> {
         I64::from(crate::sign_extend_low_in_place::<C, 64>(a.to_wires(), 8))
     }
 }
@@ -38,7 +38,7 @@ pub struct I64Extend16S;
 impl I64Extend16S {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I64<C::Wire>) -> I64<C::Wire> {
         I64::from(crate::sign_extend_low_in_place::<C, 64>(a.to_wires(), 16))
     }
 }
@@ -48,7 +48,7 @@ pub struct I64Extend32S;
 impl I64Extend32S {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I64<C::Wire>) -> I64<C::Wire> {
         I64::from(crate::sign_extend_low_in_place::<C, 64>(a.to_wires(), 32))
     }
 }
@@ -58,7 +58,7 @@ pub struct I32WrapI64;
 impl I32WrapI64 {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I64<C::Wire>) -> I32<C::Wire> {
         let wires = a.to_wires();
         let mut out = [wires[0]; 32];
         out.copy_from_slice(&wires[..32]);
@@ -71,7 +71,7 @@ pub struct I64ExtendI32S;
 impl I64ExtendI32S {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I32) -> I64 {
+    pub fn eval<C: CircuitContext>(_ctx: &mut C, a: I32<C::Wire>) -> I64<C::Wire> {
         let wires = a.to_wires();
         let sign = wires[31];
         let mut out = [sign; 64];
@@ -85,7 +85,7 @@ pub struct I64ExtendI32U;
 impl I64ExtendI32U {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32) -> I64 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>) -> I64<C::Wire> {
         let wires = a.to_wires();
         let zero = ctx.constant(Gf2(false));
         let mut out = [zero; 64];

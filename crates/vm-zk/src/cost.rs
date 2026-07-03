@@ -1,9 +1,3 @@
-//! AND-gate + advice cost of each op, used by capture to budget chunks.
-//!
-//! Costs come from the `mpz_vm_circuits` gadgets' published `COST*` constants,
-//! selecting the constant-specialized variant when an operand is public (the
-//! same choice `replay` makes when emitting the circuit).
-
 use mpz_vm_core::{Op, Operand};
 use mpz_vm_ir::{BinaryOp, UnaryOp};
 
@@ -11,26 +5,16 @@ use mpz_vm_circuits as circ;
 
 use crate::error::{Result, unsupported_binary, unsupported_op, unsupported_unary};
 
-/// Tape entries (AND gates) committed by an authenticated
-/// `crypto::sha256_compress` call: exactly one `mul` per AND gate in the
-/// compression circuit, with no advice. Capture and the segment planner both
-/// budget this so the gate tape and challenge offsets line up with replay's
-/// `mpz_circuits::sha256::compress` invocation.
 pub(crate) const SHA256_COMPRESS_COST: usize = mpz_circuits::sha256::AND_PER_BLOCK;
 
-/// Tape entries consumed by `op` as committed blind advice (rather than AND
-/// gates). The challenge stream advances only on gates, so segment chi
-/// offsets are computed from `op_cost - op_advice_bits`.
 pub(crate) fn op_advice_bits(op: &Op) -> usize {
     use mpz_vm_ir::{BinaryOp::*, UnaryOp::*};
     match op {
-        // Division advice commits the quotient and remainder.
         Op::Binary { op: bop, rhs, .. } if !rhs.is_concrete() => match bop {
             I32DivU | I32RemU | I32DivS | I32RemS => 64,
             I64DivU | I64RemU | I64DivS | I64RemS => 128,
             _ => 0,
         },
-        // Count advice commits one value of the operand's width.
         Op::Unary { op: uop, .. } => match uop {
             I32Clz | I32Ctz => 32,
             I64Clz | I64Ctz => 64,
@@ -56,7 +40,6 @@ pub(crate) fn op_cost(op: &Op) -> Result<usize> {
 fn binary_cost(op: BinaryOp, lhs: &Operand, rhs: &Operand) -> Result<usize> {
     use BinaryOp::*;
     Ok(match op {
-        // Comparisons are always symbolic.
         I32Eq => circ::I32Eq::COST,
         I32Ne => circ::I32Ne::COST,
         I32LtS => circ::I32LtS::COST,
@@ -77,7 +60,6 @@ fn binary_cost(op: BinaryOp, lhs: &Operand, rhs: &Operand) -> Result<usize> {
         I64LeU => circ::I64LeU::COST,
         I64GeS => circ::I64GeS::COST,
         I64GeU => circ::I64GeU::COST,
-        // Arithmetic. Multiply by a public constant uses the cheaper circuit.
         I32Add => circ::I32Add::COST,
         I32Sub => circ::I32Sub::COST,
         I32Mul if lhs.is_concrete() | rhs.is_concrete() => circ::I32Mul::COST_CONST,
@@ -86,8 +68,6 @@ fn binary_cost(op: BinaryOp, lhs: &Operand, rhs: &Operand) -> Result<usize> {
         I64Sub => circ::I64Sub::COST,
         I64Mul if lhs.is_concrete() | rhs.is_concrete() => circ::I64Mul::COST_CONST,
         I64Mul => circ::I64Mul::COST,
-        // Bitwise. `and`/`or` with a public constant use the cheaper circuit;
-        // `xor` is always a free wire shuffle.
         I32And if lhs.is_concrete() | rhs.is_concrete() => circ::I32And::COST_CONST,
         I32And => circ::I32And::COST,
         I32Or if lhs.is_concrete() | rhs.is_concrete() => circ::I32Or::COST_CONST,
@@ -98,7 +78,6 @@ fn binary_cost(op: BinaryOp, lhs: &Operand, rhs: &Operand) -> Result<usize> {
         I64Or if lhs.is_concrete() | rhs.is_concrete() => circ::I64Or::COST_CONST,
         I64Or => circ::I64Or::COST,
         I64Xor => circ::I64Xor::COST,
-        // Shifts/rotates by a public constant amount are free wire shuffles.
         I32Shl if rhs.is_concrete() => circ::I32Shl::COST_CONST_AMOUNT,
         I32Shl => circ::I32Shl::COST,
         I32ShrS if rhs.is_concrete() => circ::I32ShrS::COST_CONST_AMOUNT,
@@ -119,9 +98,6 @@ fn binary_cost(op: BinaryOp, lhs: &Operand, rhs: &Operand) -> Result<usize> {
         I64Rotl => circ::I64Rotl::COST,
         I64Rotr if rhs.is_concrete() => circ::I64Rotr::COST_CONST_AMOUNT,
         I64Rotr => circ::I64Rotr::COST,
-        // Division/remainder by a public constant divisor skips the advice
-        // entirely; otherwise `COST_WITH_ADVICE` already accounts for the
-        // committed advice.
         I32DivU if rhs.is_concrete() => circ::I32DivU::COST_CONST_DIVISOR,
         I32DivU => circ::I32DivU::COST_WITH_ADVICE,
         I32RemU if rhs.is_concrete() => circ::I32RemU::COST_CONST_DIVISOR,

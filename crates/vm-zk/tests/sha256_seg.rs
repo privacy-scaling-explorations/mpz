@@ -1,7 +1,3 @@
-//! Segmented proving repro for the sha256 guest: the bench workload over
-//! ideal sVOLE, small message, low segment cost — fails fast and
-//! deterministically if boundary stitching is broken.
-
 use futures::{executor::block_on, future::try_join};
 use mpz_common::context::test_st_context;
 use mpz_core::Block;
@@ -41,7 +37,6 @@ fn sha256_segmented() {
         Prover::new_with_config(module.clone(), svole_receiver, config.clone()).unwrap();
     let mut verifier = Verifier::new_with_config(module.clone(), svole_sender, config).unwrap();
 
-    // Allocate the input buffer in-guest, mirroring the bench.
     let realloc = func_idx(&module, "cabi_realloc");
     let alloc_args = || {
         vec![
@@ -80,7 +75,6 @@ fn sha256_segmented() {
     .unwrap();
     assert_eq!(rp, rv);
 
-    // `hash` returns the address of the revealed digest.
     let digest_ptr = match rp {
         Some(Value::I32(p)) => p as u32,
         other => panic!("hash returned {other:?}"),

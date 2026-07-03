@@ -1,12 +1,3 @@
-//! Benchmark harness for the zk-vm over a real OT stack.
-//!
-//! Each measured iteration proves SHA-256 of a private message end to end
-//! through the [`Prover`]/[`Verifier`] pair, with correlated randomness drawn
-//! from a real `CO15 -> SoftSpoken -> Ferret` RCOT stack (Chou-Orlandi base OT,
-//! SoftSpoken extension, Ferret expansion) rather than an ideal functionality —
-//! so the measurement reflects the cost of the actual protocol, including
-//! OT/VOLE generation.
-
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use futures::executor::block_on;
 use mpz_common::{Context, context::test_mt_context, executor::Executor};
@@ -18,20 +9,9 @@ use mpz_vm_zk::{Prover, Verifier};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use sha2::{Digest, Sha256};
 
-/// The prover's RCOT receiver: Ferret over SoftSpoken over a Chou-Orlandi base
-/// OT.
 type ProverSvole = ferret::Receiver<softspoken::Receiver<chou_orlandi::Sender>>;
-/// The verifier's RCOT sender: Ferret over SoftSpoken over a Chou-Orlandi base
-/// OT.
 type VerifierSvole = ferret::Sender<softspoken::Sender<chou_orlandi::Receiver>>;
 
-/// Builds the real RCOT stack for both parties from `seed`.
-///
-/// The verifier is the RCOT sender and holds the correlation `delta` (its lsb
-/// forced to 1, as the zk-vm requires); the prover is the RCOT receiver. The
-/// base-OT roles are swapped relative to the extension: the verifier's
-/// SoftSpoken sender is bootstrapped by a Chou-Orlandi receiver, the prover's
-/// SoftSpoken receiver by a Chou-Orlandi sender.
 fn rcot_stack(seed: u64) -> (VerifierSvole, ProverSvole) {
     let mut rng = StdRng::seed_from_u64(seed);
     let mut delta: Block = rng.random();
@@ -68,11 +48,6 @@ fn func_idx(module: &Module, name: &str) -> u32 {
         .expect("function should be exported")
 }
 
-/// The long-lived transport between the parties: a multithreaded executor
-/// pair and one context per side. Created once and reused across iterations
-/// so worker-pool spawn/teardown stays out of the measurement; everything
-/// cryptographic (base OT, SoftSpoken, Ferret, prover/verifier state) is
-/// rebuilt inside each iteration so the measured time stays end-to-end.
 struct Session {
     exec_p: Executor,
     exec_v: Executor,
@@ -101,9 +76,6 @@ impl Drop for Session {
     }
 }
 
-/// Drives one `call` on the prover and verifier concurrently and returns their
-/// results. The two parties exchange messages during a call, so both must run
-/// together; they execute on separate OS threads, as in a real deployment.
 fn call_both(
     prover: &mut Prover<ProverSvole>,
     verifier: &mut Verifier<VerifierSvole>,
@@ -120,28 +92,14 @@ fn call_both(
     })
 }
 
-/// SHA-256 digest length, in bytes.
 const DIGEST_LEN: usize = 32;
 
-/// Proves SHA-256 over the private `msg` end to end and returns the revealed
-/// digest. Allocates the message buffer in-guest via `cabi_realloc`, stages the
-/// message privately, calls the guest export `func` (either `hash`, which
-/// compresses in wasm, or `hash_precompile`, which compresses through the host
-/// `sha256_compress` precompile), and reads the digest back at the pointer the
-/// call returns. Panics if the two sides disagree.
-///
-/// The whole crypto stack is rebuilt here — only `session`'s executors and
-/// contexts are reused — so the measured time stays end-to-end.
 fn prove_sha256(module: &Module, msg: &[u8], session: &mut Session, func: &str) -> Vec<u8> {
     let (v_svole, p_svole) = rcot_stack(0);
     let mut prover = Prover::new(module.clone(), p_svole).unwrap();
     let mut verifier = Verifier::new(module.clone(), v_svole).unwrap();
     let Session { ctx_p, ctx_v, .. } = session;
 
-    // Allocate the message buffer inside the running VM via the guest's
-    // `cabi_realloc` export, then stage the message privately at the returned
-    // pointer. Allocating in the measured instance grows memory so the region is
-    // always in bounds and exercises the real allocator.
     let realloc = func_idx(module, "cabi_realloc");
     let alloc_args = || {
         vec![
@@ -171,7 +129,6 @@ fn prove_sha256(module: &Module, msg: &[u8], session: &mut Session, func: &str) 
     prover.write(ptr, Write::Private(msg)).unwrap();
     verifier.write(ptr, Write::Blind(msg.len())).unwrap();
 
-    // `func(ptr, len)` returns the address of the revealed digest.
     let hash = func_idx(module, func);
     let hash_args = || {
         vec![
@@ -196,19 +153,6 @@ fn prove_sha256(module: &Module, msg: &[u8], session: &mut Session, func: &str) 
     verifier.read(digest_ptr, DIGEST_LEN).unwrap().to_vec()
 }
 
-/// Installs a tracing subscriber when `RUST_LOG` is set that prints, on each
-/// span's close, its `time.busy`/`time.idle` wall-clock alongside the full
-/// span scope (`chunk:allocate:ferret.flush`, etc.) and recorded fields — the
-/// per-stage proving profile. A no-op (no subscriber, zero span cost) when
-/// `RUST_LOG` is unset, so a plain `cargo bench` measures undisturbed
-/// throughput.
-///
-/// For a profile run:
-/// `RUST_LOG=mpz_vm_zk=debug,mpz_ot=debug cargo bench -p mpz-vm-zk --bench vm`.
-/// The prover and verifier run on separate threads into one subscriber; their
-/// close lines carry the `role`/target so the two sides stay distinguishable,
-/// or narrow to one with a target filter (e.g. `mpz_vm_zk::prover=debug`).
-/// Absolute throughput numbers should be read from a run with `RUST_LOG` unset.
 fn init_tracing() {
     use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
 
@@ -223,18 +167,10 @@ fn init_tracing() {
         .try_init();
 }
 
-/// Message sizes (bytes) to benchmark SHA-256 over. The headline is 4 KiB.
 const SHA256_SIZES: &[usize] = &[4096, 16384];
 
-/// SHA-256 proving variants: `wasm` compresses each block with guest
-/// instructions, `precompile` compresses through the host `sha256_compress`
-/// precompile (the per-block compression circuit, no guest gates).
 const SHA256_VARIANTS: &[(&str, &str)] = &[("wasm", "hash"), ("precompile", "hash_precompile")];
 
-/// Proves SHA-256 of a private message end to end, for both the wasm and
-/// precompile variants. Each (variant, size) is validated once against a
-/// reference SHA-256 (proving the guest + VM + reveal are correct) before being
-/// timed.
 fn bench_sha256(c: &mut Criterion) {
     init_tracing();
     let wasm = include_bytes!("guests/sha256.wasm");
@@ -246,7 +182,6 @@ fn bench_sha256(c: &mut Criterion) {
     for &len in SHA256_SIZES {
         let msg: Vec<u8> = (0..len).map(|i| i as u8).collect();
         for &(label, func) in SHA256_VARIANTS {
-            // Validate the revealed digest against a reference before timing.
             let digest = prove_sha256(&module, &msg, &mut session, func);
             assert_eq!(
                 digest,

@@ -5,9 +5,11 @@ use serio::{SinkExt as _, stream::IoStreamExt};
 use mpz_common::{Context, ContextError, Flush, future::MaybeDone};
 use mpz_core::Block;
 use mpz_ot_core::{
-    softspoken::{Receiver as Core, ReceiverConfig, ReceiverError as CoreError, receiver_state as state},
     ot::OTSender,
     rcot::{RCOTReceiver, RCOTReceiverOutput},
+    softspoken::{
+        Receiver as Core, ReceiverConfig, ReceiverError as CoreError, receiver_state as state,
+    },
 };
 
 type Error = ReceiverError;

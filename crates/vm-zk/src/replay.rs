@@ -1,20 +1,3 @@
-//! Replay of a captured execution trace into a zero-knowledge circuit.
-//!
-//! Re-executes the [`Directive`](mpz_vm_core::Directive) sequence recorded
-//! during evaluation, applying each directive to the
-//! [`AuthState`] of authenticated values while emitting the corresponding
-//! gadget operations through a [`ZkExec`] backend. This is the step that turns
-//! a witnessed run into the constraints proven by the
-//! [`Prover`](crate::Prover) and checked by the [`Verifier`](crate::Verifier).
-//!
-//! Directive registers are absolute (see [`Op`]), so replay applies them to
-//! [`AuthState::regs`] directly without tracking per-frame register bases. A
-//! returning frame's register range is reclaimed so a later call reuses those
-//! slots, mirroring the thread's bounded register file.
-//!
-//! Trapping directives are replayed separately so that the committed trap
-//! reason can be re-derived and constrained against its operands.
-
 use itybity::{GetBit, Lsb0};
 use mpz_circuits::Context;
 use mpz_fields::{gf2::Gf2, gf2_128::Gf2_128};
@@ -33,45 +16,31 @@ use crate::{
     host::HostCallEvent,
 };
 
-// ============================================================
-// Execution backend
-// ============================================================
+pub(crate) type ProverCtx<'a> = mpz_zk_core::prover::Accumulate<'a, ChaCha12Rng>;
 
-/// The prover's accumulate-pass circuit context over a segment's MAC tape.
-pub(crate) type ProverCtx<'a> =
-    mpz_zk_core::prover::Prover<'a, mpz_zk_core::prover::Accumulate<ChaCha12Rng>>;
+pub(crate) type VerifierCtx<'a> = mpz_zk_core::verifier::Verifier<'a, ChaCha12Rng>;
 
-/// The verifier's accumulate-pass circuit context over a segment's key tape.
-pub(crate) type VerifierCtx<'a> =
-    mpz_zk_core::verifier::Verifier<'a, mpz_zk_core::verifier::Accumulate<ChaCha12Rng>>;
+pub(crate) trait ZkExec: Context<Field = Gf2, Wire: GetBit<Lsb0>> {
+    fn public_bit(&mut self, value: bool) -> Self::Wire;
 
-/// The prover/verifier-side capabilities replay needs on top of a circuit
-/// [`Context`]: public-bit constants and blind witness advice.
-pub(crate) trait ZkExec: Context<Wire = Gf2_128, Field = Gf2> {
-    fn public_bit(&mut self, value: bool) -> Gf2_128;
+    fn advise_i32(&mut self, compute: impl FnOnce() -> u32) -> I32<Self::Wire>;
 
-    /// Commits a 32-bit witness value as blind advice and returns the
-    /// authenticated bundle. The prover commits the bits of `compute()`; the
-    /// verifier commits blanks and never runs `compute`.
-    fn advise_i32(&mut self, compute: impl FnOnce() -> u32) -> I32;
-
-    /// 64-bit [`advise_i32`](ZkExec::advise_i32).
-    fn advise_i64(&mut self, compute: impl FnOnce() -> u64) -> I64;
+    fn advise_i64(&mut self, compute: impl FnOnce() -> u64) -> I64<Self::Wire>;
 }
 
-impl ZkExec for mpz_zk_core::Commit<'_> {
-    fn public_bit(&mut self, value: bool) -> Gf2_128 {
-        self.input_public(value)
+impl ZkExec for mpz_zk_core::Witness<'_> {
+    fn public_bit(&mut self, value: bool) -> Gf2 {
+        self.input_public(Gf2(value))
     }
 
-    fn advise_i32(&mut self, compute: impl FnOnce() -> u32) -> I32 {
+    fn advise_i32(&mut self, compute: impl FnOnce() -> u32) -> I32<Gf2> {
         let v = compute();
-        I32::from(core::array::from_fn(|i| self.input((v >> i) & 1 != 0)))
+        I32::from(core::array::from_fn(|i| self.input(Gf2((v >> i) & 1 != 0))))
     }
 
-    fn advise_i64(&mut self, compute: impl FnOnce() -> u64) -> I64 {
+    fn advise_i64(&mut self, compute: impl FnOnce() -> u64) -> I64<Gf2> {
         let v = compute();
-        I64::from(core::array::from_fn(|i| self.input((v >> i) & 1 != 0)))
+        I64::from(core::array::from_fn(|i| self.input(Gf2((v >> i) & 1 != 0))))
     }
 }
 
@@ -80,12 +49,12 @@ impl ZkExec for ProverCtx<'_> {
         self.input_public(value)
     }
 
-    fn advise_i32(&mut self, compute: impl FnOnce() -> u32) -> I32 {
+    fn advise_i32(&mut self, compute: impl FnOnce() -> u32) -> I32<Gf2_128> {
         let v = compute();
         I32::from(core::array::from_fn(|i| self.input((v >> i) & 1 != 0)))
     }
 
-    fn advise_i64(&mut self, compute: impl FnOnce() -> u64) -> I64 {
+    fn advise_i64(&mut self, compute: impl FnOnce() -> u64) -> I64<Gf2_128> {
         let v = compute();
         I64::from(core::array::from_fn(|i| self.input((v >> i) & 1 != 0)))
     }
@@ -96,18 +65,14 @@ impl ZkExec for VerifierCtx<'_> {
         self.input_public(value)
     }
 
-    fn advise_i32(&mut self, _compute: impl FnOnce() -> u32) -> I32 {
+    fn advise_i32(&mut self, _compute: impl FnOnce() -> u32) -> I32<Gf2_128> {
         I32::from(core::array::from_fn(|_| self.input()))
     }
 
-    fn advise_i64(&mut self, _compute: impl FnOnce() -> u64) -> I64 {
+    fn advise_i64(&mut self, _compute: impl FnOnce() -> u64) -> I64<Gf2_128> {
         I64::from(core::array::from_fn(|_| self.input()))
     }
 }
-
-// ============================================================
-// Replay loop
-// ============================================================
 
 #[derive(Debug)]
 pub(crate) struct ReplayState {
@@ -125,7 +90,7 @@ pub(crate) fn replay<C>(
     trace: &[Directive],
     reveal_actions: &[HostCallEvent],
     module: &Module,
-    auth: &mut AuthState,
+    auth: &mut AuthState<C::Wire>,
     exec: &mut C,
     state: &mut ReplayState,
 ) -> Result<()>
@@ -203,9 +168,6 @@ where
                 ..
             } => {
                 if is_import(module, *func_idx) {
-                    // Imported calls carry a per-call action, applied in-order:
-                    // a reveal opens live MACs, a precompile emits its circuit
-                    // over the input wires (or writes a public result).
                     let action = reveal_actions.get(reveal_cursor).ok_or_else(|| {
                         ZkVmError::Internal("reveal action missing for imported call".into())
                     })?;
@@ -240,13 +202,11 @@ where
     Ok(())
 }
 
-// ============================================================
-// Operand resolution
-// ============================================================
-
-/// Resolves an operand to its authenticated value: a symbol is cloned from the
-/// register file; a public constant is materialized as public-bit MACs.
-fn operand_value<C>(operand: &Operand, auth: &AuthState, exec: &mut C) -> Result<AuthValue>
+fn operand_value<C>(
+    operand: &Operand,
+    auth: &AuthState<C::Wire>,
+    exec: &mut C,
+) -> Result<AuthValue<C::Wire>>
 where
     C: ZkExec,
 {
@@ -260,13 +220,12 @@ where
     }
 }
 
-/// Encodes a public constant as an [`AuthValue`] of public-bit MACs.
-fn const_auth<C>(exec: &mut C, v: &Value) -> Result<AuthValue>
+fn const_auth<C>(exec: &mut C, v: &Value) -> Result<AuthValue<C::Wire>>
 where
     C: ZkExec,
 {
     let (ty, width, raw) = decode_concrete(v)?;
-    let bits: Vec<Bit> = (0..width)
+    let bits: Vec<Bit<C::Wire>> = (0..width)
         .map(|i| Bit(exec.public_bit((raw >> i) & 1 != 0)))
         .collect();
     Ok(AuthValue::from_bits(ty, &bits)?)
@@ -282,8 +241,6 @@ fn decode_concrete(v: &Value) -> Result<(ValType, usize, u64)> {
     }
 }
 
-/// The `i32` value of a concrete operand (used for the public-constant gadget
-/// paths in [`binary_eval`]).
 fn const_i32(op: &Operand) -> Result<i32> {
     match op {
         Operand::Concrete(Value::I32(x)) => Ok(*x),
@@ -293,7 +250,6 @@ fn const_i32(op: &Operand) -> Result<i32> {
     }
 }
 
-/// The `i64` value of a concrete operand.
 fn const_i64(op: &Operand) -> Result<i64> {
     match op {
         Operand::Concrete(Value::I64(x)) => Ok(*x),
@@ -303,10 +259,7 @@ fn const_i64(op: &Operand) -> Result<i64> {
     }
 }
 
-/// Concrete integer value carried by a wire bundle, read from the pointer bit
-/// (LSB) of each wire. Meaningful only on the prover, where it feeds the advice
-/// closures that compute a gadget's witness.
-fn wire_value(wires: &[Gf2_128]) -> u64 {
+fn wire_value<W: GetBit<Lsb0>>(wires: &[W]) -> u64 {
     let mut out = 0u64;
     for (i, w) in wires.iter().enumerate() {
         if GetBit::<Lsb0>::get_bit(w, 0) {
@@ -316,25 +269,18 @@ fn wire_value(wires: &[Gf2_128]) -> u64 {
     out
 }
 
-// ============================================================
-// Op dispatch
-// ============================================================
-
 fn binary_eval<C>(
     exec: &mut C,
-    auth: &AuthState,
+    auth: &AuthState<C::Wire>,
     op: BinaryOp,
     lhs: &Operand,
     rhs: &Operand,
-) -> Result<AuthValue>
+) -> Result<AuthValue<C::Wire>>
 where
     C: ZkExec,
     C::Error: core::fmt::Debug,
 {
     use BinaryOp::*;
-    // Both operands are resolved up front. A public-constant right operand takes
-    // the cheaper constant-specialized circuit (guarded arms below); resolving
-    // `b` anyway is free (public-bit MACs, no tape/gates).
     let a = operand_value(lhs, auth, exec)?;
     let b = operand_value(rhs, auth, exec)?;
     Ok(match op {
@@ -464,10 +410,12 @@ where
     })
 }
 
-/// Commits the `(q, r)` advice for a 32-bit division/remainder and emits the
-/// verifying circuit. The quotient/remainder are computed by the gadget on the
-/// prover and committed as blind advice; the verifier commits blanks.
-fn div_rem_i32<C>(exec: &mut C, a: I32, b: I32, op: BinaryOp) -> Result<AuthValue>
+fn div_rem_i32<C>(
+    exec: &mut C,
+    a: I32<C::Wire>,
+    b: I32<C::Wire>,
+    op: BinaryOp,
+) -> Result<AuthValue<C::Wire>>
 where
     C: ZkExec,
     C::Error: core::fmt::Debug,
@@ -497,8 +445,12 @@ where
     Ok(out.into())
 }
 
-/// 64-bit counterpart of [`div_rem_i32`].
-fn div_rem_i64<C>(exec: &mut C, a: I64, b: I64, op: BinaryOp) -> Result<AuthValue>
+fn div_rem_i64<C>(
+    exec: &mut C,
+    a: I64<C::Wire>,
+    b: I64<C::Wire>,
+    op: BinaryOp,
+) -> Result<AuthValue<C::Wire>>
 where
     C: ZkExec,
     C::Error: core::fmt::Debug,
@@ -528,9 +480,7 @@ where
     Ok(out.into())
 }
 
-/// Commits the count-leading/trailing-zeros advice and emits the verifying
-/// circuit for a 32-bit value.
-fn count_i32<C>(exec: &mut C, a: I32, clz: bool) -> Result<AuthValue>
+fn count_i32<C>(exec: &mut C, a: I32<C::Wire>, clz: bool) -> Result<AuthValue<C::Wire>>
 where
     C: ZkExec,
     C::Error: core::fmt::Debug,
@@ -552,8 +502,7 @@ where
     Ok(out.into())
 }
 
-/// 64-bit counterpart of [`count_i32`].
-fn count_i64<C>(exec: &mut C, a: I64, clz: bool) -> Result<AuthValue>
+fn count_i64<C>(exec: &mut C, a: I64<C::Wire>, clz: bool) -> Result<AuthValue<C::Wire>>
 where
     C: ZkExec,
     C::Error: core::fmt::Debug,
@@ -575,7 +524,7 @@ where
     Ok(out.into())
 }
 
-fn unary_eval<C>(op: UnaryOp, exec: &mut C, a: AuthValue) -> Result<AuthValue>
+fn unary_eval<C>(op: UnaryOp, exec: &mut C, a: AuthValue<C::Wire>) -> Result<AuthValue<C::Wire>>
 where
     C: ZkExec,
     C::Error: core::fmt::Debug,
@@ -602,14 +551,8 @@ where
     })
 }
 
-// ============================================================
-// Memory
-// ============================================================
-
-/// Loads `kind` at the effective address, taking symbolic bytes from committed
-/// memory and the remaining (public) bytes from `concrete` per `symbolic_mask`.
-fn mem_load(
-    auth: &mut AuthState,
+fn mem_load<W: Copy>(
+    auth: &mut AuthState<W>,
     dst: Reg,
     kind: LoadKind,
     addr: &Operand,
@@ -620,7 +563,7 @@ fn mem_load(
     use LoadKind::*;
     let eff = crate::memlog::eff_addr(addr, memarg)?;
     let m = &auth.memory;
-    let av: AuthValue = match kind {
+    let av: AuthValue<W> = match kind {
         I32 => m
             .load_i32_mixed(eff, concrete, symbolic_mask)
             .map(Into::into),
@@ -670,7 +613,7 @@ fn mem_load(
 
 fn mem_store<C>(
     exec: &mut C,
-    auth: &mut AuthState,
+    auth: &mut AuthState<C::Wire>,
     kind: StoreKind,
     addr: &Operand,
     val: &Operand,
@@ -699,11 +642,7 @@ where
     Ok(())
 }
 
-// ============================================================
-// Reveals, returns, traps
-// ============================================================
-
-fn apply_reveal<C>(event: &HostCallEvent, auth: &mut AuthState, exec: &mut C) -> Result<()>
+fn apply_reveal<C>(event: &HostCallEvent, auth: &mut AuthState<C::Wire>, exec: &mut C) -> Result<()>
 where
     C: ZkExec,
     C::Error: core::fmt::Debug,
@@ -715,16 +654,11 @@ where
             handle_dst,
             id,
         } => {
-            // Open the disclosed value against the live source MAC. A `None`
-            // source means the value was already public, so there is nothing to
-            // open.
             if let Some(src) = src {
                 finalize::assert_output(exec, auth, *src, *value)?;
             }
-            // The reveal returns the public handle id.
             set_public_reg(auth, exec, *handle_dst, &Value::I32(*id as i32))?;
         }
-        // The wait binds the now-public revealed value into its destination.
         HostCallEvent::WaitScalar { dst, value } => {
             set_public_reg(auth, exec, *dst, value)?;
         }
@@ -734,14 +668,10 @@ where
             handle_dst,
             id,
         } => {
-            // Open the disclosed bytes against the live byte MACs at this point
-            // in the trace (before any later store could overwrite them).
             crate::reveal::assert_bytes(exec, auth, *ptr, bytes)?;
             set_public_reg(auth, exec, *handle_dst, &Value::I32(*id as i32))?;
         }
-        // The byte wait's effect was applied to memory during capture.
         HostCallEvent::WaitBytes => {}
-        // Precompile actions are dispatched before `apply_reveal`.
         HostCallEvent::Sha256Compress { .. } | HostCallEvent::Sha256CompressPublic { .. } => {
             return Err(ZkVmError::Internal(
                 "precompile action routed to apply_reveal".into(),
@@ -751,20 +681,10 @@ where
     Ok(())
 }
 
-// ============================================================
-// Precompiles
-// ============================================================
-
-/// Emits the SHA-256 compression circuit for an authenticated
-/// `crypto::sha256_compress`: assembles the 256-bit state and 512-bit block
-/// wires (symbolic bytes from committed memory, public bytes as public-bit
-/// wires from the recorded plaintext), runs `mpz_circuits::sha256::compress`
-/// through the live circuit context (consuming exactly `AND_PER_BLOCK` gates),
-/// and writes the 256-bit committed output back over the state in place.
 #[allow(clippy::too_many_arguments)]
 fn apply_sha256_compress<C>(
     exec: &mut C,
-    auth: &mut AuthState,
+    auth: &mut AuthState<C::Wire>,
     state_ptr: u32,
     state_pub: &[u8; 32],
     state_sym: u64,
@@ -776,8 +696,6 @@ where
     C: ZkExec,
     C::Error: core::fmt::Debug,
 {
-    // State and block are read in memory (little-endian) order; the SHA-256
-    // gadget groups the big-endian schedule words from the block itself.
     let state = read_mixed::<256, _>(exec, auth, state_ptr, state_pub, state_sym)?;
     let msg = read_mixed::<512, _>(exec, auth, block_ptr, block_pub, block_sym)?;
     let out = mpz_circuits::sha256::compress(exec, msg, state);
@@ -785,9 +703,7 @@ where
     Ok(())
 }
 
-/// Writes a public digest back over the 32-byte state as public-bit wires (no
-/// gates), for the public fast-path where all inputs were public.
-fn write_public_bytes<C>(exec: &mut C, auth: &mut AuthState, base: u32, digest: &[u8; 32])
+fn write_public_bytes<C>(exec: &mut C, auth: &mut AuthState<C::Wire>, base: u32, digest: &[u8; 32])
 where
     C: ZkExec,
 {
@@ -799,26 +715,19 @@ where
     }
 }
 
-/// Assembles `N` input wires from the `N / 8` bytes at `base` in memory order:
-/// bit `8*bo + k` of the output is bit `k` of memory byte `bo`. This is the
-/// little-endian `u32`-word layout the SHA-256 gadget expects (it groups the
-/// big-endian schedule words itself). A byte marked symbolic in `sym` (bit `i`
-/// = byte `i`) is read from committed memory (a `MemAuthMissing` error if
-/// absent); a public byte is materialized as public-bit wires from `public[i]`
-/// (no gates).
 fn read_mixed<const N: usize, C>(
     exec: &mut C,
-    auth: &AuthState,
+    auth: &AuthState<C::Wire>,
     base: u32,
     public: &[u8],
     sym: u64,
-) -> Result<[Gf2_128; N]>
+) -> Result<[C::Wire; N]>
 where
     C: ZkExec,
 {
-    let mut out = [Gf2_128::new(0); N];
+    let mut out = [exec.public_bit(false); N];
     for bo in 0..N / 8 {
-        let bits: [Gf2_128; 8] = if (sym >> bo) & 1 != 0 {
+        let bits: [C::Wire; 8] = if (sym >> bo) & 1 != 0 {
             let off = base + bo as u32;
             let byte = auth
                 .memory
@@ -833,17 +742,19 @@ where
     Ok(out)
 }
 
-/// Writes `wires` back to memory at `base` in memory order — bit `8*bo + k` of
-/// the wire stream is bit `k` of byte `bo` — the inverse layout of
-/// [`read_mixed`].
-fn write_words(auth: &mut AuthState, base: u32, wires: &[Gf2_128]) {
+fn write_words<W: Copy>(auth: &mut AuthState<W>, base: u32, wires: &[W]) {
     for bo in 0..wires.len() / 8 {
         let byte = Byte::new(core::array::from_fn(|k| Bit(wires[bo * 8 + k])));
         auth.memory.set_byte(base + bo as u32, byte);
     }
 }
 
-fn set_public_reg<C>(auth: &mut AuthState, exec: &mut C, reg: Reg, value: &Value) -> Result<()>
+fn set_public_reg<C>(
+    auth: &mut AuthState<C::Wire>,
+    exec: &mut C,
+    reg: Reg,
+    value: &Value,
+) -> Result<()>
 where
     C: ZkExec,
 {
@@ -851,19 +762,15 @@ where
     Ok(())
 }
 
-fn handle_return(
-    auth: &mut AuthState,
+fn handle_return<W: Copy>(
+    auth: &mut AuthState<W>,
     state: &mut ReplayState,
     dst: Option<Reg>,
     src: Option<Reg>,
     reclaim: Option<(Reg, u32)>,
 ) {
     match (dst, src) {
-        // Non-root return into a caller register: bind the result's MAC there
-        // before the source range is reclaimed below.
         (Some(d), Some(s)) => auth.regs.copy(d, s),
-        // Outermost return (carries `dst = None`, `reclaim = None`): record the
-        // result register for finalize to open.
         (None, Some(s)) if reclaim.is_none() => state.output_reg = Some(s),
         _ => {}
     }
@@ -875,7 +782,7 @@ fn handle_return(
 pub(crate) fn replay_trap<C>(
     directive: &Directive,
     reason: &Trap,
-    auth: &AuthState,
+    auth: &AuthState<C::Wire>,
     exec: &mut C,
 ) -> Result<()>
 where
@@ -915,9 +822,14 @@ fn trap_operands(directive: &Directive) -> Result<(&Operand, &Operand, usize)> {
     }
 }
 
-fn assert_const_bits<C>(ctx: &mut C, value: &AuthValue, width: usize, bits: u64) -> Result<()>
+fn assert_const_bits<C>(
+    ctx: &mut C,
+    value: &AuthValue<C::Wire>,
+    width: usize,
+    bits: u64,
+) -> Result<()>
 where
-    C: Context<Wire = Gf2_128, Field = Gf2>,
+    C: Context<Field = Gf2>,
     C::Error: core::fmt::Debug,
 {
     let wires = match width {
@@ -936,17 +848,22 @@ where
     Ok(())
 }
 
-fn assert_divisor_zero<C>(ctx: &mut C, divisor: &AuthValue, width: usize) -> Result<()>
+fn assert_divisor_zero<C>(ctx: &mut C, divisor: &AuthValue<C::Wire>, width: usize) -> Result<()>
 where
-    C: Context<Wire = Gf2_128, Field = Gf2>,
+    C: Context<Field = Gf2>,
     C::Error: core::fmt::Debug,
 {
     assert_const_bits(ctx, divisor, width, 0)
 }
 
-fn assert_overflow<C>(ctx: &mut C, lhs: &AuthValue, rhs: &AuthValue, width: usize) -> Result<()>
+fn assert_overflow<C>(
+    ctx: &mut C,
+    lhs: &AuthValue<C::Wire>,
+    rhs: &AuthValue<C::Wire>,
+    width: usize,
+) -> Result<()>
 where
-    C: Context<Wire = Gf2_128, Field = Gf2>,
+    C: Context<Field = Gf2>,
     C::Error: core::fmt::Debug,
 {
     let all_ones = if width == 64 {
@@ -959,10 +876,8 @@ where
     assert_const_bits(ctx, lhs, width, int_min)
 }
 
-fn propagate_args(auth: &mut AuthState, param_base: Reg, args: &[Operand]) {
+fn propagate_args<W: Copy>(auth: &mut AuthState<W>, param_base: Reg, args: &[Operand]) {
     for (i, arg) in args.iter().enumerate() {
-        // Call-arg operands carry absolute source registers; bind each to the
-        // callee's parameter register `param_base + i`.
         if let Operand::Symbol { reg, .. } = arg {
             auth.regs.copy(param_base + i as u32, *reg);
         }

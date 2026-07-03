@@ -19,47 +19,128 @@
 //! - `store_i32_8`, `store_i32_16`
 //! - `store_i64_8`, `store_i64_16`, `store_i64_32`
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use mpz_fields::gf2_128::Gf2_128;
 
-use crate::auth::{Bit, Byte, F32, F64, I32, I64, Wire};
+use crate::auth::{Bit, Byte, F32, F64, I32, I64};
+
+/// Read-only memory layers shared by every worker in a pass: the chunk-initial
+/// base bytes plus each segment boundary's committed memory delta, oldest
+/// first. Memory has no reclaim semantics, so a later write simply shadows an
+/// earlier one.
+#[derive(Debug, Clone)]
+pub struct SharedMemory<W = Gf2_128> {
+    base: Arc<HashMap<u32, Byte<W>>>,
+    deltas: Vec<HashMap<u32, Byte<W>>>,
+}
+
+impl<W: Copy> SharedMemory<W> {
+    /// Begin a shared layer set from `base`'s bytes, shared (not copied).
+    pub fn new(base: &LinearMemory<W>) -> Self {
+        Self {
+            base: Arc::clone(&base.own),
+            deltas: Vec::new(),
+        }
+    }
+
+    /// Append the next boundary's memory delta.
+    pub fn push(&mut self, delta: HashMap<u32, Byte<W>>) {
+        self.deltas.push(delta);
+    }
+
+    /// Read `addr` across `deltas[..upto]` (newest first) then the base.
+    fn get(&self, addr: u32, upto: usize) -> Option<&Byte<W>> {
+        self.deltas[..upto]
+            .iter()
+            .rev()
+            .find_map(|d| d.get(&addr))
+            .or_else(|| self.base.get(&addr))
+    }
+}
 
 /// Sparse byte-addressed linear memory keyed by absolute byte address,
-/// storing one [`Byte<W>`] per tainted address. Carries the public-0 and
-/// public-1 [`Bit<W>`]s used to fill extensions and encode public bytes.
+/// storing one [`Byte<W>`] per tainted address. Either a *plain* store (the
+/// carried chunk memory, whose `own` map holds every byte) or a *layered*
+/// worker seed: an empty `own` overlay above a shared [`SharedMemory`]. Reads
+/// fall through `own` → newest visible delta → … → base; writes land in `own`.
+/// Carries the public-0 and public-1 [`Bit<W>`]s used to fill extensions and
+/// encode public bytes.
 #[derive(Debug, Clone)]
 pub struct LinearMemory<W = Gf2_128> {
-    inner: HashMap<u32, Byte<W>>,
+    own: Arc<HashMap<u32, Byte<W>>>,
+    shared: Option<(Arc<SharedMemory<W>>, usize)>,
     zero: Bit<W>,
     one: Bit<W>,
 }
 
-impl<W: Wire> LinearMemory<W> {
+impl<W: Copy> LinearMemory<W> {
     /// Create an empty memory whose public-0 and public-1 wires are
     /// `zero` and `one`.
     pub fn new(zero: Bit<W>, one: Bit<W>) -> Self {
         Self {
-            inner: HashMap::new(),
+            own: Arc::new(HashMap::new()),
+            shared: None,
             zero,
             one,
         }
     }
 
-    /// Set (or overwrite) the byte at the absolute address `addr`.
-    pub fn set_byte(&mut self, addr: u32, byte: Byte<W>) {
-        self.inner.insert(addr, byte);
+    /// A layered worker memory: an empty overlay above `shared`, seeing its
+    /// first `upto` deltas, reusing this memory's public-0/1 wires.
+    pub fn layered(&self, shared: Arc<SharedMemory<W>>, upto: usize) -> Self {
+        Self {
+            own: Arc::new(HashMap::new()),
+            shared: Some((shared, upto)),
+            zero: self.zero,
+            one: self.one,
+        }
     }
 
-    /// Borrow the byte at `addr`, if any.
+    /// Flatten a layered memory into a plain one, materialising base + visible
+    /// deltas + own overlay into a single map. A no-op for a plain store.
+    pub fn flatten(self) -> Self {
+        let Some((shared, upto)) = self.shared else {
+            return self;
+        };
+        let mut map: HashMap<u32, Byte<W>> = (*shared.base).clone();
+        for delta in &shared.deltas[..upto] {
+            for (a, b) in delta.iter() {
+                map.insert(*a, *b);
+            }
+        }
+        for (a, b) in self.own.iter() {
+            map.insert(*a, *b);
+        }
+        Self {
+            own: Arc::new(map),
+            shared: None,
+            zero: self.zero,
+            one: self.one,
+        }
+    }
+
+    /// Set (or overwrite) the byte at the absolute address `addr`.
+    pub fn set_byte(&mut self, addr: u32, byte: Byte<W>) {
+        Arc::make_mut(&mut self.own).insert(addr, byte);
+    }
+
+    /// Borrow the byte at `addr`, falling through to the shared layers.
     pub fn get_byte(&self, addr: u32) -> Option<&Byte<W>> {
-        self.inner.get(&addr)
+        if let Some(b) = self.own.get(&addr) {
+            return Some(b);
+        }
+        match &self.shared {
+            Some((shared, upto)) => shared.get(addr, *upto),
+            None => None,
+        }
     }
 
     /// Store `val` as a public byte at `addr`, encoding each bit with the
     /// memory's public-0/public-1 wires (LSB first).
     pub fn set_public_byte(&mut self, addr: u32, val: u8) {
-        self.inner.insert(addr, self.public_byte(val));
+        let byte = self.public_byte(val);
+        Arc::make_mut(&mut self.own).insert(addr, byte);
     }
 
     /// Build (without storing) a public byte holding `val`, encoding each bit
@@ -83,7 +164,7 @@ impl<W: Wire> LinearMemory<W> {
 // needed, no nonlinear gates are emitted. Loads return `None` if
 // any required byte is absent.
 
-impl<W: Wire> LinearMemory<W> {
+impl<W: Copy> LinearMemory<W> {
     /// `i32.load`: 4 little-endian bytes → [`I32`].
     pub fn load_i32(&self, addr: u32) -> Option<I32<W>> {
         self.load_i32_mixed(addr, 0, !0)
@@ -369,7 +450,7 @@ impl<W: Wire> LinearMemory<W> {
     /// committed byte.
     fn mixed_byte(&self, addr: u32, i: usize, concrete: u64, symbolic_mask: u8) -> Option<Byte<W>> {
         if symbolic_mask & (1 << i) != 0 {
-            self.inner.get(&(addr + i as u32)).copied()
+            self.get_byte(addr + i as u32).copied()
         } else {
             Some(self.public_byte((concrete >> (i * 8)) as u8))
         }
@@ -423,8 +504,9 @@ impl<W: Wire> LinearMemory<W> {
 
     /// Write `bytes.len()` consecutive bytes starting at `addr`.
     fn write_bytes(&mut self, addr: u32, bytes: &[Byte<W>]) {
+        let own = Arc::make_mut(&mut self.own);
         for (i, byte) in bytes.iter().enumerate() {
-            self.inner.insert(addr + i as u32, *byte);
+            own.insert(addr + i as u32, *byte);
         }
     }
 }

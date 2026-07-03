@@ -72,7 +72,6 @@ impl Memory {
         let current_pages = (self.data.len() / 65536) as u32;
         let new_size = self.data.len() + (delta_pages as usize * 65536);
 
-        // WebAssembly spec: memory can grow up to 2^16 pages (4 GiB)
         if new_size as u64 > (1u64 << 16) * 65536 {
             return Err(Trap::MemoryOutOfBounds);
         }
@@ -202,7 +201,7 @@ mod tests {
     #[test]
     fn test_memory_creation() {
         let mem = Memory::new(1, None).unwrap();
-        assert_eq!(mem.len(), 65536); // 1 page = 64 KiB
+        assert_eq!(mem.len(), 65536);
         assert_eq!(mem.size_pages(), 1);
     }
 
@@ -228,7 +227,6 @@ mod tests {
 
     #[test]
     fn test_memory_too_large() {
-        // Trying to create memory larger than 4 GiB should fail
         assert!(Memory::new(65537, None).is_err());
     }
 
@@ -267,9 +265,7 @@ mod tests {
     fn test_read_i32_partial_8bit() {
         let mut mem = Memory::new(1, None).unwrap();
         mem.write_bytes(0, &[0xFF]).unwrap();
-        // Signed: 0xFF as i8 = -1, extended to i32
         assert_eq!(mem.read_i32_partial(0, 1, true).unwrap(), -1);
-        // Unsigned: 0xFF as u8 = 255
         assert_eq!(mem.read_i32_partial(0, 1, false).unwrap(), 255);
     }
 
@@ -277,9 +273,7 @@ mod tests {
     fn test_read_i32_partial_16bit() {
         let mut mem = Memory::new(1, None).unwrap();
         mem.write_bytes(0, &[0xFF, 0xFF]).unwrap();
-        // Signed: 0xFFFF as i16 = -1
         assert_eq!(mem.read_i32_partial(0, 2, true).unwrap(), -1);
-        // Unsigned: 0xFFFF as u16 = 65535
         assert_eq!(mem.read_i32_partial(0, 2, false).unwrap(), 65535);
     }
 
@@ -287,17 +281,14 @@ mod tests {
     fn test_read_i64_partial() {
         let mut mem = Memory::new(1, None).unwrap();
         mem.write_bytes(0, &[0xFF, 0xFF, 0xFF, 0xFF]).unwrap();
-        // Signed: 0xFFFFFFFF as i32 = -1, extended to i64
         assert_eq!(mem.read_i64_partial(0, 4, true).unwrap(), -1);
-        // Unsigned: 0xFFFFFFFF as u32 = 4294967295
         assert_eq!(mem.read_i64_partial(0, 4, false).unwrap(), 4294967295);
     }
 
     #[test]
     fn test_read_out_of_bounds() {
-        let mem = Memory::new(1, None).unwrap(); // 64KB
+        let mem = Memory::new(1, None).unwrap();
 
-        // Reading past end should fail
         assert!(mem.read_i32(65536).is_err());
         assert!(mem.read_i64(65536).is_err());
     }

@@ -6,9 +6,7 @@
 //! the LSB-of-MAC pointer-bit convention (the LSB of the inner
 //! `Gf2_128` carries the authenticated bit value).
 //!
-//! The wire type only has to satisfy [`Wire`] — a purely structural
-//! bound (copy, addition, and the zerocopy traits needed to view a
-//! `[Bit<W>]` as a raw `[W]`). Everything protocol-specific — the
+//! The wire type only has to be `Copy`. Everything protocol-specific — the
 //! [`MAC_ZERO`]/[`MAC_ONE`] constants, the pointer-bit accessor, the
 //! `u128` constructor, and the `Default` encoding of a public-zero wire
 //! — lives only on the concrete `Bit<Gf2_128>` instantiation.
@@ -24,18 +22,9 @@
 //! values. Callers that need those supply them explicitly (see
 //! [`LinearMemory::new`](crate::LinearMemory::new)).
 
-use mpz_fields::gf2_128::Gf2_128;
+use mpz_fields::{gf2::Gf2, gf2_128::Gf2_128};
 use mpz_vm_ir::ValType;
 use thiserror::Error;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
-
-/// Structural requirements on a wire type: it must be `Copy` and
-/// zerocopy-castable so a `[Bit<W>]` can be viewed as a raw `[W]` at the
-/// boundary with crates that work in raw wires. Blanket-implemented for
-/// every conforming type.
-pub trait Wire: Copy + FromBytes + IntoBytes + Immutable + KnownLayout {}
-
-impl<W> Wire for W where W: Copy + FromBytes + IntoBytes + Immutable + KnownLayout {}
 
 /// Per-bit authenticated value over wire type `W`. `repr(transparent)`
 /// over `W` with the matching zerocopy derives, so an array of `Bit<W>`s
@@ -53,21 +42,6 @@ impl<W> Wire for W where W: Copy + FromBytes + IntoBytes + Immutable + KnownLayo
     zerocopy::KnownLayout,
 )]
 pub struct Bit<W = Gf2_128>(pub W);
-
-impl<W: Wire> Bit<W> {
-    /// View a slice of `Bit<W>` as raw `W` without copying, for handing
-    /// wires to crates that operate on raw `W` directly. `Bit<W>` is
-    /// `repr(transparent)` over `W`, so the cast is layout-preserving and
-    /// infallible.
-    pub(crate) fn cast_slice(bits: &[Bit<W>]) -> &[W] {
-        <[W]>::ref_from_bytes(bits.as_bytes()).expect("Bit is repr(transparent) over W")
-    }
-
-    /// Inverse of [`Bit::cast_slice`]: view raw `W` wires as `Bit<W>`s.
-    pub(crate) fn wrap_slice(raw: &[W]) -> &[Bit<W>] {
-        <[Bit<W>]>::ref_from_bytes(raw.as_bytes()).expect("Bit is repr(transparent) over W")
-    }
-}
 
 impl<W> From<W> for Bit<W> {
     fn from(w: W) -> Self {
@@ -145,7 +119,7 @@ macro_rules! wasm_value {
         )]
         pub struct $name<W = Gf2_128>(pub [Bit<W>; $bits]);
 
-        impl<W: Wire> $name<W> {
+        impl<W: Copy> $name<W> {
             /// Bit-width of this value type.
             pub const WIDTH: usize = $bits;
             /// Byte-width of this value type.
@@ -179,21 +153,19 @@ macro_rules! wasm_value {
             /// to a `Context` that operates on raw `W`. The inverse is
             /// `From<[W; WIDTH]>`.
             pub fn to_wires(&self) -> [W; $bits] {
-                Bit::cast_slice(&self.0)
-                    .try_into()
-                    .expect("slice is WIDTH wide")
+                self.0.map(|bit| bit.0)
             }
         }
 
-        impl<W: Wire> From<$name<W>> for AuthValue<W> {
+        impl<W: Copy> From<$name<W>> for AuthValue<W> {
             fn from(v: $name<W>) -> Self {
                 AuthValue::$name(v)
             }
         }
 
-        impl<W: Wire> From<[W; $bits]> for $name<W> {
+        impl<W: Copy> From<[W; $bits]> for $name<W> {
             fn from(wires: [W; $bits]) -> Self {
-                Self(Bit::wrap_slice(&wires).try_into().expect("slice is WIDTH wide"))
+                Self(wires.map(Bit))
             }
         }
     };
@@ -203,6 +175,44 @@ wasm_value!(I32, 32, 4, ValType::I32);
 wasm_value!(I64, 64, 8, ValType::I64);
 wasm_value!(F32, 32, 4, ValType::F32);
 wasm_value!(F64, 64, 8, ValType::F64);
+
+/// Spreads a native `i32` into a cleartext-bit [`I32`], LSB first.
+impl From<i32> for I32<Gf2> {
+    fn from(value: i32) -> Self {
+        I32(core::array::from_fn(|i| Bit(Gf2((value >> i) & 1 != 0))))
+    }
+}
+
+/// Reads a cleartext-bit [`I32`] back into a native `i32`, LSB first.
+impl From<I32<Gf2>> for i32 {
+    fn from(value: I32<Gf2>) -> Self {
+        value
+            .0
+            .iter()
+            .enumerate()
+            .filter(|(_, bit)| bit.0.0)
+            .fold(0, |acc, (i, _)| acc | (1 << i))
+    }
+}
+
+/// Spreads a native `i64` into a cleartext-bit [`I64`], LSB first.
+impl From<i64> for I64<Gf2> {
+    fn from(value: i64) -> Self {
+        I64(core::array::from_fn(|i| Bit(Gf2((value >> i) & 1 != 0))))
+    }
+}
+
+/// Reads a cleartext-bit [`I64`] back into a native `i64`, LSB first.
+impl From<I64<Gf2>> for i64 {
+    fn from(value: I64<Gf2>) -> Self {
+        value
+            .0
+            .iter()
+            .enumerate()
+            .filter(|(_, bit)| bit.0.0)
+            .fold(0, |acc, (i, _)| acc | (1 << i))
+    }
+}
 
 /// Authenticated register value: a typed bundle of [`Bit`]s mirroring
 /// [`mpz_vm_core::value::Value`]. The variant pins both the bit-width
@@ -232,7 +242,7 @@ pub struct AuthValueType {
     pub got: ValType,
 }
 
-impl<W: Wire> AuthValue<W> {
+impl<W: Copy> AuthValue<W> {
     /// WASM type of the underlying value.
     pub fn ty(&self) -> ValType {
         match self {
@@ -378,17 +388,6 @@ mod tests {
             assert_eq!(av.width(), w);
             assert_eq!(av.bits().len(), w);
         }
-    }
-
-    #[test]
-    fn cast_slice_round_trips() {
-        let bits: Vec<Bit> = (0..8).map(|i| bit(i as u128)).collect();
-        let raw = Bit::cast_slice(&bits);
-        assert_eq!(raw.len(), bits.len());
-        for (b, g) in bits.iter().zip(raw) {
-            assert_eq!(&b.0, g);
-        }
-        assert_eq!(Bit::wrap_slice(raw), bits.as_slice());
     }
 
     // -------- newtype tests --------

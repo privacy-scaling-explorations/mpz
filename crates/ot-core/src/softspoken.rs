@@ -275,8 +275,16 @@ mod tests {
         receiver_seeds: [[Block; 2]; CSP],
     ) {
         // Small batch so the larger `count` cases span multiple extends.
-        let sender_config = SenderConfig::builder().k(k).batch_size(2048).build().unwrap();
-        let receiver_config = ReceiverConfig::builder().k(k).batch_size(2048).build().unwrap();
+        let sender_config = SenderConfig::builder()
+            .k(k)
+            .batch_size(2048)
+            .build()
+            .unwrap();
+        let receiver_config = ReceiverConfig::builder()
+            .k(k)
+            .batch_size(2048)
+            .build()
+            .unwrap();
 
         let sender = Sender::new(sender_config, delta);
         let receiver = Receiver::new(receiver_config);

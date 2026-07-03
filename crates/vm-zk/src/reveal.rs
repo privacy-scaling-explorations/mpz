@@ -56,11 +56,14 @@ where
     Ok(())
 }
 
-/// Opens the `bytes` at `[ptr, ptr + bytes.len())` against their committed
-/// wires, asserting each byte's MAC equals the disclosed value.
-pub(crate) fn assert_bytes<C>(exec: &mut C, auth: &AuthState, ptr: u32, bytes: &[u8]) -> Result<()>
+pub(crate) fn assert_bytes<C>(
+    exec: &mut C,
+    auth: &AuthState<C::Wire>,
+    ptr: u32,
+    bytes: &[u8],
+) -> Result<()>
 where
-    C: Context<Wire = Gf2_128, Field = Gf2>,
+    C: Context<Field = Gf2>,
     C::Error: std::fmt::Debug,
 {
     for (i, &b) in bytes.iter().enumerate() {
@@ -69,9 +72,9 @@ where
     Ok(())
 }
 
-fn assert_byte<C>(exec: &mut C, auth: &AuthState, addr: u32, value: u8) -> Result<()>
+fn assert_byte<C>(exec: &mut C, auth: &AuthState<C::Wire>, addr: u32, value: u8) -> Result<()>
 where
-    C: Context<Wire = Gf2_128, Field = Gf2>,
+    C: Context<Field = Gf2>,
     C::Error: std::fmt::Debug,
 {
     let byte = auth

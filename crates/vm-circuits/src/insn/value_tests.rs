@@ -1,74 +1,63 @@
 use super::*;
 use mpz_circuits::Context;
-use mpz_fields::{gf2::Gf2, gf2_128::Gf2_128};
+use mpz_fields::gf2::Gf2;
 use mpz_vm_memory::{I32, I64};
 
 struct EvalCtx;
 
 impl Context for EvalCtx {
     type Error = ();
-    type Wire = Gf2_128;
+    type Wire = Gf2;
     type Field = Gf2;
 
-    fn add(&mut self, a: Gf2_128, b: Gf2_128) -> Gf2_128 {
+    fn add(&mut self, a: Gf2, b: Gf2) -> Gf2 {
         a + b
     }
 
-    fn sub(&mut self, a: Gf2_128, b: Gf2_128) -> Gf2_128 {
-        a + b
+    fn sub(&mut self, a: Gf2, b: Gf2) -> Gf2 {
+        a - b
     }
 
-    fn mul(&mut self, a: Gf2_128, b: Gf2_128) -> Gf2_128 {
+    fn mul(&mut self, a: Gf2, b: Gf2) -> Gf2 {
         a * b
     }
 
-    fn constant(&mut self, v: Gf2) -> Gf2_128 {
-        if v.0 { Gf2_128::ONE } else { Gf2_128::ZERO }
+    fn constant(&mut self, v: Gf2) -> Gf2 {
+        v
     }
 
-    fn assert_const(&mut self, v: Gf2_128, expected: Gf2) -> Result<(), ()> {
-        let exp = if expected.0 {
-            Gf2_128::ONE
-        } else {
-            Gf2_128::ZERO
-        };
-        if v == exp { Ok(()) } else { Err(()) }
+    fn assert_const(&mut self, v: Gf2, expected: Gf2) -> Result<(), ()> {
+        if v == expected { Ok(()) } else { Err(()) }
     }
 }
 
-fn wires<const N: usize>(v: u64) -> [Gf2_128; N] {
-    let mut w = [Gf2_128::ZERO; N];
-    for (i, wi) in w.iter_mut().enumerate() {
-        if (v >> i) & 1 == 1 {
-            *wi = Gf2_128::ONE;
-        }
-    }
-    w
+fn wires<const N: usize>(v: u64) -> [Gf2; N] {
+    core::array::from_fn(|i| Gf2((v >> i) & 1 == 1))
 }
 
-fn read<const N: usize>(w: [Gf2_128; N]) -> u64 {
+fn read<const N: usize>(w: [Gf2; N]) -> u64 {
     let mut v = 0u64;
     for (i, wi) in w.iter().enumerate() {
-        if *wi == Gf2_128::ONE {
+        if wi.0 {
             v |= 1u64 << i;
         }
     }
     v
 }
 
-fn i32_in(v: u32) -> I32 {
+fn i32_in(v: u32) -> I32<Gf2> {
     I32::from(wires::<32>(v as u64))
 }
 
-fn i64_in(v: u64) -> I64 {
+fn i64_in(v: u64) -> I64<Gf2> {
     I64::from(wires::<64>(v))
 }
 
-fn i32_out(x: I32) -> u32 {
+fn i32_out(x: I32<Gf2>) -> u32 {
     read(x.to_wires()) as u32
 }
 
-fn i64_out(x: I64) -> u64 {
+fn i64_out(x: I64<Gf2>) -> u64 {
     read(x.to_wires())
 }
 

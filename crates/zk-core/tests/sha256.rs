@@ -1,7 +1,7 @@
 //! End-to-end integration: build the SHA-256 compression function as
 //! a boolean circuit written against `zk_core::circuit::Context`,
 //! then drive it through the witness-mode evaluator (sanity vs the
-//! `sha2` crate) and through the [`Prover`] / [`Verifier`] pair
+//! `sha2` crate) and through the [`Accumulate`] / [`Verifier`] pair
 //! against a simulated sVOLE tape, verifying that the batch
 //! consistency check accepts.
 
@@ -16,7 +16,9 @@ use mpz_ot_core::ideal::rcot::IdealRCOT;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use rand_chacha::ChaCha12Rng;
 
-use mpz_zk_core::{Commit, Proof, Prover, ProverOutput, Verifier, VerifierOutput, vope_receiver, vope_sender};
+use mpz_zk_core::{
+    Accumulate, Proof, ProverOutput, Verifier, VerifierOutput, Witness, vope_receiver, vope_sender,
+};
 
 const VOPE_COST: usize = 128;
 
@@ -134,7 +136,7 @@ fn sha256_quicksilver_batch_check_accepts() {
         .collect();
 
     // Gate tape slices (caller-owned). `gate_masks` is mutated in
-    // place by the prover's commit pass: after `finish` it holds the
+    // place by the prover's witness pass: after `finish` it holds the
     // masked witness adjust bits.
     let mut gate_masks: Vec<bool> = choices[input_count..main_cost].to_vec();
     let gate_macs: Vec<Gf2_128> = macs[input_count..main_cost].to_vec();
@@ -143,15 +145,20 @@ fn sha256_quicksilver_batch_check_accepts() {
     let msg_p: [Gf2_128; 512] = core::array::from_fn(|i| input_mac_wires[i]);
     let state_p: [Gf2_128; 256] = core::array::from_fn(|i| input_mac_wires[512 + i]);
 
-    // Commit pass: adjusts `gate_masks` in place, touching no MACs.
-    let mut commit = Commit::new(&mut gate_masks);
-    let _ = sha256_compress(&mut commit, msg_p, state_p);
+    // Witness pass: cleartext bit wires; adjusts `gate_masks` in place,
+    // touching no MACs.
+    let msg_b: [Gf2; 512] = core::array::from_fn(|i| Gf2(input_bits[i]));
+    let state_b: [Gf2; 256] = core::array::from_fn(|i| Gf2(input_bits[512 + i]));
+    let mut commit = Witness::new(&mut gate_masks);
+    let _ = sha256_compress(&mut commit, msg_b, state_b);
     commit.finish().expect("commit finish");
 
     // Accumulate pass: re-evaluates the circuit, folding the proof.
-    let mut prover = Prover::committed(&gate_macs).accumulate(ChaCha12Rng::from_seed(chi));
+    let mut prover = Accumulate::new(&gate_macs, ChaCha12Rng::from_seed(chi));
     let prover_out = sha256_compress(&mut prover, msg_p, state_p);
-    let ProverOutput { u, v, assertions, .. } = prover.finish().expect("accumulate finish");
+    let ProverOutput {
+        u, v, assertions, ..
+    } = prover.finish().expect("accumulate finish");
 
     let (a_0, a_1) = vope_receiver(&vope_choices, &vope_ev);
     let proof = Proof {
@@ -173,12 +180,16 @@ fn sha256_quicksilver_batch_check_accepts() {
 
     let gate_keys: Vec<Gf2_128> = raw_keys[input_count..main_cost].to_vec();
 
-    let verifier = Verifier::new(delta, &gate_keys, &gate_masks).expect("new");
-    let mut verifier = verifier.accumulate(ChaCha12Rng::from_seed(chi));
+    let mut verifier =
+        Verifier::new(delta, &gate_keys, &gate_masks, ChaCha12Rng::from_seed(chi)).expect("new");
     let msg_v: [Gf2_128; 512] = core::array::from_fn(|i| input_key_wires[i]);
     let state_v: [Gf2_128; 256] = core::array::from_fn(|i| input_key_wires[512 + i]);
     let verifier_out = sha256_compress(&mut verifier, msg_v, state_v);
-    let VerifierOutput { w, assertions: v_assertions, .. } = verifier.finish().expect("finish");
+    let VerifierOutput {
+        w,
+        assertions: v_assertions,
+        ..
+    } = verifier.finish().expect("finish");
 
     // Output IT-MAC sanity: MAC == key + b·delta for each output bit.
     let expected_bits = sha2_compress_out_bits(msg, H0);

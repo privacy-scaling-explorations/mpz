@@ -46,7 +46,8 @@ struct RecordedData {
     cot_seed: Block,
     /// Seed for Ferret sender.
     sender_seed: Block,
-    /// Correlations actually produced (OT_COUNT rounded up to whole iterations).
+    /// Correlations actually produced (OT_COUNT rounded up to whole
+    /// iterations).
     actual_count: usize,
 }
 
@@ -149,7 +150,8 @@ struct RecordedDataMt {
     cot_seed: Block,
     /// Seed for Ferret sender.
     sender_seed: Block,
-    /// Correlations actually produced (OT_COUNT rounded up to whole iterations).
+    /// Correlations actually produced (OT_COUNT rounded up to whole
+    /// iterations).
     actual_count: usize,
 }
 

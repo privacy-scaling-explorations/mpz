@@ -27,6 +27,7 @@ unsafe extern "C" {
 #[link(wasm_import_module = "crypto")]
 unsafe extern "C" {
     /// Compresses the 64-byte block at `block_ptr` into the 8-word (32-byte)
-    /// state at `state_ptr`, in place: `*state = sha256_compress(*block, *state)`.
+    /// state at `state_ptr`, in place: `*state = sha256_compress(*block,
+    /// *state)`.
     pub fn sha256_compress(state_ptr: i32, block_ptr: i32);
 }

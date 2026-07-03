@@ -1,11 +1,3 @@
-//! WebAssembly spec-conformance tests for the zkVM, via the shared
-//! [`mpz_vm_test_harness`] harness.
-//!
-//! `spec_all` runs the entire WASM core spec suite through the real
-//! prover/verifier protocol. The zkVM supports only a subset of WebAssembly, so
-//! the harness is configured to treat unsupported ops, private control flow,
-//! and symbolic value/address errors as expected skips rather than failures.
-
 use futures::{executor::block_on, future::try_join};
 use mpz_common::context::test_st_context;
 use mpz_core::Block;
@@ -16,7 +8,6 @@ use mpz_vm_test_harness::{SpecConfig, SpecVm, run_suite, suites};
 use mpz_vm_zk::{Config, Prover, Verifier, ZkVmError};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
-/// A prover/verifier pair wired over ideal sVOLE.
 struct ZkPair {
     prover: Prover<IdealRCOTReceiver>,
     verifier: Verifier<IdealRCOTSender>,
@@ -26,12 +17,6 @@ impl SpecVm for ZkPair {
     type Error = ZkVmError;
 
     fn variants() -> Vec<String> {
-        // Default (unbounded chunk) plus a small-cap variant that drives the
-        // whole spec corpus through multi-chunk proving (exercising
-        // cross-chunk authenticated-state liveness), plus a small
-        // segment-cost variant that drives it through multi-segment parallel
-        // proving (exercising boundary-commitment stitching) on every
-        // construct rather than on a few hand-written programs.
         vec![
             String::new(),
             "chunk64".to_string(),
@@ -70,8 +55,6 @@ impl SpecVm for ZkPair {
         params_b: Vec<Param>,
     ) -> Result<(Option<Value>, Option<Value>), ZkVmError> {
         let (mut ctx_p, mut ctx_v) = test_st_context(1024 * 1024);
-        // `try_join` (not `join`) so that if one party errors mid-protocol the
-        // other future is dropped rather than left blocked on a recv.
         block_on(try_join(
             self.prover.call(&mut ctx_p, func_idx, params_a),
             self.verifier.call(&mut ctx_v, func_idx, params_b),
@@ -89,8 +72,6 @@ fn zk_config() -> SpecConfig {
     }
 }
 
-/// Run the entire WASM spec suite against the zkVM through the real
-/// prover/verifier protocol.
 #[test]
 fn spec_all() {
     let (mut passed, mut failed, mut skipped) = (0usize, 0usize, 0usize);

@@ -2,11 +2,11 @@ use std::{collections::VecDeque, mem};
 
 use crate::{
     TransferId,
+    rcot::{RCOTSender, RCOTSenderOutput},
     softspoken::{
         CSP, Check, Corrections, Extend, SSP, SenderConfig, SenderError, check, fold,
         fold::TILE_TARGET_BLOCKS, ggm,
     },
-    rcot::{RCOTSender, RCOTSenderOutput},
 };
 
 use itybity::ToBits;
@@ -223,7 +223,11 @@ impl Sender<state::Extension> {
         let q = self.config.leaves();
 
         // Round up to a multiple of SSP (the rows sacrificed to the check).
-        let expected_count = self.config.batch_size().min(self.alloc).next_multiple_of(SSP);
+        let expected_count = self
+            .config
+            .batch_size()
+            .min(self.alloc)
+            .next_multiple_of(SSP);
         if count != expected_count {
             return Err(SenderError::CountMismatch {
                 expected: expected_count,

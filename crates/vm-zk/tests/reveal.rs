@@ -1,10 +1,3 @@
-//! End-to-end tests of guest VCI reveal: a program that reveals private data
-//! must disclose it to the blind verifier, with the disclosure bound to the
-//! committed witness. Each scalar case runs the same program on the prover
-//! (with a private input) and the blind verifier, asserting both return the
-//! expected value — so a verifier that failed to learn the reveal, or learned a
-//! wrong value, fails the test.
-
 mod common;
 
 use futures::{executor::block_on, future::join};
@@ -35,10 +28,6 @@ fn blind(v: &Value) -> Param {
     }
 }
 
-/// Runs `func` on the prover (with `inputs` as private parameters) and the
-/// blind verifier (the same inputs as blinds), under `chunk_cap`, asserting
-/// both return `expected`. The verifier assertion is the substance: it only
-/// holds if the reveal disclosed the value to the party that never held it.
 fn run(wat: &str, func: &str, inputs: &[Value], expected: Value, chunk_cap: Option<usize>) {
     common::init_tracing();
     let module = Module::parse(&wat::parse_str(wat).expect("valid WAT")).expect("valid module");
@@ -72,8 +61,6 @@ fn run(wat: &str, func: &str, inputs: &[Value], expected: Value, chunk_cap: Opti
     );
 }
 
-/// `disclose(x)` reveals its private argument and returns the revealed value:
-/// the baseline scalar disclosure.
 #[test]
 fn scalar_reveal_discloses_private_input() {
     let wat = r#"
@@ -86,10 +73,6 @@ fn scalar_reveal_discloses_private_input() {
     run(wat, "disclose", &[Value::I32(42)], Value::I32(42), None);
 }
 
-/// A revealed value is public, so the program can branch on it — the only way
-/// to get data-dependent control flow in zk-vm, which rejects private
-/// branching. If the reveal failed to make the value public, the verifier would
-/// block on the branch and the call would error.
 #[test]
 fn revealed_value_drives_a_branch() {
     let wat = r#"
@@ -107,10 +90,6 @@ fn revealed_value_drives_a_branch() {
     run(wat, "branch", &[Value::I32(3)], Value::I32(200), None);
 }
 
-/// With one op per chunk, the reveal and its wait land in different chunks, so
-/// the disclosed payload must survive across chunk boundaries: announced when
-/// the reveal is captured, retrieved when the wait is captured a chunk or more
-/// later.
 #[test]
 fn reveal_and_wait_span_chunks() {
     let wat = r#"
@@ -128,9 +107,6 @@ fn reveal_and_wait_span_chunks() {
     run(wat, "spanned", &[Value::I32(99)], Value::I32(99), Some(1));
 }
 
-/// Two reveals are staged before either wait, so they take distinct ids and the
-/// waits resolve them by handle — exercising the reveal-id keying and the
-/// one-action-per-import-call ordering that replay relies on.
 #[test]
 fn two_staged_reveals_resolve_by_handle() {
     let wat = r#"
@@ -152,10 +128,6 @@ fn two_staged_reveals_resolve_by_handle() {
     );
 }
 
-/// `disclose_bytes(x)` stores its private argument to memory, reveals those 4
-/// bytes, then reads them back. The blind verifier learns the bytes through the
-/// reveal (materialized into its memory on wait) and reads back the same value,
-/// with the open bound to the stored witness.
 #[test]
 fn byte_reveal_discloses_private_memory() {
     common::init_tracing();

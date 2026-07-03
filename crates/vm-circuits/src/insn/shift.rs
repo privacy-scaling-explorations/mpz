@@ -8,7 +8,11 @@ impl I32Shl {
     pub const COST: usize = 160;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I32, amount: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I32<C::Wire>,
+        amount: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         I32::from(crate::shl_n::<C, 32>(
             ctx,
             value.to_wires(),
@@ -16,7 +20,11 @@ impl I32Shl {
         ))
     }
 
-    pub fn eval_const_amount<C: CircuitContext>(ctx: &mut C, value: I32, amount: i32) -> I32 {
+    pub fn eval_const_amount<C: CircuitContext>(
+        ctx: &mut C,
+        value: I32<C::Wire>,
+        amount: i32,
+    ) -> I32<C::Wire> {
         let z = crate::zero(ctx);
         I32::from(crate::shift_left_const(
             value.to_wires(),
@@ -32,7 +40,11 @@ impl I32ShrS {
     pub const COST: usize = 160;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I32, amount: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I32<C::Wire>,
+        amount: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         I32::from(crate::shr_s_n::<C, 32>(
             ctx,
             value.to_wires(),
@@ -40,7 +52,7 @@ impl I32ShrS {
         ))
     }
 
-    pub fn eval_const_amount(value: I32, amount: i32) -> I32 {
+    pub fn eval_const_amount<W: Copy>(value: I32<W>, amount: i32) -> I32<W> {
         let w = value.to_wires();
         let sign = w[31];
         I32::from(crate::shift_right_const(
@@ -57,7 +69,11 @@ impl I32ShrU {
     pub const COST: usize = 160;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I32, amount: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I32<C::Wire>,
+        amount: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         I32::from(crate::shr_u_n::<C, 32>(
             ctx,
             value.to_wires(),
@@ -65,7 +81,11 @@ impl I32ShrU {
         ))
     }
 
-    pub fn eval_const_amount<C: CircuitContext>(ctx: &mut C, value: I32, amount: i32) -> I32 {
+    pub fn eval_const_amount<C: CircuitContext>(
+        ctx: &mut C,
+        value: I32<C::Wire>,
+        amount: i32,
+    ) -> I32<C::Wire> {
         let z = crate::zero(ctx);
         I32::from(crate::shift_right_const(
             value.to_wires(),
@@ -81,7 +101,11 @@ impl I32Rotl {
     pub const COST: usize = 160;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I32, amount: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I32<C::Wire>,
+        amount: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         I32::from(crate::rotl_n::<C, 32>(
             ctx,
             value.to_wires(),
@@ -89,7 +113,7 @@ impl I32Rotl {
         ))
     }
 
-    pub fn eval_const_amount(value: I32, amount: i32) -> I32 {
+    pub fn eval_const_amount<W: Copy>(value: I32<W>, amount: i32) -> I32<W> {
         I32::from(crate::rotate_left_const(
             value.to_wires(),
             (amount as u32 % 32) as usize,
@@ -103,7 +127,11 @@ impl I32Rotr {
     pub const COST: usize = 160;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I32, amount: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I32<C::Wire>,
+        amount: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         I32::from(crate::rotr_n::<C, 32>(
             ctx,
             value.to_wires(),
@@ -111,7 +139,7 @@ impl I32Rotr {
         ))
     }
 
-    pub fn eval_const_amount(value: I32, amount: i32) -> I32 {
+    pub fn eval_const_amount<W: Copy>(value: I32<W>, amount: i32) -> I32<W> {
         I32::from(crate::rotate_right_const(
             value.to_wires(),
             (amount as u32 % 32) as usize,
@@ -125,7 +153,11 @@ impl I64Shl {
     pub const COST: usize = 384;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I64, amount: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I64<C::Wire>,
+        amount: I64<C::Wire>,
+    ) -> I64<C::Wire> {
         I64::from(crate::shl_n::<C, 64>(
             ctx,
             value.to_wires(),
@@ -133,7 +165,11 @@ impl I64Shl {
         ))
     }
 
-    pub fn eval_const_amount<C: CircuitContext>(ctx: &mut C, value: I64, amount: i64) -> I64 {
+    pub fn eval_const_amount<C: CircuitContext>(
+        ctx: &mut C,
+        value: I64<C::Wire>,
+        amount: i64,
+    ) -> I64<C::Wire> {
         let z = crate::zero(ctx);
         I64::from(crate::shift_left_const(
             value.to_wires(),
@@ -149,7 +185,11 @@ impl I64ShrS {
     pub const COST: usize = 384;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I64, amount: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I64<C::Wire>,
+        amount: I64<C::Wire>,
+    ) -> I64<C::Wire> {
         I64::from(crate::shr_s_n::<C, 64>(
             ctx,
             value.to_wires(),
@@ -157,7 +197,7 @@ impl I64ShrS {
         ))
     }
 
-    pub fn eval_const_amount(value: I64, amount: i64) -> I64 {
+    pub fn eval_const_amount<W: Copy>(value: I64<W>, amount: i64) -> I64<W> {
         let w = value.to_wires();
         let sign = w[63];
         I64::from(crate::shift_right_const(
@@ -174,7 +214,11 @@ impl I64ShrU {
     pub const COST: usize = 384;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I64, amount: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I64<C::Wire>,
+        amount: I64<C::Wire>,
+    ) -> I64<C::Wire> {
         I64::from(crate::shr_u_n::<C, 64>(
             ctx,
             value.to_wires(),
@@ -182,7 +226,11 @@ impl I64ShrU {
         ))
     }
 
-    pub fn eval_const_amount<C: CircuitContext>(ctx: &mut C, value: I64, amount: i64) -> I64 {
+    pub fn eval_const_amount<C: CircuitContext>(
+        ctx: &mut C,
+        value: I64<C::Wire>,
+        amount: i64,
+    ) -> I64<C::Wire> {
         let z = crate::zero(ctx);
         I64::from(crate::shift_right_const(
             value.to_wires(),
@@ -198,7 +246,11 @@ impl I64Rotl {
     pub const COST: usize = 384;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I64, amount: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I64<C::Wire>,
+        amount: I64<C::Wire>,
+    ) -> I64<C::Wire> {
         I64::from(crate::rotl_n::<C, 64>(
             ctx,
             value.to_wires(),
@@ -206,7 +258,7 @@ impl I64Rotl {
         ))
     }
 
-    pub fn eval_const_amount(value: I64, amount: i64) -> I64 {
+    pub fn eval_const_amount<W: Copy>(value: I64<W>, amount: i64) -> I64<W> {
         I64::from(crate::rotate_left_const(
             value.to_wires(),
             (amount as u32 % 64) as usize,
@@ -220,7 +272,11 @@ impl I64Rotr {
     pub const COST: usize = 384;
     pub const COST_CONST_AMOUNT: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, value: I64, amount: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        value: I64<C::Wire>,
+        amount: I64<C::Wire>,
+    ) -> I64<C::Wire> {
         I64::from(crate::rotr_n::<C, 64>(
             ctx,
             value.to_wires(),
@@ -228,7 +284,7 @@ impl I64Rotr {
         ))
     }
 
-    pub fn eval_const_amount(value: I64, amount: i64) -> I64 {
+    pub fn eval_const_amount<W: Copy>(value: I64<W>, amount: i64) -> I64<W> {
         I64::from(crate::rotate_right_const(
             value.to_wires(),
             (amount as u32 % 64) as usize,

@@ -7,7 +7,7 @@ pub struct I32Eq;
 impl I32Eq {
     pub const COST: usize = 31;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32, b: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>, b: I32<C::Wire>) -> I32<C::Wire> {
         let bit = crate::eq_n::<C, 32>(ctx, a.to_wires(), b.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -18,7 +18,7 @@ pub struct I32Ne;
 impl I32Ne {
     pub const COST: usize = 31;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32, b: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>, b: I32<C::Wire>) -> I32<C::Wire> {
         let bit = crate::ne_n::<C, 32>(ctx, a.to_wires(), b.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -29,7 +29,11 @@ pub struct I32LtS;
 impl I32LtS {
     pub const COST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I32, right: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I32<C::Wire>,
+        right: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let bit = crate::lt_s_n::<C, 32>(ctx, left.to_wires(), right.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -40,7 +44,11 @@ pub struct I32LtU;
 impl I32LtU {
     pub const COST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I32, right: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I32<C::Wire>,
+        right: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let bit = crate::lt_u_n::<C, 32>(ctx, left.to_wires(), right.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -51,7 +59,11 @@ pub struct I32GtS;
 impl I32GtS {
     pub const COST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I32, right: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I32<C::Wire>,
+        right: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let bit = crate::lt_s_n::<C, 32>(ctx, right.to_wires(), left.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -62,7 +74,11 @@ pub struct I32GtU;
 impl I32GtU {
     pub const COST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I32, right: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I32<C::Wire>,
+        right: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let bit = crate::lt_u_n::<C, 32>(ctx, right.to_wires(), left.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -73,7 +89,11 @@ pub struct I32LeS;
 impl I32LeS {
     pub const COST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I32, right: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I32<C::Wire>,
+        right: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let gt = crate::lt_s_n::<C, 32>(ctx, right.to_wires(), left.to_wires());
         let bit = crate::not(ctx, gt);
         super::zero_extend_bit(ctx, bit)
@@ -85,7 +105,11 @@ pub struct I32LeU;
 impl I32LeU {
     pub const COST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I32, right: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I32<C::Wire>,
+        right: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let gt = crate::lt_u_n::<C, 32>(ctx, right.to_wires(), left.to_wires());
         let bit = crate::not(ctx, gt);
         super::zero_extend_bit(ctx, bit)
@@ -97,7 +121,11 @@ pub struct I32GeS;
 impl I32GeS {
     pub const COST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I32, right: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I32<C::Wire>,
+        right: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let lt = crate::lt_s_n::<C, 32>(ctx, left.to_wires(), right.to_wires());
         let bit = crate::not(ctx, lt);
         super::zero_extend_bit(ctx, bit)
@@ -109,7 +137,11 @@ pub struct I32GeU;
 impl I32GeU {
     pub const COST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I32, right: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I32<C::Wire>,
+        right: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let lt = crate::lt_u_n::<C, 32>(ctx, left.to_wires(), right.to_wires());
         let bit = crate::not(ctx, lt);
         super::zero_extend_bit(ctx, bit)
@@ -121,7 +153,7 @@ pub struct I32Eqz;
 impl I32Eqz {
     pub const COST: usize = 31;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>) -> I32<C::Wire> {
         let bit = crate::eqz_n::<C, 32>(ctx, a.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -132,7 +164,7 @@ pub struct I64Eq;
 impl I64Eq {
     pub const COST: usize = 63;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64, b: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>, b: I64<C::Wire>) -> I32<C::Wire> {
         let bit = crate::eq_n::<C, 64>(ctx, a.to_wires(), b.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -143,7 +175,7 @@ pub struct I64Ne;
 impl I64Ne {
     pub const COST: usize = 63;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64, b: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>, b: I64<C::Wire>) -> I32<C::Wire> {
         let bit = crate::ne_n::<C, 64>(ctx, a.to_wires(), b.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -154,7 +186,11 @@ pub struct I64LtS;
 impl I64LtS {
     pub const COST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I64, right: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I64<C::Wire>,
+        right: I64<C::Wire>,
+    ) -> I32<C::Wire> {
         let bit = crate::lt_s_n::<C, 64>(ctx, left.to_wires(), right.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -165,7 +201,11 @@ pub struct I64LtU;
 impl I64LtU {
     pub const COST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I64, right: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I64<C::Wire>,
+        right: I64<C::Wire>,
+    ) -> I32<C::Wire> {
         let bit = crate::lt_u_n::<C, 64>(ctx, left.to_wires(), right.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -176,7 +216,11 @@ pub struct I64GtS;
 impl I64GtS {
     pub const COST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I64, right: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I64<C::Wire>,
+        right: I64<C::Wire>,
+    ) -> I32<C::Wire> {
         let bit = crate::lt_s_n::<C, 64>(ctx, right.to_wires(), left.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -187,7 +231,11 @@ pub struct I64GtU;
 impl I64GtU {
     pub const COST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I64, right: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I64<C::Wire>,
+        right: I64<C::Wire>,
+    ) -> I32<C::Wire> {
         let bit = crate::lt_u_n::<C, 64>(ctx, right.to_wires(), left.to_wires());
         super::zero_extend_bit(ctx, bit)
     }
@@ -198,7 +246,11 @@ pub struct I64LeS;
 impl I64LeS {
     pub const COST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I64, right: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I64<C::Wire>,
+        right: I64<C::Wire>,
+    ) -> I32<C::Wire> {
         let gt = crate::lt_s_n::<C, 64>(ctx, right.to_wires(), left.to_wires());
         let bit = crate::not(ctx, gt);
         super::zero_extend_bit(ctx, bit)
@@ -210,7 +262,11 @@ pub struct I64LeU;
 impl I64LeU {
     pub const COST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I64, right: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I64<C::Wire>,
+        right: I64<C::Wire>,
+    ) -> I32<C::Wire> {
         let gt = crate::lt_u_n::<C, 64>(ctx, right.to_wires(), left.to_wires());
         let bit = crate::not(ctx, gt);
         super::zero_extend_bit(ctx, bit)
@@ -222,7 +278,11 @@ pub struct I64GeS;
 impl I64GeS {
     pub const COST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I64, right: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I64<C::Wire>,
+        right: I64<C::Wire>,
+    ) -> I32<C::Wire> {
         let lt = crate::lt_s_n::<C, 64>(ctx, left.to_wires(), right.to_wires());
         let bit = crate::not(ctx, lt);
         super::zero_extend_bit(ctx, bit)
@@ -234,7 +294,11 @@ pub struct I64GeU;
 impl I64GeU {
     pub const COST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, left: I64, right: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        left: I64<C::Wire>,
+        right: I64<C::Wire>,
+    ) -> I32<C::Wire> {
         let lt = crate::lt_u_n::<C, 64>(ctx, left.to_wires(), right.to_wires());
         let bit = crate::not(ctx, lt);
         super::zero_extend_bit(ctx, bit)
@@ -246,7 +310,7 @@ pub struct I64Eqz;
 impl I64Eqz {
     pub const COST: usize = 63;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>) -> I32<C::Wire> {
         let bit = crate::eqz_n::<C, 64>(ctx, a.to_wires());
         super::zero_extend_bit(ctx, bit)
     }

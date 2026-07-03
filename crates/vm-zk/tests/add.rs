@@ -1,8 +1,3 @@
-//! End-to-end integration test for the zero-authenticated-work path: an
-//! all-public, non-trapping call must not deadlock. Op/result correctness with
-//! private inputs is covered far more broadly by the shared spec harness
-//! (`tests/spec.rs`).
-
 mod common;
 
 use futures::{executor::block_on, future::join};
@@ -24,11 +19,6 @@ fn func_idx(module: &Module, name: &str) -> u32 {
         .expect("function should be exported")
 }
 
-// An all-public, non-trapping call does zero authenticated work (no committed
-// inputs, no gates), so both sides must skip the
-// allocate/commit/challenge/proof exchange in lockstep. `join` (not `try_join`)
-// and `block_on` give a hang nowhere to hide: if either side blocks, the test
-// never returns.
 #[test]
 fn test_add_public_no_deadlock() {
     common::init_tracing();

@@ -188,7 +188,13 @@ mod tests {
                 let punctured_sums: Vec<Gf2_128> = sums
                     .iter()
                     .enumerate()
-                    .map(|(i, &sum)| if (idx >> i) & 1 == 1 { sum } else { sum + delta })
+                    .map(|(i, &sum)| {
+                        if (idx >> i) & 1 == 1 {
+                            sum
+                        } else {
+                            sum + delta
+                        }
+                    })
                     .collect();
 
                 // Pre-fill with garbage: the expansion must not rely on a

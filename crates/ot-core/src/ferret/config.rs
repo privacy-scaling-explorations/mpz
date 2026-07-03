@@ -22,7 +22,8 @@ pub struct FerretConfig {
     #[builder(default = "true")]
     reserve_bootstrap: bool,
     /// Whether to serve small demands directly from the base COT instead of
-    /// running a full Ferret iteration. See [`FerretConfig::direct_passthrough`].
+    /// running a full Ferret iteration. See
+    /// [`FerretConfig::direct_passthrough`].
     #[builder(default = "true")]
     direct_passthrough: bool,
     #[builder(setter(custom), default = "Arc::new(default_parameter_selector)")]

@@ -23,6 +23,7 @@
 //!   [`StepResult::Blocked`] carrying a [`Pending`] request, which the embedder
 //!   satisfies with the matching `Thread::resolve_*` method.
 
+mod access_log;
 pub(crate) mod analysis;
 pub(crate) mod arithmetic;
 pub(crate) mod bitset;
@@ -35,6 +36,7 @@ pub mod thread;
 pub mod trap;
 pub mod value;
 
+pub use access_log::{Access, AccessAddr, AccessKind, AccessLog};
 pub use call::{Call, Param};
 pub use error::Error;
 pub use memory::Memory;

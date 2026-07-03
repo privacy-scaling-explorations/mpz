@@ -1,78 +1,29 @@
-//! Chunked capture of a thread's execution trace.
-//!
-//! [`capture_chunk`] drives a [`Thread`] forward, recording each emitted
-//! [`Directive`] until the chunk's gate-bit cap is reached, the thread
-//! completes, or it traps. Imported calls are serviced inline, with the reveal
-//! they carry recorded alongside the trace. The resulting [`ChunkCapture`]
-//! carries the trace, its accumulated gate/advice cost, and the terminal
-//! outcome (a return value or a [`TrapPoint`]).
-//!
-//! Both prover and verifier run this loop over the same program; driving them
-//! with the same module and inputs yields identical directive/frame skeletons,
-//! which is what lets the verifier check the prover's announced trace and trap.
-
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use mpz_vm_core::{
-    Directive, Global, Operand, Pending, Reg, StepResult, Thread, Trap, value::Value,
+    Directive, Global, Op, Operand, Pending, Reg, StepResult, Thread, Trap, value::Value,
 };
-use mpz_vm_ir::{Function, Module, StoreKind};
+use mpz_vm_ir::{Function, Module};
+
+use std::ops::Range;
 
 use crate::{
     cost,
     error::{Result, ZkVmError},
     host::{self, HostCallEvent, RevealPayload, RevealState},
-    memlog::{self, MemoryLog, Stored},
+    memlog::{self, ByteState},
+    segment::{BoundaryDelta, MemItem, ValItem},
 };
 
-/// Returns whether `func_idx` names an imported (host) function.
 pub(crate) fn is_import(module: &Module, func_idx: u32) -> bool {
     matches!(module.function(func_idx), Some(Function::Import(_)))
 }
 
-/// Returns whether `func_idx` names an import from the `crypto` host module
-/// (e.g. `crypto::sha256_compress`), serviced by the circuit precompile
-/// path rather than the `vc` reveal path.
 pub(crate) fn is_precompile(module: &Module, func_idx: u32) -> bool {
     matches!(
         module.function(func_idx),
         Some(Function::Import(import)) if import.module() == "crypto"
     )
-}
-
-/// Records a `sha256_compress` precompile's 32-byte in-place output into `log`,
-/// matching the action's path: symbolic bytes for the authenticated variant,
-/// public bytes for the public variant. Shared by capture and the segment scan
-/// so both derive the identical written-byte view (hence identical boundary
-/// layout). Byte-granular so a boundary cut commits exactly these 32 bytes.
-pub(crate) fn log_precompile_output(log: &mut MemoryLog, action: &HostCallEvent) {
-    match action {
-        HostCallEvent::Sha256Compress { state_ptr, .. } => {
-            for i in 0..32u32 {
-                log.record_store(StoreKind::I32Store8, state_ptr + i, Stored::Symbolic);
-            }
-        }
-        HostCallEvent::Sha256CompressPublic { state_ptr, digest } => {
-            for (i, b) in digest.iter().enumerate() {
-                log.record_store(
-                    StoreKind::I32Store8,
-                    state_ptr + i as u32,
-                    Stored::Public(Value::I32(*b as i32)),
-                );
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Capture-side accounting for a precompile call: budget the circuit gates
-/// (only the authenticated variant has any) and log its in-place output stores.
-fn account_precompile(cost: &mut usize, log: &mut MemoryLog, action: Option<&HostCallEvent>) {
-    let Some(action) = action else { return };
-    if matches!(action, HostCallEvent::Sha256Compress { .. }) {
-        *cost += cost::SHA256_COMPRESS_COST;
-    }
-    log_precompile_output(log, action);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,8 +32,6 @@ pub(crate) enum Role {
     Verifier,
 }
 
-/// Capture limits: the chunk's op-cost cap and the per-segment cost target.
-/// Both must match between the prover and verifier.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Limits {
     pub(crate) chunk_cap: Option<usize>,
@@ -96,45 +45,14 @@ pub(crate) struct TrapPoint {
     pub(crate) trap: Trap,
 }
 
-/// Plaintext state captured at a segment boundary, recorded by the prover so
-/// each segment's commit/accumulate workers can be seeded without walking the
-/// preceding segments.
-///
-/// The verifier records no snapshot: it derives the boundary *layout* from
-/// the directive skeleton (see [`segment`](crate::segment)) and obtains the
-/// committed values through the prover's adjustment bits.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Snapshot {
-    /// The thread's flat register file (absolute registers).
-    pub(crate) regs: Vec<Value>,
-    /// The module's globals, by global index.
-    pub(crate) globals: Vec<Value>,
-    /// Plaintext of every byte stored to since the previous mark (boundaries
-    /// are per-segment deltas).
-    pub(crate) mem: BTreeMap<u32, u8>,
-}
-
-/// A segment boundary: the trace splits *before* `directive_idx`.
-///
-/// The `sym_*`/`pub_mem` fields record the thread's taint state at the mark.
-/// Public computation updates registers, globals, and (untainted) memory
-/// without emitting directives, so an item written symbolically during the
-/// segment may be publicly overwritten by the time of the mark — its auth
-/// wire is then dead (every later use surfaces as a concrete operand) and
-/// must not be stitched. Taint symbolic-ness is identical across parties, so
-/// both record the same sets and derive the same boundary layout.
 #[derive(Clone, Debug)]
-pub(crate) struct SegmentMark {
-    pub(crate) directive_idx: usize,
-    /// Registers symbolic per the thread at the mark, ascending.
-    pub(crate) sym_regs: Vec<u32>,
-    /// Globals symbolic at the mark, ascending.
-    pub(crate) sym_globals: Vec<u32>,
-    /// Bytes written since the previous mark that are *not* symbolic at the
-    /// mark (publicly overwritten or revealed), ascending.
-    pub(crate) pub_mem: Vec<u32>,
-    /// Plaintext at the boundary; `None` on the verifier.
-    pub(crate) snapshot: Option<Snapshot>,
+pub(crate) struct SegmentInfo {
+    pub(crate) directives: Range<usize>,
+    pub(crate) reveals: Range<usize>,
+    pub(crate) log: Range<u64>,
+    pub(crate) bits: usize,
+    pub(crate) gates: usize,
+    pub(crate) boundary: Option<BoundaryDelta>,
 }
 
 pub(crate) struct ChunkCapture {
@@ -144,16 +62,38 @@ pub(crate) struct ChunkCapture {
     pub(crate) result: Option<Value>,
     pub(crate) result_symbolic: bool,
     pub(crate) trap: Option<TrapPoint>,
-    /// Reveal events, one per imported `Directive::Call` in `trace` and in the
-    /// same order, that replay opens against the authenticated state.
     pub(crate) reveal_actions: Vec<HostCallEvent>,
-    /// Payloads newly disclosed by reveals in this chunk, to announce (prover)
-    /// or already merged (verifier). Keyed by reveal id.
     pub(crate) reveals: BTreeMap<u32, RevealPayload>,
-    /// Segment boundaries inside `trace`, in ascending directive order. Both
-    /// sides produce identical `directive_idx` sequences since cost accrues
-    /// identically over identical skeletons.
-    pub(crate) marks: Vec<SegmentMark>,
+    pub(crate) segments: Vec<SegmentInfo>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish_segments(
+    mut segments: Vec<SegmentInfo>,
+    dir_start: usize,
+    rev_start: usize,
+    log_start: u64,
+    trace_len: usize,
+    reveal_len: usize,
+    log_end: u64,
+    bits: usize,
+    gates: usize,
+) -> Vec<SegmentInfo> {
+    if dir_start == trace_len && !segments.is_empty() {
+        let last = segments.last_mut().expect("non-empty");
+        last.boundary = None;
+        last.log.end = log_end;
+    } else {
+        segments.push(SegmentInfo {
+            directives: dir_start..trace_len,
+            reveals: rev_start..reveal_len,
+            log: log_start..log_end,
+            bits,
+            gates,
+            boundary: None,
+        });
+    }
+    segments
 }
 
 #[tracing::instrument(level = "debug", name = "capture", skip_all, fields(?role))]
@@ -170,20 +110,20 @@ pub(crate) fn capture_chunk(
     let mut cost: usize = 0;
     let mut reveal_actions: Vec<HostCallEvent> = Vec::new();
     let mut reveals: BTreeMap<u32, RevealPayload> = BTreeMap::new();
-    let mut marks: Vec<SegmentMark> = Vec::new();
-    // The chunk's memory accesses; each boundary snapshot reads the current
-    // plaintext of the bytes written since the previous mark, then drains the
-    // written view.
-    let mut log = MemoryLog::default();
+    let mut segments: Vec<SegmentInfo> = Vec::new();
+    let mut seg_dir_start = 0usize;
+    let mut seg_rev_start = 0usize;
+    let mut seg_log_start = global.access_log().expect("access log enabled").clock();
+    let mut seg_bits = 0usize;
+    let mut seg_gates = 0usize;
+    let mut seg_regs: BTreeSet<u32> = BTreeSet::new();
+    let mut seg_globals: BTreeSet<u32> = BTreeSet::new();
+    let mut seg_dropped: Vec<(Reg, u32)> = Vec::new();
     let mut next_mark = limits.segment_cost.unwrap_or(usize::MAX);
 
     loop {
         let directive = match thread.step(module, global)? {
             StepResult::Continue => continue,
-            // An imported call surfaces as a `Directive::Call`. Service it now —
-            // recording the reveal action and resolving the call — then push the
-            // directive so replay opens it in-order. Other directives fall
-            // through to cost accounting and the trace.
             StepResult::Directive(Directive::Call {
                 dst,
                 func_idx,
@@ -195,9 +135,6 @@ pub(crate) fn capture_chunk(
                         host::service_sha256_compress(role, global, &args)?;
                     reveal_actions.push(action);
                     thread.resolve_host_call(value, visibility)?;
-                    // Fall through (do not `continue`) so the tail budgets the
-                    // precompile's gates, logs its output stores, and runs the
-                    // mark/chunk-cap checks.
                     Directive::Call {
                         dst,
                         func_idx,
@@ -217,6 +154,9 @@ pub(crate) fn capture_chunk(
                     )?;
                     reveal_actions.push(action);
                     thread.resolve_host_call(value, visibility)?;
+                    if let Some(r) = reveal_written_reg(reveal_actions.last()) {
+                        seg_regs.insert(r);
+                    }
                     trace.push(Directive::Call {
                         dst,
                         func_idx,
@@ -226,18 +166,23 @@ pub(crate) fn capture_chunk(
                     continue;
                 }
             }
-            // A could-trap op (e.g. div/rem with an unheld operand) emits as an
-            // ordinary directive. `op_counter` was bumped past the op before
-            // `step` returned, so the emitted op sits at the announced index `i`
-            // when `op_counter() == i + 1`. This is the trapping op: validate it
-            // and end the chunk terminal — it is tape-free and never enters the
-            // trace.
             StepResult::Directive(d)
                 if let Some((i, reason)) = &announced_trap
                     && thread.op_counter() == *i + 1 =>
             {
                 validate_trap_directive(&d, reason)?;
-                trim_marks(&mut marks, trace.len());
+                let log_end = global.access_log().expect("access log enabled").clock();
+                let segments = finish_segments(
+                    segments,
+                    seg_dir_start,
+                    seg_rev_start,
+                    seg_log_start,
+                    trace.len(),
+                    reveal_actions.len(),
+                    log_end,
+                    seg_bits,
+                    seg_gates,
+                );
                 return Ok(ChunkCapture {
                     trace,
                     cost,
@@ -251,22 +196,15 @@ pub(crate) fn capture_chunk(
                     }),
                     reveal_actions,
                     reveals,
-                    marks,
+                    segments,
                 });
             }
             StepResult::Directive(d) => d,
-            // A could-trap op resolved to a trap by the stepping driver itself
-            // (the prover, or the verifier when the trap-determining operand is
-            // public). The trapping directive is not pushed into the trace: it
-            // is tape-free, consumes no cost, and rides on the capture for the
-            // separate trap-replay pass. The chunk ends terminal with no result.
             StepResult::Trapped {
                 index,
                 directive,
                 trap,
             } => {
-                // If the prover announced a trap index, a verifier reaching the
-                // trap locally must land on the same op.
                 if let Some((announced, _)) = &announced_trap
                     && *announced != index
                 {
@@ -274,7 +212,18 @@ pub(crate) fn capture_chunk(
                         "local trap at index {index} but prover announced {announced}"
                     )));
                 }
-                trim_marks(&mut marks, trace.len());
+                let log_end = global.access_log().expect("access log enabled").clock();
+                let segments = finish_segments(
+                    segments,
+                    seg_dir_start,
+                    seg_rev_start,
+                    seg_log_start,
+                    trace.len(),
+                    reveal_actions.len(),
+                    log_end,
+                    seg_bits,
+                    seg_gates,
+                );
                 return Ok(ChunkCapture {
                     trace,
                     cost,
@@ -288,22 +237,15 @@ pub(crate) fn capture_chunk(
                     }),
                     reveal_actions,
                     reveals,
-                    marks,
+                    segments,
                 });
             }
-            // Blocked on a condition the zk-vm does not support: private
-            // branching, indirect-call dispatch, and memory.grow all need a
-            // value fed back into execution. (A could-trap op no longer blocks —
-            // it emits as an ordinary directive and is matched by index below.)
             StepResult::Blocked(pending) => match pending {
                 Pending::Branch => {
                     return Err(ZkVmError::Unsupported(
                         "private branching not supported in zk-vm".into(),
                     ));
                 }
-                // Imported calls are serviced when their `Directive::Call` is
-                // emitted, so the thread is never stepped while a host call is
-                // unresolved here.
                 Pending::HostCall { .. } => {
                     return Err(ZkVmError::Internal(
                         "host call surfaced as blocked but should be serviced at its directive"
@@ -322,7 +264,18 @@ pub(crate) fn capture_chunk(
                 }
             },
             StepResult::Done { result, symbolic } => {
-                trim_marks(&mut marks, trace.len());
+                let log_end = global.access_log().expect("access log enabled").clock();
+                let segments = finish_segments(
+                    segments,
+                    seg_dir_start,
+                    seg_rev_start,
+                    seg_log_start,
+                    trace.len(),
+                    reveal_actions.len(),
+                    log_end,
+                    seg_bits,
+                    seg_gates,
+                );
                 return Ok(ChunkCapture {
                     trace,
                     cost,
@@ -332,81 +285,105 @@ pub(crate) fn capture_chunk(
                     trap: None,
                     reveal_actions,
                     reveals,
-                    marks,
+                    segments,
                 });
             }
         };
 
         match &directive {
             Directive::Op(op) => {
-                cost += cost::op_cost(op)?;
-                // Log accesses leniently: an unsupported (symbolic) address is
-                // replay's error to surface, at its natural protocol point.
+                let c = cost::op_cost(op)?;
+                cost += c;
+                seg_bits += c;
+                seg_gates += c - cost::op_advice_bits(op);
                 match op {
-                    mpz_vm_core::Op::Store {
-                        kind,
-                        addr,
-                        val,
-                        memarg,
-                    } => {
-                        if let Ok(eff) = memlog::eff_addr(addr, memarg) {
-                            let stored = match val {
-                                Operand::Concrete(v) => Stored::Public(*v),
-                                Operand::Symbol { .. } => Stored::Symbolic,
-                            };
-                            log.record_store(*kind, eff, stored);
-                        }
+                    Op::Copy { dst, .. }
+                    | Op::GlobalGet { dst, .. }
+                    | Op::Binary { dst, .. }
+                    | Op::Unary { dst, .. }
+                    | Op::Load { dst, .. } => {
+                        seg_regs.insert(dst.0);
                     }
-                    mpz_vm_core::Op::Load {
-                        kind,
-                        addr,
-                        memarg,
-                        symbolic_mask,
-                        ..
-                    } => {
-                        if let Ok(eff) = memlog::eff_addr(addr, memarg) {
-                            log.record_load(*kind, eff, *symbolic_mask);
-                        }
+                    Op::GlobalSet { global_idx, .. } => {
+                        seg_globals.insert(*global_idx);
                     }
                     _ => {}
                 }
             }
-            // A precompile call carries no `Op` cost; budget its circuit gates
-            // and log the 32-byte in-place output so boundaries commit it. The
-            // just-pushed action carries the path (authenticated vs public).
-            Directive::Call { func_idx, .. } if is_precompile(module, *func_idx) => {
-                account_precompile(&mut cost, &mut log, reveal_actions.last());
+            Directive::Call {
+                func_idx,
+                args,
+                param_base,
+                ..
+            } => {
+                if is_precompile(module, *func_idx) {
+                    if let Some(action) = reveal_actions.last() {
+                        if matches!(action, HostCallEvent::Sha256Compress { .. }) {
+                            cost += cost::SHA256_COMPRESS_COST;
+                            seg_bits += cost::SHA256_COMPRESS_COST;
+                            seg_gates += cost::SHA256_COMPRESS_COST;
+                        }
+                    }
+                } else if !is_import(module, *func_idx) {
+                    for (k, arg) in args.iter().enumerate() {
+                        if matches!(arg, Operand::Symbol { .. }) {
+                            seg_regs.insert(param_base.0 + k as u32);
+                        }
+                    }
+                }
             }
-            _ => {}
+            Directive::Return { dst, src, reclaim } => {
+                if let (Some(d), Some(_)) = (dst, src) {
+                    seg_regs.insert(d.0);
+                }
+                if let Some((base, count)) = reclaim {
+                    for r in base.0..base.0 + *count {
+                        seg_regs.remove(&r);
+                    }
+                    seg_dropped.push((*base, *count));
+                }
+            }
+            Directive::Branch {
+                cond: Some(Operand::Symbol { .. }),
+                ..
+            } => {
+                return Err(ZkVmError::Unsupported(
+                    "private branching not supported in zk-vm".into(),
+                ));
+            }
+            Directive::Branch { .. } => {}
         }
 
         trace.push(directive);
 
         if cost >= next_mark {
-            let snapshot = match role {
-                Role::Prover => Some(snapshot(global, thread, &log)?),
-                Role::Verifier => None,
-            };
-            let sym_regs = (0..thread.registers().len() as u32)
-                .filter(|&r| thread.is_register_symbolic(r))
-                .collect();
-            let sym_globals = (0..global.globals().len() as u32)
-                .filter(|&g| global.is_global_symbolic(g))
-                .collect();
-            let pub_mem = log
-                .written_addrs()
-                .filter(|&a| !global.memory_tainted(a, 1))
-                .collect();
-            // Boundaries are deltas: drain the written view so the next
-            // snapshot covers only bytes written after this mark.
-            log.take_written();
-            marks.push(SegmentMark {
-                directive_idx: trace.len(),
-                sym_regs,
-                sym_globals,
-                pub_mem,
-                snapshot,
+            let log_end = global.access_log().expect("access log enabled").clock();
+            let written = memlog::written_view(
+                global.access_log().expect("access log enabled"),
+                seg_log_start..log_end,
+            );
+            let boundary = build_boundary(
+                role,
+                thread,
+                global,
+                std::mem::take(&mut seg_regs),
+                std::mem::take(&mut seg_globals),
+                std::mem::take(&mut seg_dropped),
+                written,
+            )?;
+            segments.push(SegmentInfo {
+                directives: seg_dir_start..trace.len(),
+                reveals: seg_rev_start..reveal_actions.len(),
+                log: seg_log_start..log_end,
+                bits: seg_bits,
+                gates: seg_gates,
+                boundary: Some(boundary),
             });
+            seg_dir_start = trace.len();
+            seg_rev_start = reveal_actions.len();
+            seg_log_start = log_end;
+            seg_bits = 0;
+            seg_gates = 0;
             next_mark = cost
                 + limits
                     .segment_cost
@@ -416,7 +393,18 @@ pub(crate) fn capture_chunk(
         if let Some(c) = limits.chunk_cap
             && cost >= c
         {
-            trim_marks(&mut marks, trace.len());
+            let log_end = global.access_log().expect("access log enabled").clock();
+            let segments = finish_segments(
+                segments,
+                seg_dir_start,
+                seg_rev_start,
+                seg_log_start,
+                trace.len(),
+                reveal_actions.len(),
+                log_end,
+                seg_bits,
+                seg_gates,
+            );
             return Ok(ChunkCapture {
                 trace,
                 cost,
@@ -426,51 +414,84 @@ pub(crate) fn capture_chunk(
                 trap: None,
                 reveal_actions,
                 reveals,
-                marks,
+                segments,
             });
         }
     }
 }
 
-/// Reads the prover's plaintext at a segment boundary: the thread's flat
-/// register file, the module globals, and the current value of every byte
-/// stored to since the previous mark.
-fn snapshot(global: &Global, thread: &Thread, log: &MemoryLog) -> Result<Snapshot> {
-    let mut mem = BTreeMap::new();
-    if log.has_writes() {
-        let memory = global
-            .memory()
-            .ok_or(ZkVmError::Core(mpz_vm_core::Error::MemoryNotDefined))?;
-        for addr in log.written_addrs() {
-            mem.insert(
-                addr,
-                memory.read_bytes(addr, 1).map_err(ZkVmError::Trap)?[0],
-            );
+fn reveal_written_reg(action: Option<&HostCallEvent>) -> Option<u32> {
+    match action? {
+        HostCallEvent::OpenScalar { handle_dst, .. }
+        | HostCallEvent::OpenBytes { handle_dst, .. } => Some(handle_dst.0),
+        HostCallEvent::WaitScalar { dst, .. } => Some(dst.0),
+        _ => None,
+    }
+}
+
+fn build_boundary(
+    role: Role,
+    thread: &Thread,
+    global: &Global,
+    seg_regs: BTreeSet<u32>,
+    seg_globals: BTreeSet<u32>,
+    dropped: Vec<(Reg, u32)>,
+    written: BTreeMap<u32, ByteState>,
+) -> Result<BoundaryDelta> {
+    let prover = role == Role::Prover;
+
+    let vals =
+        |keys: BTreeSet<u32>, symbolic: &dyn Fn(u32) -> bool, read: &dyn Fn(u32) -> Value| {
+            keys.into_iter()
+                .map(|key| {
+                    let v = read(key);
+                    if symbolic(key) {
+                        ValItem::Sym {
+                            key,
+                            ty: v.ty(),
+                            value: prover.then_some(v),
+                        }
+                    } else {
+                        ValItem::Pub { key, value: v }
+                    }
+                })
+                .collect()
+        };
+
+    let regs = vals(seg_regs, &|r| thread.is_register_symbolic(r), &|r| {
+        thread.registers()[r as usize]
+    });
+    let globals = vals(seg_globals, &|g| global.is_global_symbolic(g), &|g| {
+        global.globals()[g as usize]
+    });
+
+    let mut mem = Vec::new();
+    for (a, state) in written {
+        if global.memory_tainted(a, 1) {
+            let value = if prover {
+                let byte = global
+                    .memory()
+                    .ok_or(ZkVmError::Core(mpz_vm_core::Error::MemoryNotDefined))?
+                    .read_bytes(a, 1)
+                    .map_err(ZkVmError::Trap)?[0];
+                Some(byte)
+            } else {
+                None
+            };
+            mem.push(MemItem::Sym { addr: a, value });
+        } else if let ByteState::Public(value) = state {
+            mem.push(MemItem::Pub { addr: a, value });
         }
     }
-    Ok(Snapshot {
-        regs: thread.registers().to_vec(),
-        globals: global.globals().to_vec(),
+
+    Ok(BoundaryDelta {
+        regs,
+        dropped,
+        globals,
         mem,
     })
 }
 
-/// Drops a trailing mark that coincides with the end of the trace, which
-/// would otherwise produce an empty final segment.
-fn trim_marks(marks: &mut Vec<SegmentMark>, trace_len: usize) {
-    while marks.last().is_some_and(|m| m.directive_idx >= trace_len) {
-        marks.pop();
-    }
-}
-
-/// Steps `thread` to completion using only local work, rejecting any step that
-/// would require a proving round (and thus communication with the other party).
-///
-/// Public computation is reproduced in-thread and runs to a
-/// [`StepResult::Done`] or a trap. A symbolic [`Op`](mpz_vm_core::Op), a
-/// private branch, or a host call (every zk-vm host call is a reveal) reports
-/// [`ZkVmError::RequiresCommunication`]; the remaining directives — local
-/// calls, returns, and public branches — are in-thread control flow.
 pub(crate) fn run_local(
     module: &Module,
     global: &mut Global,
@@ -535,8 +556,35 @@ fn validate_trap_directive(directive: &Directive, reason: &Trap) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mpz_vm_core::{Call, Op, Param};
+    use mpz_vm_core::{Access, AccessAddr, AccessKind, Call, Op, Param, Visibility};
     use mpz_vm_ir::{ExportKind, Module, ValType};
+
+    fn capture_full(
+        module: &Module,
+        func_idx: u32,
+        role: Role,
+        params: Vec<Param>,
+        limits: Limits,
+    ) -> (ChunkCapture, Global) {
+        let mut global = Global::new(module).unwrap();
+        global.enable_access_log();
+        let mut thread = Thread::new();
+        thread
+            .call(module, &mut global, Call { func_idx, params })
+            .unwrap();
+        let mut reveal_state = RevealState::default();
+        let capture = capture_chunk(
+            module,
+            &mut global,
+            &mut thread,
+            limits,
+            role,
+            None,
+            &mut reveal_state,
+        )
+        .unwrap();
+        (capture, global)
+    }
 
     fn capture_trace(
         module: &Module,
@@ -544,23 +592,46 @@ mod tests {
         role: Role,
         params: Vec<Param>,
     ) -> Vec<Directive> {
-        let mut global = Global::new(module).unwrap();
-        let mut thread = Thread::new();
-        thread
-            .call(module, &mut global, Call { func_idx, params })
-            .unwrap();
-        let mut reveal_state = RevealState::default();
-        capture_chunk(
-            module,
-            &mut global,
-            &mut thread,
-            Limits::default(),
-            role,
-            None,
-            &mut reveal_state,
-        )
-        .unwrap()
-        .trace
+        capture_full(module, func_idx, role, params, Limits::default())
+            .0
+            .trace
+    }
+
+    const SEGMENTED_WAT: &str = r#"(module
+        (memory 1)
+        (func (export "main") (param i32) (result i32)
+          (local $acc i32) (local $tmp i32)
+          local.get 0 local.get 0 i32.add local.set $acc
+          i32.const 0 local.get $acc i32.store
+          i32.const 64 i32.const 7 i32.store
+          local.get $acc local.get 0 i32.add local.set $acc
+          i32.const 4 local.get $acc i32.store
+          i32.const 0 i32.load local.set $tmp
+          local.get $acc local.get $tmp i32.add local.set $acc
+          i32.const 8 local.get $acc i32.store
+          local.get $acc local.get 0 i32.add local.set $acc
+          i32.const 4 i32.load local.get $acc i32.add))"#;
+
+    fn segmented_module() -> Module {
+        Module::parse(&wat::parse_str(SEGMENTED_WAT).unwrap()).unwrap()
+    }
+
+    fn main_idx(module: &Module) -> u32 {
+        module
+            .exports()
+            .iter()
+            .find_map(|e| match e.kind {
+                ExportKind::Func(i) if e.name == "main" => Some(i),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    fn segmented_limits() -> Limits {
+        Limits {
+            chunk_cap: None,
+            segment_cost: Some(1),
+        }
     }
 
     fn skeleton(directive: &Directive) -> String {
@@ -619,6 +690,347 @@ mod tests {
         assert!(
             ps.iter().any(|k| k.starts_with("call")),
             "the test program must exercise a Call"
+        );
+    }
+
+    #[test]
+    fn segment_log_ranges_are_contiguous() {
+        let module = segmented_module();
+        let idx = main_idx(&module);
+        let (chunk, global) = capture_full(
+            &module,
+            idx,
+            Role::Prover,
+            vec![Param::Private(Value::I32(7))],
+            segmented_limits(),
+        );
+
+        assert!(
+            chunk.segments.len() >= 2,
+            "the program must split into at least two segments (got {})",
+            chunk.segments.len()
+        );
+
+        let final_clock = global.access_log().expect("log enabled").clock();
+        assert_eq!(
+            chunk
+                .segments
+                .first()
+                .expect("at least one segment")
+                .log
+                .start,
+            0,
+            "the first segment starts at the chunk-start clock"
+        );
+        for seg in &chunk.segments {
+            assert!(
+                seg.log.start <= seg.log.end,
+                "segment log range must be well-formed: {:?}",
+                seg.log
+            );
+        }
+        for pair in chunk.segments.windows(2) {
+            assert_eq!(
+                pair[0].log.end, pair[1].log.start,
+                "each segment's log range must start where the previous ended"
+            );
+        }
+        assert_eq!(
+            chunk.segments.last().expect("at least one segment").log.end,
+            final_clock,
+            "the last segment must end at the final clock"
+        );
+    }
+
+    #[test]
+    fn emitted_log_entries_zip_segment_memory_directives() {
+        let module = segmented_module();
+        let idx = main_idx(&module);
+        let (chunk, global) = capture_full(
+            &module,
+            idx,
+            Role::Prover,
+            vec![Param::Private(Value::I32(7))],
+            segmented_limits(),
+        );
+        let entries = global.access_log().expect("log enabled").entries();
+
+        for seg in &chunk.segments {
+            let emitted: Vec<AccessKind> = entries[seg.log.start as usize..seg.log.end as usize]
+                .iter()
+                .filter(|a| a.emitted)
+                .map(|a| a.kind)
+                .collect();
+            let mem_dirs: Vec<&Directive> = chunk.trace[seg.directives.clone()]
+                .iter()
+                .filter(|d| {
+                    matches!(
+                        d,
+                        Directive::Op(Op::Load { .. }) | Directive::Op(Op::Store { .. })
+                    )
+                })
+                .collect();
+            assert_eq!(
+                emitted.len(),
+                mem_dirs.len(),
+                "segment (directives {:?}): emitted entries vs memory directives",
+                seg.directives
+            );
+            for (kind, directive) in emitted.iter().zip(&mem_dirs) {
+                match (kind, directive) {
+                    (AccessKind::Read, Directive::Op(Op::Load { .. })) => {}
+                    (AccessKind::Write, Directive::Op(Op::Store { .. })) => {}
+                    _ => panic!("emitted kind {kind:?} does not match directive {directive:?}"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn prover_and_verifier_segment_log_ranges_match() {
+        let module = segmented_module();
+        let idx = main_idx(&module);
+        let (prover, _) = capture_full(
+            &module,
+            idx,
+            Role::Prover,
+            vec![Param::Private(Value::I32(7))],
+            segmented_limits(),
+        );
+        let (verifier, _) = capture_full(
+            &module,
+            idx,
+            Role::Verifier,
+            vec![Param::Blind(ValType::I32)],
+            segmented_limits(),
+        );
+
+        let ps: Vec<_> = prover.segments.iter().map(|s| s.log.clone()).collect();
+        let vs: Vec<_> = verifier.segments.iter().map(|s| s.log.clone()).collect();
+        assert_eq!(
+            ps, vs,
+            "prover and verifier must derive identical per-segment log ranges"
+        );
+    }
+
+    const PRECOMPILE_WAT: &str = r#"(module
+        (import "crypto" "sha256_compress" (func $compress (param i32 i32)))
+        (memory 2)
+        (func (export "main") (param $state i32) (param $block i32)
+            (call $compress (local.get $state) (local.get $block))))"#;
+
+    const STATE_PTR: u32 = 256;
+    const BLOCK_PTR: u32 = 512;
+
+    fn capture_precompile(role: Role, state_symbolic: bool) -> (ChunkCapture, Global) {
+        let module = Module::parse(&wat::parse_str(PRECOMPILE_WAT).unwrap()).unwrap();
+        let idx = main_idx(&module);
+        let mut global = Global::new(&module).unwrap();
+        global.enable_access_log();
+        if state_symbolic {
+            let vis = match role {
+                Role::Prover => Visibility::Private,
+                Role::Verifier => Visibility::Blind,
+            };
+            global.set_memory_visibility(STATE_PTR, 32, vis);
+        }
+        let mut thread = Thread::new();
+        thread
+            .call(
+                &module,
+                &mut global,
+                Call {
+                    func_idx: idx,
+                    params: vec![
+                        Param::Public(Value::I32(STATE_PTR as i32)),
+                        Param::Public(Value::I32(BLOCK_PTR as i32)),
+                    ],
+                },
+            )
+            .unwrap();
+        let mut reveal_state = RevealState::default();
+        let capture = capture_chunk(
+            &module,
+            &mut global,
+            &mut thread,
+            Limits::default(),
+            role,
+            None,
+            &mut reveal_state,
+        )
+        .unwrap();
+        (capture, global)
+    }
+
+    fn assert_digest_entries(entries: &[Access], expected: [Option<u64>; 4], mask: u8) {
+        assert_eq!(
+            entries.len(),
+            4,
+            "one compress logs exactly four host writes"
+        );
+        for (i, (entry, value)) in entries.iter().zip(expected).enumerate() {
+            assert_eq!(
+                entry,
+                &Access {
+                    kind: AccessKind::Write,
+                    addr: AccessAddr::Public(STATE_PTR + 8 * i as u32),
+                    width: 8,
+                    symbolic_mask: mask,
+                    value,
+                    emitted: false,
+                    host: true,
+                },
+                "host-write entry {i} must cover its 8-byte digest chunk"
+            );
+        }
+    }
+
+    #[test]
+    fn precompile_public_output_logs_host_writes() {
+        let (chunk, global) = capture_precompile(Role::Prover, false);
+        let log = global.access_log().expect("log enabled");
+        let entries = log.entries();
+
+        let digest = global
+            .memory()
+            .unwrap()
+            .read_bytes(STATE_PTR, 32)
+            .unwrap()
+            .to_vec();
+        let expected = core::array::from_fn(|i| {
+            Some(u64::from_le_bytes(
+                digest[8 * i..8 * i + 8].try_into().unwrap(),
+            ))
+        });
+        assert_digest_entries(entries, expected, 0);
+
+        let seg = chunk
+            .segments
+            .iter()
+            .find(|s| s.log.start == 0)
+            .expect("a segment starts at the chunk-start clock");
+        assert!(
+            seg.log.start == 0 && seg.log.end >= 4,
+            "the covering segment must contain the four host writes: {:?}",
+            seg.log
+        );
+
+        let (_, verifier) = capture_precompile(Role::Verifier, false);
+        assert_eq!(
+            entries,
+            verifier.access_log().expect("log enabled").entries(),
+            "prover and verifier must log identical host writes"
+        );
+    }
+
+    #[test]
+    fn precompile_authenticated_output_logs_host_writes() {
+        let (_, prover) = capture_precompile(Role::Prover, true);
+        let (_, verifier) = capture_precompile(Role::Verifier, true);
+
+        let prover_entries = prover.access_log().expect("log enabled").entries();
+        let verifier_entries = verifier.access_log().expect("log enabled").entries();
+
+        assert_digest_entries(prover_entries, [None; 4], 0xff);
+        assert_eq!(
+            prover_entries, verifier_entries,
+            "prover and verifier must log identical host writes"
+        );
+    }
+
+    const SILENT_VS_SYMBOLIC_WAT: &str = r#"(module
+        (memory 1)
+        (func (export "main") (param i32) (result i32)
+          ;; silent concrete store at address 0 (public value, no directive)
+          i32.const 0 i32.const 42 i32.store
+          ;; symbolic-value store at address 8 (private input, emitted)
+          i32.const 8 local.get 0 i32.store
+          ;; trailing symbolic arithmetic so the store's segment is not the last
+          local.get 0 local.get 0 i32.add
+          local.get 0 i32.add))"#;
+
+    fn boundary_skeleton(delta: &BoundaryDelta) -> Vec<String> {
+        let vals = |items: &[ValItem]| -> Vec<String> {
+            items
+                .iter()
+                .map(|item| match item {
+                    ValItem::Sym { key, ty, .. } => format!("sym {key} {ty:?}"),
+                    ValItem::Pub { key, value } => format!("pub {key} {value:?}"),
+                })
+                .collect()
+        };
+        let mut out = vals(&delta.regs);
+        out.extend(vals(&delta.globals));
+        out.extend(delta.mem.iter().map(|item| match item {
+            MemItem::Sym { addr, .. } => format!("msym {addr}"),
+            MemItem::Pub { addr, value } => format!("mpub {addr} {value}"),
+        }));
+        out
+    }
+
+    #[test]
+    fn silent_store_excluded_from_written_view() {
+        let module = Module::parse(&wat::parse_str(SILENT_VS_SYMBOLIC_WAT).unwrap()).unwrap();
+        let idx = main_idx(&module);
+        let (prover, _) = capture_full(
+            &module,
+            idx,
+            Role::Prover,
+            vec![Param::Private(Value::I32(0x1122_3344))],
+            segmented_limits(),
+        );
+        let (verifier, _) = capture_full(
+            &module,
+            idx,
+            Role::Verifier,
+            vec![Param::Blind(ValType::I32)],
+            segmented_limits(),
+        );
+
+        let mem_boundaries: Vec<&BoundaryDelta> = prover
+            .segments
+            .iter()
+            .filter_map(|s| s.boundary.as_ref())
+            .filter(|b| !b.mem.is_empty())
+            .collect();
+        assert_eq!(
+            mem_boundaries.len(),
+            1,
+            "only the symbolic store contributes memory to a boundary"
+        );
+
+        let mem = &mem_boundaries[0].mem;
+        let addrs: Vec<u32> = mem
+            .iter()
+            .map(|item| match item {
+                MemItem::Sym { addr, .. } | MemItem::Pub { addr, .. } => *addr,
+            })
+            .collect();
+        assert_eq!(addrs, vec![8, 9, 10, 11], "the symbolic store covers 8..12");
+        assert!(
+            mem.iter().all(|item| matches!(item, MemItem::Sym { .. })),
+            "the symbolic store's bytes are committed"
+        );
+        assert!(
+            !addrs.iter().any(|&a| a < 8),
+            "the silent public store's bytes must not enter the written view"
+        );
+
+        let ps: Vec<_> = prover
+            .segments
+            .iter()
+            .filter_map(|s| s.boundary.as_ref())
+            .map(boundary_skeleton)
+            .collect();
+        let vs: Vec<_> = verifier
+            .segments
+            .iter()
+            .filter_map(|s| s.boundary.as_ref())
+            .map(boundary_skeleton)
+            .collect();
+        assert_eq!(
+            ps, vs,
+            "prover and verifier must commit identical boundary skeletons"
         );
     }
 }

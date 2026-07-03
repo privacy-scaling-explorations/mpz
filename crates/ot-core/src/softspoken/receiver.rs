@@ -2,11 +2,11 @@ use std::{collections::VecDeque, mem};
 
 use crate::{
     TransferId,
+    rcot::{RCOTReceiver, RCOTReceiverOutput},
     softspoken::{
         CSP, Check, Corrections, Extend, ReceiverConfig, ReceiverError, SSP, check, fold,
         fold::TILE_TARGET_BLOCKS, ggm,
     },
-    rcot::{RCOTReceiver, RCOTReceiverOutput},
 };
 
 use mpz_common::future::{MaybeDone, Sender, new_output};
@@ -198,7 +198,11 @@ impl Receiver<state::Extension> {
         let q = self.config.leaves();
 
         // Round up to a multiple of SSP (the rows sacrificed to the check).
-        let count = self.config.batch_size().min(self.alloc).next_multiple_of(SSP);
+        let count = self
+            .config
+            .batch_size()
+            .min(self.alloc)
+            .next_multiple_of(SSP);
         let rb = count / 8;
         let m = count / CSP; // blocks per row this batch
 
@@ -276,8 +280,12 @@ impl Receiver<state::Extension> {
 
         let total_rb = self.state.total_rb;
 
-        let (check_t, check_x) =
-            check::check_fold(chi_seed, &self.state.mac, total_rb, Some(&self.state.choices));
+        let (check_t, check_x) = check::check_fold(
+            chi_seed,
+            &self.state.mac,
+            total_rb,
+            Some(&self.state.choices),
+        );
         let check_x = check_x.expect("choices were provided");
 
         // Transpose the matrix in place: it becomes the per-OT MACs. The last

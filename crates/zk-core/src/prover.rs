@@ -16,82 +16,45 @@ use crate::{
     util::{draw_chi, lsb, set_lsb},
 };
 
-/// The prover side of the zero-knowledge protocol.
-///
-/// The prover walks the circuits twice. The first pass is the mask-only
-/// [`Commit`] context, which never touches the MAC tape. The second pass is
-/// `Prover<Accumulate>`: starting from [`Prover::committed`], the caller
-/// installs the challenge stream via [`accumulate`](Self::accumulate) and
-/// re-evaluates the same circuits in the same order, folding every
-/// multiplication and assertion directly into the running proof state.
-/// [`finish`](Self::finish) yields a [`ProverOutput`].
-///
-/// The caller masks `(u, v)` with the VOPE correlation
-/// ([`vope_receiver`](crate::vope_receiver)) before sending the proof.
+/// The prover's witness-pass circuit context.
 #[derive(Debug)]
-pub struct Prover<'a, S> {
-    macs: &'a [Gf2_128],
-    cursor: usize,
-    state: S,
-}
-
-/// The prover's commit-pass circuit context.
-///
-/// Distinct from [`Commitment`](crate::Commitment): this is the evaluation
-/// *context*, whereas `Commitment` is the adjustment-bit *message* this pass
-/// produces and sends to the verifier.
-///
-/// Walks the circuits over *pointer-bit wires*: each wire is a [`Gf2_128`]
-/// whose LSB carries the plaintext bit and whose remaining bits are
-/// meaningless. The commit pass only ever reads wire LSBs, so it needs no MAC
-/// tape — each input and AND gate XORs its witness bit into the mask tape in
-/// place, producing the adjustment bits sent to the verifier (see
-/// [`Commitment`](crate::Commitment)).
-///
-/// This makes the commit pass pure plaintext evaluation: circuits walked with
-/// a `Commit` context must be re-walked with the same inputs in the
-/// accumulate pass, which reconstructs the same LSBs on the real MAC wires.
-#[derive(Debug)]
-pub struct Commit<'a> {
-    masks: &'a mut [bool],
+pub struct Witness<'a> {
+    witness: &'a mut [bool],
     cursor: usize,
 }
 
-impl<'a> Commit<'a> {
-    /// Creates a commit-pass context over the mask tape.
-    ///
-    /// The `masks` tape is adjusted in place as circuits are evaluated: entry
-    /// `i` is XORed with the bit committed by the `i`-th input or AND gate.
-    pub fn new(masks: &'a mut [bool]) -> Self {
-        Self { masks, cursor: 0 }
+impl<'a> Witness<'a> {
+    /// Creates a witness-pass context.
+    pub fn new(witness: &'a mut [bool]) -> Self {
+        Self { witness, cursor: 0 }
     }
 
-    /// Consumes the next tape entry to commit a private input `bit` and
-    /// returns its pointer-bit wire.
+    /// Consumes the next tape entry to commit a private input `value` and
+    /// returns its cleartext wire.
     ///
     /// # Panics
     ///
-    /// Panics if the mask tape has been exhausted.
-    pub fn input(&mut self, bit: bool) -> Gf2_128 {
+    /// Panics if the witness tape has been exhausted.
+    pub fn input(&mut self, value: Gf2) -> Gf2 {
         let i = self.cursor;
         let slot = self
-            .masks
+            .witness
             .get_mut(i)
-            .expect("mask tape exhausted during input");
-        *slot ^= bit;
+            .expect("witness tape exhausted during input");
+        *slot ^= value.0;
         self.cursor = i + 1;
-        Gf2_128::new(bit as u128)
+        value
     }
 
-    /// Returns the wire for a public input `bit`.
+    /// Returns the wire for a public input `value`.
     ///
     /// Public inputs consume no tape entry, since their value is known to both
     /// parties.
-    pub fn input_public(&self, bit: bool) -> Gf2_128 {
-        if bit { MAC_ONE } else { MAC_ZERO }
+    pub fn input_public(&self, value: Gf2) -> Gf2 {
+        value
     }
 
-    /// Completes the commit pass.
+    /// Completes the witness pass.
     ///
     /// # Errors
     ///
@@ -99,32 +62,32 @@ impl<'a> Commit<'a> {
     /// the tape length, indicating the circuits drew fewer inputs and AND
     /// gates than the tape provides.
     pub fn finish(self) -> Result<()> {
-        if self.cursor != self.masks.len() {
-            return Err(Error::tape_unconsumed(self.cursor, self.masks.len()));
+        if self.cursor != self.witness.len() {
+            return Err(Error::tape_unconsumed(self.cursor, self.witness.len()));
         }
         Ok(())
     }
 }
 
-impl PolyContext for Commit<'_> {
-    /// Plaintext evaluation: an expression is just its cleartext bit, so the
-    /// commit pass compiles polynomial gadgets down to bit operations.
+impl PolyContext for Witness<'_> {
+    /// Plaintext evaluation: an expression is just its cleartext value, so the
+    /// witness pass compiles polynomial gadgets down to field operations.
     type Coeffs = PlainCoeffs<Gf2>;
 
-    fn lift(&self, wire: Gf2_128) -> Expr<PlainCoeffs<Gf2>, U1> {
-        Expr::new(lsb(wire))
+    fn lift(&self, wire: Gf2) -> Expr<PlainCoeffs<Gf2>, U1> {
+        Expr::new(wire)
     }
 
     fn lift_const(&self, value: Gf2) -> Expr<PlainCoeffs<Gf2>, U0> {
         Expr::new(value)
     }
 
-    fn materialize<N>(&mut self, expr: Expr<PlainCoeffs<Gf2>, N>) -> Gf2_128
+    fn materialize<N>(&mut self, expr: Expr<PlainCoeffs<Gf2>, N>) -> Gf2
     where
         N: Degree + Max<U1>,
         Maximum<N, U1>: Degree,
     {
-        self.input(expr.plain().0)
+        self.input(expr.plain())
     }
 
     fn assert_zero<N: Degree>(&mut self, expr: Expr<PlainCoeffs<Gf2>, N>) -> Result<()> {
@@ -137,60 +100,59 @@ impl PolyContext for Commit<'_> {
     }
 }
 
-impl Context for Commit<'_> {
+impl Context for Witness<'_> {
     type Error = Error;
-    type Wire = Gf2_128;
+    type Wire = Gf2;
     type Field = Gf2;
 
-    fn add(&mut self, a: Gf2_128, b: Gf2_128) -> Gf2_128 {
+    fn add(&mut self, a: Gf2, b: Gf2) -> Gf2 {
         a + b
     }
 
-    fn sub(&mut self, a: Gf2_128, b: Gf2_128) -> Gf2_128 {
+    fn sub(&mut self, a: Gf2, b: Gf2) -> Gf2 {
         a - b
     }
 
-    fn mul(&mut self, a: Gf2_128, b: Gf2_128) -> Gf2_128 {
-        let z = GetBit::<Lsb0>::get_bit(&a, 0) & GetBit::<Lsb0>::get_bit(&b, 0);
+    fn mul(&mut self, a: Gf2, b: Gf2) -> Gf2 {
+        let z = a * b;
         let i = self.cursor;
         let slot = self
-            .masks
+            .witness
             .get_mut(i)
-            .expect("mask tape exhausted: circuit has more AND gates than the tape");
-        *slot ^= z;
+            .expect("witness tape exhausted: circuit has more AND gates than the tape");
+        *slot ^= z.0;
         self.cursor = i + 1;
-        Gf2_128::new(z as u128)
+        z
     }
 
-    fn constant(&mut self, v: Gf2) -> Gf2_128 {
-        self.input_public(v.0)
+    fn constant(&mut self, v: Gf2) -> Gf2 {
+        self.input_public(v)
     }
 
-    fn assert_const(&mut self, v: Gf2_128, expected: Gf2) -> Result<()> {
+    fn assert_const(&mut self, v: Gf2, expected: Gf2) -> Result<()> {
         // The hash binding assertions into the proof is built during the
         // accumulate pass; here the check only surfaces witness bugs early.
-        let got = GetBit::<Lsb0>::get_bit(&v, 0);
-        if got != expected.0 {
+        if v != expected {
             return Err(Error::assert());
         }
         Ok(())
     }
 }
 
-/// Committed state for the [`Prover`].
+/// The prover's accumulate-pass circuit context (pass 2).
 ///
-/// The witness is committed; the prover awaits the challenge before beginning
-/// the accumulate pass.
-#[derive(Debug)]
-pub struct Committed;
-
-/// Accumulate-phase state for the [`Prover`].
+/// Walks the circuits a second time after the [`Witness`] pass, over the real
+/// MAC tape and an installed challenge stream, folding every multiplication and
+/// assertion directly into the running proof state. The `u` and `v`
+/// accumulators defer reduction to [`finish`](Self::finish), which yields a
+/// [`ProverOutput`].
 ///
-/// Holds the challenge stream and the running proof state folded during the
-/// second pass. The `u` and `v` accumulators defer reduction to
-/// [`finish`](Prover::finish).
+/// The caller masks `(u, v)` with the VOPE correlation
+/// ([`vope_receiver`](crate::vope_receiver)) before sending the proof.
 #[derive(Debug)]
-pub struct Accumulate<R> {
+pub struct Accumulate<'a, R> {
+    macs: &'a [Gf2_128],
+    cursor: usize,
     assertions: Hasher,
     rng: R,
     u: Gf2_128Accumulator,
@@ -198,51 +160,36 @@ pub struct Accumulate<R> {
     poly: ProverPoly,
 }
 
-impl<'a> Prover<'a, Committed> {
-    /// Creates a prover directly in the committed state.
+impl<'a, R> Accumulate<'a, R> {
+    /// Creates the accumulate context over the MAC tape, drawing challenge
+    /// weights from `rng`.
     ///
     /// Used to fold a sub-range of a trace whose commitment was produced
-    /// elsewhere: `macs` covers the sub-range's tape entries, and the
-    /// challenge stream passed to [`accumulate`](Self::accumulate) is
+    /// elsewhere: `macs` covers the sub-range's tape entries, and `rng` is
     /// positioned to the sub-range's gate offset. The `(u, v)` outputs of the
-    /// sub-ranges sum to the full trace's `(u, v)`, so sub-ranges can be
-    /// folded in parallel and combined by field addition.
-    pub fn committed(macs: &'a [Gf2_128]) -> Self {
-        Self {
-            macs,
-            cursor: 0,
-            state: Committed,
-        }
-    }
-
-    /// Begins the accumulate pass, drawing challenge weights from `rng`.
+    /// sub-ranges sum to the full trace's `(u, v)`, so sub-ranges can be folded
+    /// in parallel and combined by field addition.
     ///
     /// Each multiplication and each polynomial constraint
     /// ([`PolyContext::assert_zero`] of degree ≥ 1, or
     /// [`PolyContext::materialize`]) consumes 16 bytes of the stream, so `rng`
-    /// must be positioned to match the trace evaluated: the caller derives it
-    /// from the agreed challenge and seeks it when folding a sub-range of the
-    /// trace.
-    pub fn accumulate<R: RngCore>(self, rng: R) -> Prover<'a, Accumulate<R>> {
-        Prover {
-            macs: self.macs,
-            cursor: self.cursor,
-            state: Accumulate {
-                assertions: Hasher::default(),
-                rng,
-                u: Gf2_128Accumulator::zero(),
-                v: Gf2_128Accumulator::zero(),
-                poly: ProverPoly::default(),
-            },
+    /// must be positioned to match the trace evaluated.
+    pub fn new(macs: &'a [Gf2_128], rng: R) -> Self {
+        Self {
+            macs,
+            cursor: 0,
+            assertions: Hasher::default(),
+            rng,
+            u: Gf2_128Accumulator::zero(),
+            v: Gf2_128Accumulator::zero(),
+            poly: ProverPoly::default(),
         }
     }
-}
 
-impl<'a, R> Prover<'a, Accumulate<R>> {
     /// Consumes the next tape entry for a private input `bit` and returns its
     /// authenticated wire.
     ///
-    /// Inputs must be supplied in the same order as during the commit phase.
+    /// Inputs must be supplied in the same order as during the witness pass.
     ///
     /// # Panics
     ///
@@ -280,15 +227,15 @@ impl<'a, R> Prover<'a, Accumulate<R>> {
             return Err(Error::tape_unconsumed(self.cursor, self.macs.len()));
         }
         Ok(ProverOutput {
-            u: self.state.u.reduce(),
-            v: self.state.v.reduce(),
-            poly: self.state.poly,
-            assertions: *self.state.assertions.finalize().as_bytes(),
+            u: self.u.reduce(),
+            v: self.v.reduce(),
+            poly: self.poly,
+            assertions: *self.assertions.finalize().as_bytes(),
         })
     }
 }
 
-impl<R: RngCore> Context for Prover<'_, Accumulate<R>> {
+impl<R: RngCore> Context for Accumulate<'_, R> {
     type Error = Error;
     type Wire = Gf2_128;
     type Field = Gf2;
@@ -312,18 +259,17 @@ impl<R: RngCore> Context for Prover<'_, Accumulate<R>> {
         set_lsb(&mut mac, x & y);
         self.cursor = i + 1;
 
-        let chi = draw_chi(&mut self.state.rng);
+        let chi = draw_chi(&mut self.rng);
 
         // `a_10 = b if lsb(a) else 0`, `a_11 = a if lsb(b) else 0`,
-        // expressed as `a · mask` with `mask ∈ {0, u128::MAX}` so there
+        // expressed as `a · w` with `w ∈ {0, u128::MAX}` so there
         // is no data-dependent branch.
-        let mask_x = (x as u128).wrapping_neg();
-        let mask_y = (y as u128).wrapping_neg();
-        let body_v =
-            Gf2_128::new(b.to_inner() & mask_x) + Gf2_128::new(a.to_inner() & mask_y) + mac;
+        let w_x = (x as u128).wrapping_neg();
+        let w_y = (y as u128).wrapping_neg();
+        let body_v = Gf2_128::new(b.to_inner() & w_x) + Gf2_128::new(a.to_inner() & w_y) + mac;
 
-        self.state.u.add_product(a * b, chi);
-        self.state.v.add_product(body_v, chi);
+        self.u.add_product(a * b, chi);
+        self.v.add_product(body_v, chi);
 
         mac
     }
@@ -338,13 +284,13 @@ impl<R: RngCore> Context for Prover<'_, Accumulate<R>> {
             return Err(Error::assert());
         }
 
-        self.state.assertions.update(&v.to_inner().to_le_bytes());
+        self.assertions.update(&v.to_inner().to_le_bytes());
 
         Ok(())
     }
 }
 
-impl<R: RngCore> PolyContext for Prover<'_, Accumulate<R>> {
+impl<R: RngCore> PolyContext for Accumulate<'_, R> {
     type Coeffs = ProverCoeffs<Gf2>;
 
     fn lift(&self, wire: Gf2_128) -> Expr<ProverCoeffs<Gf2>, U1> {
@@ -366,13 +312,13 @@ impl<R: RngCore> PolyContext for Prover<'_, Accumulate<R>> {
         // constraint's top coefficient is `expr.value + lsb(wire) = 0` by
         // construction, so it folds without a witness check.
         let constraint = expr - self.lift(wire);
-        let chi = draw_chi(&mut self.state.rng);
-        self.state.poly.fold_expr(&constraint, chi);
+        let chi = draw_chi(&mut self.rng);
+        self.poly.fold_expr(&constraint, chi);
         wire
     }
 
     fn assert_zero<N: Degree>(&mut self, expr: Expr<ProverCoeffs<Gf2>, N>) -> Result<()> {
-        let Self { state, .. } = self;
-        state.poly.assert_expr(&expr, || draw_chi(&mut state.rng))
+        let Self { poly, rng, .. } = self;
+        poly.assert_expr(&expr, || draw_chi(&mut *rng))
     }
 }

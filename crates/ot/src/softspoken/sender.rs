@@ -3,9 +3,9 @@ use itybity::IntoBits;
 use mpz_common::{Context, ContextError, Flush, future::MaybeDone};
 use mpz_core::Block;
 use mpz_ot_core::{
-    softspoken::{Sender as Core, SenderConfig, SenderError as CoreError, sender_state as state},
     ot::{OTReceiver, OTReceiverOutput},
     rcot::{RCOTSender, RCOTSenderOutput},
+    softspoken::{Sender as Core, SenderConfig, SenderError as CoreError, sender_state as state},
 };
 use serio::{SinkExt, stream::IoStreamExt as _};
 

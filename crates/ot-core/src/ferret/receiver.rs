@@ -141,8 +141,8 @@ where
     }
 
     /// Returns the number of base COTs to pull on the next bootstrap: just the
-    /// outstanding demand when it is below the bootstrap cost (served directly),
-    /// otherwise a full bootstrap batch.
+    /// outstanding demand when it is below the bootstrap cost (served
+    /// directly), otherwise a full bootstrap batch.
     fn bootstrap_count(&self) -> usize {
         let missing = self.alloc.saturating_sub(self.available());
         if self.config.direct_passthrough() && missing > 0 && missing < self.config.bootstrap_cost()
@@ -254,8 +254,13 @@ where
         self.macs.resize(start + params.n, Gf2_128::ZERO);
         self.pending = params.n;
 
-        self.spcot
-            .expand(&spcot_lengths, &spcot_idxs, sums, &cs, &mut self.macs[start..])?;
+        self.spcot.expand(
+            &spcot_lengths,
+            &spcot_idxs,
+            sums,
+            &cs,
+            &mut self.macs[start..],
+        )?;
 
         // The check MACs follow the LPN input in the scratch buffer; the check
         // masks are the tail of the choices buffer.
