@@ -1,29 +1,50 @@
 //! WASM `simd128` backend for GF(2⁶⁴).
 //!
-//! Uses `bmul_simd::bmul64_full` (v128-parallelised BearSSL) for the
-//! 64×64 carry-less product, then reduces mod p(x) = x⁶⁴+x⁴+x³+x+1
-//! with the same shift/XOR chain as the soft backend. `inner_product`
-//! keeps its accumulator in a v128 across the whole loop, amortising
-//! both the reduction *and* the final bit-reverse+shift.
+//! Multiplication runs on `bmul_simd::clmul32_x4` (32×32→64 carry-less
+//! pieces via single-multiply `extmul`s): Karatsuba splits the 64×64
+//! product into three clmul32 streams — q00, q11 and the middle — which
+//! fit one pack. The recombination is linear over GF(2), so the
+//! accumulating kernels defer it (and the final reduction mod
+//! p(x) = x⁶⁴+x⁴+x³+x+1) out of their loops.
 
 use std::arch::wasm32::*;
 
-use crate::bmul_simd::{bit_spread_v128, bmul64_full, bmul64_lo_v128, rev64};
+use crate::bmul_simd::{bit_spread_v128, clmul32_x4};
 
 use super::Gf2_64;
 
+/// Splits an element into its clmul32 stream operands
+/// `[w0, w1, w0^w1, 0]` (streams q00, q11, qm).
+#[inline(always)]
+fn pack(v: u64) -> v128 {
+    let w0 = v as u32;
+    let w1 = (v >> 32) as u32;
+    u32x4(w0, w1, w0 ^ w1, 0)
+}
+
+/// Recovers the unreduced 128-bit product from an accumulated stream
+/// pack of [`pack`]-shaped operands.
+#[inline(always)]
+fn recover(acc: (v128, v128)) -> u128 {
+    let q00 = u64x2_extract_lane::<0>(acc.0);
+    let q11 = u64x2_extract_lane::<1>(acc.0);
+    let qm = u64x2_extract_lane::<0>(acc.1);
+
+    let mid = qm ^ q00 ^ q11;
+    (q00 as u128) ^ ((q11 as u128) << 64) ^ ((mid as u128) << 32)
+}
+
 #[inline]
 pub(super) fn mul(a: u64, b: u64) -> u64 {
-    let (lo, hi) = bmul64_full(a, b);
-    reduce64(lo, hi)
+    reduce(mul_full(a, b))
 }
 
 /// Unreduced carry-less product `a · b` (≤ 127 bits) packed into a `u128`.
 /// The accumulator XORs these and reduces once with [`reduce`].
 #[inline]
 pub(super) fn mul_full(a: u64, b: u64) -> u128 {
-    let (lo, hi) = bmul64_full(a, b);
-    (lo as u128) | ((hi as u128) << 64)
+    let zero = u64x2_splat(0);
+    recover(clmul32_x4(pack(a), pack(b), (zero, zero)))
 }
 
 /// Reduces an accumulated 128-bit polynomial to a field element.
@@ -46,41 +67,27 @@ pub(super) fn square(a: u64) -> u64 {
 
 #[inline]
 pub(super) fn inner_product(a: &[Gf2_64], b: &[Gf2_64]) -> u64 {
-    // Accumulate raw v128 partials (lane 0 = lo, lane 1 = bit-reversed hi-raw).
-    // The lane 1 → hi conversion (rev64 + shift) is linear, so it commutes
-    // with XOR accumulation and can be deferred to the end.
-    let mut acc = u64x2_splat(0);
+    let zero = u64x2_splat(0);
+    let mut acc = (zero, zero);
     for (x, y) in a.iter().zip(b.iter()) {
-        let v = bmul64_lo_v128(
-            u64x2(x.0, rev64(x.0)),
-            u64x2(y.0, rev64(y.0)),
-        );
-        acc = v128_xor(acc, v);
+        acc = clmul32_x4(pack(x.0), pack(y.0), acc);
     }
-    let lo = u64x2_extract_lane::<0>(acc);
-    let hi = rev64(u64x2_extract_lane::<1>(acc)) >> 1;
-    reduce64(lo, hi)
+    reduce(recover(acc))
 }
 
 /// `Σ aᵢ · bᵢ · cᵢ`. Per iteration: one full `mul(aᵢ, bᵢ)` to get the
-/// 64-bit `xy` intermediate, then accumulate the raw v128 partial for
-/// `(xy · cᵢ)` — deferring the rev64+shift recovery and the final
-/// reduction to one post-loop pass.
+/// 64-bit `xy` intermediate, then accumulate the `(xy · cᵢ)` streams,
+/// deferring their recombination and the final reduction to one
+/// post-loop pass.
 #[inline]
 pub(super) fn double_inner_product(a: &[Gf2_64], b: &[Gf2_64], c: &[Gf2_64]) -> u64 {
-    let mut acc = u64x2_splat(0);
+    let zero = u64x2_splat(0);
+    let mut acc = (zero, zero);
     for ((x, y), z) in a.iter().zip(b.iter()).zip(c.iter()) {
-        let (xy_lo, xy_hi) = bmul64_full(x.0, y.0);
-        let xy = reduce64(xy_lo, xy_hi);
-        let v = bmul64_lo_v128(
-            u64x2(xy, rev64(xy)),
-            u64x2(z.0, rev64(z.0)),
-        );
-        acc = v128_xor(acc, v);
+        let xy = mul(x.0, y.0);
+        acc = clmul32_x4(pack(xy), pack(z.0), acc);
     }
-    let lo = u64x2_extract_lane::<0>(acc);
-    let hi = rev64(u64x2_extract_lane::<1>(acc)) >> 1;
-    reduce64(lo, hi)
+    reduce(recover(acc))
 }
 
 #[inline]

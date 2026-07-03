@@ -1,13 +1,16 @@
 //! WASM `simd128` carry-less multiplication primitives.
 //!
-//! Uses the BearSSL bit-interleaving algorithm (the same one as scalar
-//! `bmul`) but runs the forward and bit-reversed halves of
-//! `bmul64_full` in parallel across the two `u64` lanes of a `v128`,
-//! collapsing 32 scalar 64×64 multiplications into 16 `i64x2_mul`s.
-//!
-//! Since WASM has no carry-less-multiply instruction in `simd128`
-//! (neither stable nor relaxed-SIMD), the lane-parallel BearSSL trick
-//! is the best acceleration available.
+//! WASM has no carry-less-multiply instruction in `simd128` (neither
+//! stable nor relaxed-SIMD), so multiplication is built from the BearSSL
+//! bit-interleaving algorithm over 32×32→64 integer products
+//! ([`clmul32_x4`]). The `i64x2.extmul_*_u32x4` instructions each compute
+//! two such products and lower to a single widening multiply on common
+//! hosts — much cheaper than `i64x2.mul`, which engines emulate with a
+//! multi-instruction sequence. Working from 32-bit pieces also yields the
+//! full product with no truncation, so no bit-reversal trick is needed;
+//! wider multiplies recombine the 64-bit pieces with Karatsuba, and since
+//! the recombination is linear over GF(2) it can be deferred across
+//! XOR-accumulation loops.
 
 use std::arch::wasm32::*;
 
@@ -39,109 +42,71 @@ pub(crate) fn bit_spread_v128(mut v: v128) -> v128 {
     v
 }
 
-/// Returns a `v128` whose lane `i` holds the low-64 carry-less product of
-/// `x`'s and `y`'s lane `i`. Both lanes run the BearSSL bit-interleaving
-/// algorithm simultaneously via `i64x2_mul`.
-#[inline(always)]
-pub(crate) fn bmul64_lo_v128(x: v128, y: v128) -> v128 {
-    let m0 = u64x2_splat(0x1111_1111_1111_1111);
-    let m1 = u64x2_splat(0x2222_2222_2222_2222);
-    let m2 = u64x2_splat(0x4444_4444_4444_4444);
-    let m3 = u64x2_splat(0x8888_8888_8888_8888);
-
-    let a0 = v128_and(x, m0);
-    let a1 = v128_and(x, m1);
-    let a2 = v128_and(x, m2);
-    let a3 = v128_and(x, m3);
-    let b0 = v128_and(y, m0);
-    let b1 = v128_and(y, m1);
-    let b2 = v128_and(y, m2);
-    let b3 = v128_and(y, m3);
-
-    let z0 = v128_xor(
-        v128_xor(i64x2_mul(a0, b0), i64x2_mul(a1, b3)),
-        v128_xor(i64x2_mul(a2, b2), i64x2_mul(a3, b1)),
-    );
-    let z1 = v128_xor(
-        v128_xor(i64x2_mul(a0, b1), i64x2_mul(a1, b0)),
-        v128_xor(i64x2_mul(a2, b3), i64x2_mul(a3, b2)),
-    );
-    let z2 = v128_xor(
-        v128_xor(i64x2_mul(a0, b2), i64x2_mul(a1, b1)),
-        v128_xor(i64x2_mul(a2, b0), i64x2_mul(a3, b3)),
-    );
-    let z3 = v128_xor(
-        v128_xor(i64x2_mul(a0, b3), i64x2_mul(a1, b2)),
-        v128_xor(i64x2_mul(a2, b1), i64x2_mul(a3, b0)),
-    );
-
-    v128_xor(
-        v128_xor(v128_and(z0, m0), v128_and(z1, m1)),
-        v128_xor(v128_and(z2, m2), v128_and(z3, m3)),
-    )
-}
-
-/// Bit-reverses a `u64` (scalar — WASM has no bit-reverse instruction).
-#[inline(always)]
-pub(crate) fn rev64(mut x: u64) -> u64 {
-    x = ((x & 0x5555_5555_5555_5555) << 1) | ((x >> 1) & 0x5555_5555_5555_5555);
-    x = ((x & 0x3333_3333_3333_3333) << 2) | ((x >> 2) & 0x3333_3333_3333_3333);
-    x = ((x & 0x0f0f_0f0f_0f0f_0f0f) << 4) | ((x >> 4) & 0x0f0f_0f0f_0f0f_0f0f);
-    x.swap_bytes()
-}
-
-/// Full 64×64 carry-less product, left in *raw* v128 form. Lane 0 is
-/// the low 64 bits of the product; lane 1 is the BearSSL bit-reversed
-/// product form (which still needs `rev64(lane1) >> 1` to recover the
-/// high 64 bits — see [`recover_raw`]).
+/// BearSSL 4-mask clmul32 over all four u32 lane pairs of `a` × `b`,
+/// XORed into `acc = (low lane products, high lane products)`: result
+/// u64 lane `l` of the pair is the full 32×32 carry-less product of
+/// `a`'s and `b`'s u32 lane `l`, one `extmul` per two products.
 ///
-/// Prefer this over [`bmul64_full`] whenever many partials are going to
-/// be XOR-accumulated: since `rev64` and `>> 1` are linear over GF(2),
-/// they commute with XOR and can be deferred to the end of the
-/// accumulation.
+/// Carry safety: 4-bit mask spacing leaves each product column with at
+/// most 8 addends, so integer carries never reach the next lattice
+/// position and are cleared by the per-`k` masking.
 #[inline(always)]
-pub(crate) fn bmul64_raw(x: u64, y: u64) -> v128 {
-    bmul64_lo_v128(u64x2(x, rev64(x)), u64x2(y, rev64(y)))
+pub(crate) fn clmul32_x4(a: v128, b: v128, acc: (v128, v128)) -> (v128, v128) {
+    let mut t_lo = [u64x2_splat(0); 4];
+    let mut t_hi = [u64x2_splat(0); 4];
+
+    let am = mask4(a);
+    let bm = mask4(b);
+
+    for i in 0..4 {
+        for j in 0..4 {
+            let k = (i + j) & 3;
+            t_lo[k] = v128_xor(t_lo[k], i64x2_extmul_low_u32x4(am[i], bm[j]));
+            t_hi[k] = v128_xor(t_hi[k], i64x2_extmul_high_u32x4(am[i], bm[j]));
+        }
+    }
+
+    let mut r_lo = acc.0;
+    let mut r_hi = acc.1;
+    for k in 0..4 {
+        let mk = u64x2_splat(0x1111_1111_1111_1111 << k);
+        r_lo = v128_xor(r_lo, v128_and(t_lo[k], mk));
+        r_hi = v128_xor(r_hi, v128_and(t_hi[k], mk));
+    }
+    (r_lo, r_hi)
 }
 
-/// Recover scalar `(lo, hi)` from an accumulated raw v128 bmul partial.
+/// Low-lanes-only variant of [`clmul32_x4`], for packs with only the
+/// two low u32 lane pairs populated.
 #[inline(always)]
-pub(crate) fn recover_raw(v: v128) -> (u64, u64) {
-    let lo = u64x2_extract_lane::<0>(v);
-    let hi = rev64(u64x2_extract_lane::<1>(v)) >> 1;
-    (lo, hi)
+pub(crate) fn clmul32_x2(a: v128, b: v128, acc: v128) -> v128 {
+    let mut t = [u64x2_splat(0); 4];
+
+    let am = mask4(a);
+    let bm = mask4(b);
+
+    for i in 0..4 {
+        for j in 0..4 {
+            let k = (i + j) & 3;
+            t[k] = v128_xor(t[k], i64x2_extmul_low_u32x4(am[i], bm[j]));
+        }
+    }
+
+    let mut r = acc;
+    for k in 0..4 {
+        let mk = u64x2_splat(0x1111_1111_1111_1111 << k);
+        r = v128_xor(r, v128_and(t[k], mk));
+    }
+    r
 }
 
-/// Full 64×64 → 128 bit carry-less product. Returns `(lo, hi)` such that
-/// the 128-bit product is `hi·2⁶⁴ + lo`.
+/// The four BearSSL lattice maskings of `v`.
 #[inline(always)]
-pub(crate) fn bmul64_full(x: u64, y: u64) -> (u64, u64) {
-    recover_raw(bmul64_raw(x, y))
-}
-
-/// Full 128×128 → 256 bit carry-less product. Returns `(lo, hi)` such
-/// that the 256-bit product is `hi·2¹²⁸ + lo`.
-#[inline(always)]
-pub(crate) fn bmul128_full(a: u128, b: u128) -> (u128, u128) {
-    let a_lo = a as u64;
-    let a_hi = (a >> 64) as u64;
-    let b_lo = b as u64;
-    let b_hi = (b >> 64) as u64;
-
-    // Karatsuba: the middle partial p01^p10 = p_mid ^ p00 ^ p11, where
-    // p_mid = (a_lo+a_hi)(b_lo+b_hi) — three bmul64_full instead of four.
-    let (p00_lo, p00_hi) = bmul64_full(a_lo, b_lo);
-    let (p11_lo, p11_hi) = bmul64_full(a_hi, b_hi);
-    let (pm_lo, pm_hi) = bmul64_full(a_lo ^ a_hi, b_lo ^ b_hi);
-
-    let mid_lo = pm_lo ^ p00_lo ^ p11_lo;
-    let mid_hi = pm_hi ^ p00_hi ^ p11_hi;
-
-    let p00 = ((p00_hi as u128) << 64) | (p00_lo as u128);
-    let p11 = ((p11_hi as u128) << 64) | (p11_lo as u128);
-
-    let lo = p00 ^ ((mid_lo as u128) << 64);
-    let hi = p11 ^ (mid_hi as u128);
-
-    (lo, hi)
+fn mask4(v: v128) -> [v128; 4] {
+    [
+        v128_and(v, u32x4_splat(0x1111_1111)),
+        v128_and(v, u32x4_splat(0x2222_2222)),
+        v128_and(v, u32x4_splat(0x4444_4444)),
+        v128_and(v, u32x4_splat(0x8888_8888)),
+    ]
 }
