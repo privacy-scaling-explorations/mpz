@@ -1,7 +1,3 @@
-//! Stress the chunk-loop with a tight cap that forces a chunk per
-//! `i32.add`. Catches AuthMap-across-chunks regressions: each gate's
-//! output is needed by the next chunk's gate.
-
 mod common;
 
 use futures::{executor::block_on, future::join};
@@ -26,9 +22,6 @@ fn func_idx(module: &Module, name: &str) -> u32 {
 #[test]
 fn chunk_per_gate() {
     common::init_tracing();
-    // Five chained adds = 5 × 32 = 160 sVOLE bits. Cap at 1 forces
-    // one chunk per i32.add — the AuthMap entry written by chunk N
-    // must still be live in chunk N+1.
     let wat = r#"
         (module
             (func $sum6 (export "sum6")

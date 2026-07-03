@@ -39,8 +39,8 @@ pub(crate) fn xor_into(dst: &mut [u8], src: &[u8]) {
     }
 }
 
-/// Branchless conditional XOR: `dst ^= src & mask` over 16-byte lanes. `mask` is
-/// all-ones to apply `src`, zero for a no-op.
+/// Branchless conditional XOR: `dst ^= src & mask` over 16-byte lanes. `mask`
+/// is all-ones to apply `src`, zero for a no-op.
 pub(crate) fn xor_masked_into(dst: &mut [u8], src: &[u8], mask: [u8; 16]) {
     debug_assert_eq!(dst.len(), src.len());
     debug_assert_eq!(dst.len() % 16, 0);
@@ -136,7 +136,10 @@ mod tests {
                     xor_into(&mut u_ref, &rows[x * tb..(x + 1) * tb]);
                     for i in 0..k {
                         if (x >> i) & 1 == 1 {
-                            xor_into(&mut v_ref[i * tb..(i + 1) * tb], &rows[x * tb..(x + 1) * tb]);
+                            xor_into(
+                                &mut v_ref[i * tb..(i + 1) * tb],
+                                &rows[x * tb..(x + 1) * tb],
+                            );
                         }
                     }
                 }

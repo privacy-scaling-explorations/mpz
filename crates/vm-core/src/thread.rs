@@ -35,6 +35,7 @@ use mpz_vm_ir::Module;
 
 use crate::{
     Directive, Global, MaybeTrap, Op, Operand, Trap, Visibility,
+    access_log::{Access, AccessAddr, AccessKind},
     analysis::{BranchRegion, FunctionAnalysis},
     arithmetic,
     call::{Call, Param},
@@ -310,8 +311,6 @@ impl Thread {
             Some(Pending::Branch) => {
                 self.pending = None;
                 if unreachable {
-                    // A trap is a terminal outcome, not an error: surface it
-                    // as `StepResult::Trapped` on the next `step`.
                     self.deferred_trap = Some(Trap::Unreachable);
                 } else {
                     self.op_counter += 1;
@@ -348,14 +347,11 @@ impl Thread {
             match value {
                 Some(v) => {
                     self.registers[reg.index()] = v;
-                    // The result's visibility is determined by the specific call
-                    // and supplied by the embedder.
                     self.reg_taints.set(reg.as_u32(), Class::from(visibility));
                 }
                 None => return Err(Error::MissingHostCallValue),
             }
         }
-        // The call op_counter was advanced when the directive was emitted.
         self.pending = None;
         Ok(())
     }
@@ -455,12 +451,8 @@ impl Thread {
         for (i, param) in params.into_iter().enumerate() {
             let abs_reg = (reg_base + i) as u32;
             let (value, class) = match param {
-                // This party holds the bits: taints but held.
                 Param::Private(value) => (value, Class::Private),
-                // Public: concrete and held by both parties.
                 Param::Public(value) => (value, Class::Public),
-                // The remote party holds the bits: taints and unheld here
-                // (the register value is a placeholder, never read).
                 Param::Blind(ty) => (Value::zero(ty), Class::Blind),
             };
             self.registers[reg_base + i] = value;
@@ -498,9 +490,6 @@ impl Thread {
     /// [`Error::Unimplemented`] when the operation being executed cannot be
     /// interpreted.
     pub fn step(&mut self, module: &Module, global: &mut Global) -> Result<StepResult, Error> {
-        // An imported call is emitted as a directive and only then marked
-        // pending. If the embedder steps again without resolving it, re-surface
-        // it as blocked rather than erroring.
         if let Some(pending @ Pending::HostCall { .. }) = &self.pending {
             return Ok(StepResult::Blocked(pending.clone()));
         }
@@ -533,7 +522,6 @@ impl Thread {
             _ => return Err(Error::InvalidFunction(func_idx)),
         };
 
-        // Compute (or fetch) the cached branch analysis for this function.
         let analysis = match self.analysis.get(&func_idx) {
             Some(analysis) => Arc::clone(analysis),
             None => {
@@ -574,8 +562,6 @@ impl Thread {
                         bail_out,
                         ..
                     } => {
-                        // Bail-out branches are publicly deducible — don't
-                        // enter private CF, but still require trap resolution.
                         if !bail_out && self.private_cf.is_none() {
                             self.private_cf = Some(match exit {
                                 Some(block) => PrivateCfExit::Join {
@@ -587,10 +573,6 @@ impl Thread {
                                 },
                             });
                         }
-                        // The condition is taints. If this party doesn't hold
-                        // its bits it can't pick a path — block for the embedder
-                        // to resolve. (The operand carries `Some` value iff it
-                        // is available to this party.)
                         if cond_value.is_none() {
                             if exit.is_none() {
                                 self.exit_frame()?;
@@ -600,9 +582,6 @@ impl Thread {
                             return Ok(StepResult::Blocked(Pending::Branch));
                         }
                     }
-                    // Emit the imported call as a directive, but mark it pending
-                    // so a later step blocks until the embedder resolves it with
-                    // `resolve_host_call`.
                     Directive::Call {
                         dst,
                         func_idx,
@@ -622,11 +601,6 @@ impl Thread {
                 Ok(StepResult::Directive(event))
             }
             FrameStepResult::Trapped { directive, trap } => {
-                // An op trapped while executing concretely (e.g. the embedder
-                // evaluated an `i32.div_u` trap condition itself, or a memory
-                // access went out of bounds). Terminal: mark done. The index it
-                // occupies is the current op_counter; no bump (the op is not a
-                // normal emission).
                 let index = self.op_counter;
                 self.done = true;
                 Ok(StepResult::Trapped {
@@ -651,8 +625,6 @@ impl Thread {
                         _ => unreachable!("local call args should be taints"),
                     })
                     .collect();
-                // The callee's frame begins at the current end of the register
-                // file; capture it before `enter_frame` grows it.
                 let param_base = Reg(self.registers.len() as u32);
                 self.enter_frame(cx, func_idx, func, reg_args, dst)?;
                 self.op_counter += 1;
@@ -668,10 +640,6 @@ impl Thread {
                 self.check_private_cf_exit();
                 let src = return_reg.map(|r| popped.reg_base + r);
                 let (dst, reclaim) = if self.call_stack.is_empty() {
-                    // Outermost return: the result lives in the popped frame's
-                    // registers (read by `complete`), so it is neither copied
-                    // into a caller nor reclaimed. Defer `Done` until the next
-                    // step so observers see this `Return` first.
                     self.deferred_complete = true;
                     (None, None)
                 } else {
@@ -694,8 +662,6 @@ impl Thread {
     fn check_private_cf_exit(&mut self) {
         let exited = match self.private_cf {
             Some(PrivateCfExit::Join { block, depth }) => {
-                // Exit when we reach the join block at the right depth,
-                // OR when the call depth drops (function returned/trapped).
                 self.call_stack.len() < depth
                     || (self.call_stack.len() == depth
                         && self
@@ -733,14 +699,12 @@ impl Thread {
             self.registers.resize(target_len, Value::I32(0));
         }
 
-        // Copy args (preserving their class)
         for (i, arg) in args.iter().enumerate() {
             let abs_dst = (reg_base + i) as u32;
             self.registers[reg_base + i] = self.registers[arg.index()];
             self.reg_taints.copy(arg.as_u32(), abs_dst, 1);
         }
 
-        // Zero declared locals (concrete and held)
         let num_params = func_type.params.len();
         let mut local_idx = num_params;
         for local in func.locals() {
@@ -770,10 +734,6 @@ impl Thread {
             .call_stack
             .pop()
             .ok_or_else(|| Error::Internal("no frame to exit".into()))?;
-        // Reclaim the popped frame's register slots: clear their taints and
-        // shrink the register file back to this frame's base so a later call at
-        // the same depth reuses them. This bounds the register file by the live
-        // call stack rather than by total calls made.
         self.reg_taints.set_range(
             frame.reg_base.as_u32(),
             frame.num_regs as usize,
@@ -786,8 +746,6 @@ impl Thread {
     fn complete(&mut self) -> Result<StepResult, Error> {
         self.done = true;
         let (result, symbolic) = if self.has_result {
-            // The return value occupies register 0; its taint there is
-            // authoritative for whether the result is symbolic.
             (Some(self.registers[0]), self.reg_taints.is_symbolic(0))
         } else {
             (None, false)
@@ -868,14 +826,11 @@ impl Frame {
 
     fn operand(&self, registers: &[Value], taints: &Taints, reg: Reg) -> Operand {
         if self.is_symbolic(taints, reg) {
-            // The directive carries the concrete value only if this party
-            // holds it.
             let value = if self.is_available(taints, reg) {
                 Some(self.get(registers, reg))
             } else {
                 None
             };
-            // Directives speak in absolute registers.
             Operand::Symbol {
                 reg: self.abs(reg),
                 value,
@@ -1028,8 +983,6 @@ impl Frame {
                 let false_sym = self.is_symbolic(taints, *if_false);
 
                 if !cond_sym {
-                    // Concrete condition: the result takes the taint and
-                    // availability of the *selected* operand only.
                     let condition = self.get(registers, *cond).as_i32()?;
                     let (result, sel_reg, sel_sym) = if condition != 0 {
                         (self.get(registers, *if_true), *if_true, true_sym)
@@ -1052,10 +1005,6 @@ impl Frame {
                     self.set_clear(registers, taints, *dst, result);
                     self.advance_ip();
                 } else {
-                    // Symbolic condition: the result is taints. This party
-                    // can compute it only if it holds the condition (to pick
-                    // the operand) and that operand; otherwise it is
-                    // taints.
                     let d = Directive::Op(Op::Select {
                         dst: self.abs(*dst),
                         cond: self.operand(registers, taints, *cond),
@@ -1073,7 +1022,6 @@ impl Frame {
                         self.set(registers, *dst, result);
                         self.set_symbolic(taints, *dst, avail);
                     } else {
-                        // Can't pick the operand: placeholder, taints.
                         let placeholder = self.get(registers, *if_true);
                         self.set(registers, *dst, placeholder);
                         self.set_symbolic(taints, *dst, false);
@@ -1125,11 +1073,6 @@ impl Frame {
             }
 
             Instruction::MemoryGrow { dst, pages } => {
-                // The growth mutates shared memory by `pages`, which both parties
-                // must apply identically. If the count is symbolic and not held
-                // here, this party cannot pick it: block for the embedder to
-                // supply it. A held value (concrete, or symbolic but available)
-                // is used directly.
                 let delta = match resolved {
                     Some(v) => v,
                     None if self.is_symbolic(taints, *pages)
@@ -1151,8 +1094,6 @@ impl Frame {
             }
 
             Instruction::MemoryFill { dest, val, len } => {
-                // Destination unknown to this party: surface the op as a
-                // directive, mark memory conservatively, and do not write.
                 if self.addr_unlocatable(taints, *dest) {
                     let d = Directive::Op(Op::MemoryFill {
                         dest: self.operand(registers, taints, *dest),
@@ -1168,7 +1109,6 @@ impl Frame {
                 let dest_addr = self.get(registers, *dest).as_i32()? as usize;
                 let memory = cx.global.memory_mut().ok_or(Error::MemoryNotDefined)?;
                 mem_try!(memory.fill(dest_addr, byte_val, size));
-                // Concrete fill clears taints state at destination.
                 if !in_private_cf {
                     cx.global
                         .memory_taints_mut()
@@ -1254,11 +1194,6 @@ impl Frame {
                 table_idx,
                 args,
             } => {
-                // The call target is selected by the index. If the index is
-                // symbolic and not held here, this party cannot pick the target:
-                // block for the embedder to supply the concrete index. A held
-                // value (concrete, or symbolic but available) dispatches
-                // directly.
                 let idx = match resolved {
                     Some(v) => v,
                     None if self.is_symbolic(taints, *table_idx)
@@ -1344,7 +1279,6 @@ impl Frame {
                         src: self.abs(unary.src),
                     });
                     if self.is_available(taints, unary.src) {
-                        // We hold the operand: compute the real result.
                         let (dst, val) = match arithmetic::execute(instr, |reg| {
                             Ok(registers[reg_base + reg.index()])
                         })? {
@@ -1359,7 +1293,7 @@ impl Frame {
                         registers[reg_base + dst.index()] = val;
                         self.set_symbolic(taints, unary.dst, true);
                     } else {
-                        // We don't: result is taints and taints.
+                        self.set(registers, unary.dst, Value::zero(unary.op.return_ty()));
                         self.set_symbolic(taints, unary.dst, false);
                     }
                     self.advance_ip();
@@ -1382,11 +1316,6 @@ impl Frame {
             InstructionArith::Binary(binary) => {
                 let lhs_sym = self.is_symbolic(taints, binary.lhs);
                 let rhs_sym = self.is_symbolic(taints, binary.rhs);
-                // Ops that may trap based on operand values: the integer
-                // div/rem ops. `DivideByZero` is decided by the divisor
-                // (`rhs`) alone; the signed divides additionally decide
-                // `IntegerOverflow` from the dividend (`lhs`), so they need
-                // both operands available to resolve locally.
                 let could_trap = binary_could_trap(binary.op);
                 let needs_lhs = binary_trap_needs_lhs(binary.op);
                 if lhs_sym || rhs_sym {
@@ -1401,7 +1330,6 @@ impl Frame {
                     self.advance_ip();
 
                     if could_trap && rhs_avail && (!needs_lhs || lhs_avail) {
-                        // Trap-determining operands available: decide locally.
                         let lhs = registers[reg_base + binary.lhs.index()];
                         let rhs = registers[reg_base + binary.rhs.index()];
                         if let Some(trap) = binary_trap(binary.op, lhs, rhs) {
@@ -1413,8 +1341,6 @@ impl Frame {
                     }
 
                     if lhs_avail && rhs_avail {
-                        // All operands held: compute the real result (and
-                        // surface any other trap it raises).
                         match arithmetic::execute(instr, |reg| {
                             Ok(registers[reg_base + reg.index()])
                         })? {
@@ -1430,13 +1356,11 @@ impl Frame {
                             }
                         }
                     } else {
+                        self.set(registers, binary.dst, Value::zero(binary.op.return_ty()));
                         self.set_symbolic(taints, binary.dst, false);
                     }
                     return Ok(FrameStepResult::Directive(d));
                 }
-                // Both operands concrete: compute. A trap surfaces with no
-                // directive (the op is fully public) and is turned into
-                // `StepResult::Trapped` by the caller.
                 match arithmetic::execute(instr, |reg| Ok(registers[reg_base + reg.index()]))? {
                     Ok((dst, val)) => {
                         self.set_clear(registers, taints, dst, val);
@@ -1487,15 +1411,20 @@ impl Frame {
             };
             self.set_clear(registers, taints, dst, value);
             self.advance_ip();
+            if let Some(log) = cx.global.access_log_mut() {
+                log.push(Access {
+                    kind: AccessKind::Read,
+                    addr: AccessAddr::Public(eff_addr),
+                    width: byte_size as u8,
+                    symbolic_mask: 0,
+                    value: None,
+                    emitted: false,
+                    host: false,
+                });
+            }
             return Ok(FrameStepResult::Continue);
         }
 
-        // Build the directive. The address operand carries its concrete value
-        // (or marks it symbolic — the embedder decides what to do with a
-        // symbolic address). For a concrete address, also carry the concrete
-        // bytes in range (symbolic bytes zeroed) and the per-byte symbolic mask,
-        // so an embedder can authenticate the symbolic bytes and materialize the
-        // concrete ones.
         let addr_op = self.operand(registers, taints, addr);
         let (concrete, symbolic_mask) = if addr_sym {
             (0, 0)
@@ -1525,8 +1454,6 @@ impl Frame {
             concrete,
             symbolic_mask,
         });
-        // The loaded value is available iff this party holds the address (to
-        // know which bytes) and holds every byte in range.
         let result_avail = self.is_available(taints, addr)
             && !cx
                 .global
@@ -1545,9 +1472,25 @@ impl Frame {
             self.set(registers, dst, value);
             self.set_symbolic(taints, dst, true);
         } else {
+            self.set(registers, dst, Value::zero(kind.result_ty()));
             self.set_symbolic(taints, dst, false);
         }
         self.advance_ip();
+        if let Some(log) = cx.global.access_log_mut() {
+            log.push(Access {
+                kind: AccessKind::Read,
+                addr: if addr_sym {
+                    AccessAddr::Symbolic
+                } else {
+                    AccessAddr::Public(eff_addr)
+                },
+                width: byte_size as u8,
+                symbolic_mask,
+                value: None,
+                emitted: true,
+                host: false,
+            });
+        }
         Ok(FrameStepResult::Directive(d))
     }
 
@@ -1565,26 +1508,37 @@ impl Frame {
         store_op: Directive,
     ) -> Result<FrameStepResult, Error> {
         let byte_size = kind.byte_size();
-        let mark_all_sym_on_sym_addr = kind.is_narrowing();
+        let full_mask = ((1u16 << byte_size) - 1) as u8;
         if self.is_symbolic(taints, addr) {
             if !self.is_available(taints, addr) {
-                // The destination is unknown to this party: conservatively mark
-                // the whole memory taints and taints, emit, don't write.
-                if mark_all_sym_on_sym_addr && let Some(memory) = cx.global.memory() {
+                if let Some(memory) = cx.global.memory() {
                     let len = memory.len();
                     cx.global
                         .memory_taints_mut()
                         .set_range(0, len, Class::Blind);
                 }
                 self.advance_ip();
+                if let Some(log) = cx.global.access_log_mut() {
+                    log.push(Access {
+                        kind: AccessKind::Write,
+                        addr: AccessAddr::Symbolic,
+                        width: byte_size as u8,
+                        symbolic_mask: full_mask,
+                        value: None,
+                        emitted: true,
+                        host: false,
+                    });
+                }
                 return Ok(FrameStepResult::Directive(store_op));
             }
-            // Address held: write at the (taints) location; the stored bytes
-            // take the value's availability.
             let addr_val = self.get(registers, addr).as_i32()?;
             let eff_addr = (addr_val as u64 + memarg.offset as u64) as u32;
             let val_avail = self.is_available(taints, val);
             let bytes = self.get(registers, val).to_le_bytes();
+            if let Some(memory) = cx.global.memory() {
+                let len = memory.len();
+                cx.global.memory_taints_mut().mark_symbolic_range(0, len);
+            }
             let memory = cx.global.memory_mut().ok_or(Error::MemoryNotDefined)?;
             mem_try!(memory.write_bytes(eff_addr, &bytes[..byte_size]));
             cx.global.memory_taints_mut().set_range(
@@ -1593,6 +1547,17 @@ impl Frame {
                 Class::symbolic(val_avail),
             );
             self.advance_ip();
+            if let Some(log) = cx.global.access_log_mut() {
+                log.push(Access {
+                    kind: AccessKind::Write,
+                    addr: AccessAddr::Symbolic,
+                    width: byte_size as u8,
+                    symbolic_mask: full_mask,
+                    value: None,
+                    emitted: true,
+                    host: false,
+                });
+            }
             return Ok(FrameStepResult::Directive(store_op));
         }
         let addr_val = self.get(registers, addr).as_i32()?;
@@ -1600,7 +1565,6 @@ impl Frame {
         let val_sym = self.is_symbolic(taints, val);
 
         if !val_sym {
-            // Concrete value: bytes become concrete (and available).
             let bytes = self.get(registers, val).to_le_bytes();
             let memory = cx.global.memory_mut().ok_or(Error::MemoryNotDefined)?;
             mem_try!(memory.write_bytes(eff_addr, &bytes[..byte_size]));
@@ -1609,9 +1573,22 @@ impl Frame {
                     .memory_taints_mut()
                     .set_range(eff_addr, byte_size, Class::Public);
             }
+            if let Some(log) = cx.global.access_log_mut() {
+                let mut value = 0u64;
+                for (i, &b) in bytes[..byte_size].iter().enumerate() {
+                    value |= (b as u64) << (i * 8);
+                }
+                log.push(Access {
+                    kind: AccessKind::Write,
+                    addr: AccessAddr::Public(eff_addr),
+                    width: byte_size as u8,
+                    symbolic_mask: 0,
+                    value: Some(value),
+                    emitted: false,
+                    host: false,
+                });
+            }
         } else {
-            // Symbolic value at a concrete address: bytes inherit the value's
-            // taint and availability.
             let val_avail = self.is_available(taints, val);
             if val_avail {
                 let bytes = self.get(registers, val).to_le_bytes();
@@ -1624,6 +1601,17 @@ impl Frame {
                 Class::symbolic(val_avail),
             );
             self.advance_ip();
+            if let Some(log) = cx.global.access_log_mut() {
+                log.push(Access {
+                    kind: AccessKind::Write,
+                    addr: AccessAddr::Public(eff_addr),
+                    width: byte_size as u8,
+                    symbolic_mask: full_mask,
+                    value: None,
+                    emitted: true,
+                    host: false,
+                });
+            }
             return Ok(FrameStepResult::Directive(store_op));
         }
         self.advance_ip();
@@ -1645,9 +1633,6 @@ impl Frame {
             .ok_or(Error::UndefinedFunction(func_idx))?;
 
         match func {
-            // The interpreter does not own host/import semantics. Surface every
-            // imported call as a `Directive::Call` (which `step` turns into a
-            // `Pending::HostCall`) for the embedder to service or reject.
             Function::Import(_) => {
                 let args: Vec<Operand> = args
                     .iter()
@@ -1658,8 +1643,6 @@ impl Frame {
                     dst: dst.map(|r| self.abs(r)),
                     func_idx,
                     args,
-                    // A host/imported call enters no frame, so there is no
-                    // callee parameter base.
                     param_base: Reg(0),
                 }))
             }
@@ -1722,9 +1705,6 @@ impl Frame {
                 if self.is_symbolic(taints, *cond) {
                     let region = analysis.region(self.current_block);
                     if !self.is_available(taints, *cond) {
-                        // We don't hold the condition: emit the taints branch
-                        // directive; `Thread::step` blocks (the cond operand
-                        // carries no value) for the embedder to resolve.
                         return self.handle_symbolic_branch(
                             cx,
                             registers,
@@ -1735,8 +1715,6 @@ impl Frame {
                             in_private_cf,
                         );
                     }
-                    // We hold the condition: emit the directive (and taint),
-                    // then follow the path we know.
                     let result = self.handle_symbolic_branch(
                         cx,
                         registers,
@@ -1797,7 +1775,6 @@ impl Frame {
                         region,
                         in_private_cf,
                     )?;
-                    // We hold the index: follow the real target.
                     let index = self.get(registers, *idx).as_i32()?;
                     let target = if (index as usize) < targets.len() {
                         targets[index as usize]
@@ -1854,14 +1831,12 @@ impl Frame {
         region: &BranchRegion,
         _in_private_cf: bool,
     ) -> Result<FrameStepResult, Error> {
-        // Taint globals written in the branch region.
         for &global_idx in &region.globals_written {
             cx.global
                 .global_taints_mut()
                 .mark_symbolic_range(global_idx, 1);
         }
 
-        // Taint all memory if any store exists in the branch region.
         if region.has_memory_store
             && let Some(memory) = cx.global.memory()
         {
@@ -1869,12 +1844,10 @@ impl Frame {
             cx.global.memory_taints_mut().mark_symbolic_range(0, len);
         }
 
-        // Mark registers written in the branch region as symbolic.
         for &reg in &region.registers_written {
             taints.mark_symbolic_range(self.abs(reg).as_u32(), 1);
         }
 
-        // Also taint the absolute result register (outside the frame).
         if let Some(idx) = self.reg_result {
             taints.mark_symbolic_range(idx.as_u32(), 1);
         }
@@ -1890,8 +1863,6 @@ impl Frame {
         let bail_out = region.bail_out;
 
         if self.is_available(taints, cond_reg) {
-            // We hold the condition: emit it with its value; the caller follows
-            // the path.
             return Ok(FrameStepResult::Directive(Directive::Branch {
                 func_idx: self.func_idx,
                 block: branch_block,
@@ -1965,9 +1936,6 @@ mod tests {
 
     #[test]
     fn memory_grow_blind_pages_blocks_then_resolves() {
-        // The page count is blind (symbolic and unheld), so `memory.grow` must
-        // block rather than error; resolving it re-runs the op with the
-        // supplied count.
         let wat = r#"
             (module
               (memory 1)
@@ -1998,7 +1966,6 @@ mod tests {
                     thread.resolve_memory_grow(1).unwrap();
                 }
                 StepResult::Done { result, .. } => {
-                    // Growing from the initial 1 page returns the prior size.
                     assert_eq!(result, Some(Value::I32(1)));
                     break;
                 }
@@ -2063,10 +2030,6 @@ mod tests {
 
     #[test]
     fn blind_divisor_div_u_emits_directive_and_continues() {
-        // A blind divisor means this party can't decide whether the div_u traps.
-        // The op no longer blocks: it emits as an ordinary directive and
-        // execution continues as if it did not trap. A peer detects any trap by
-        // correlating the op index.
         let module = div_module();
         let (mut thread, mut global) = setup_div_params(
             &module,
@@ -2078,7 +2041,6 @@ mod tests {
             let pre_counter = thread.op_counter();
             match thread.step(&module, &mut global).expect("step") {
                 StepResult::Directive(d) if is_div_u_directive(&d) => {
-                    // The div_u emits at its slot and op_counter bumps once.
                     assert_eq!(thread.op_counter(), pre_counter + 1);
                     assert!(!thread.is_done());
                     div_index = Some(pre_counter);
@@ -2130,9 +2092,6 @@ mod tests {
     fn op_counter_matches_for_div_u() {
         let module = div_module();
 
-        // Drive a thread until it emits the div_u, recording its op index. The
-        // op emits as a Directive at the same slot whether the divisor is held
-        // or blind — the could-trap case no longer blocks.
         let run = |blind_divisor: bool| -> u64 {
             let divisor = if blind_divisor {
                 Param::Blind(ValType::I32)
@@ -2234,5 +2193,424 @@ mod tests {
             }
             assert!(trapped, "public div-by-zero should trap");
         }
+    }
+
+    /// Steps `thread` to completion, collecting every emitted [`Directive`].
+    fn run_collect(module: &Module, global: &mut Global, thread: &mut Thread) -> Vec<Directive> {
+        let mut directives = Vec::new();
+        loop {
+            match thread.step(module, global).expect("step") {
+                StepResult::Directive(d) => directives.push(d),
+                StepResult::Continue => {}
+                StepResult::Done { .. } => break,
+                StepResult::Trapped { trap, .. } => panic!("unexpected trap: {trap:?}"),
+                StepResult::Blocked(p) => panic!("unexpected block: {p:?}"),
+            }
+        }
+        directives
+    }
+
+    /// The per-byte symbolic axis of linear memory, LSB-address first.
+    fn memory_symbolic_axis(global: &Global) -> Vec<bool> {
+        let len = global.memory().expect("memory should be defined").len();
+        (0..len as u32)
+            .map(|i| global.memory_tainted(i, 1))
+            .collect()
+    }
+
+    #[test]
+    fn symbolic_address_store_smears_symbolic_axis_identically() {
+        let wat = r#"
+            (module
+              (memory 1)
+              (func (export "s") (param i32 i32)
+                local.get 0
+                local.get 1
+                i32.store))
+        "#;
+        let module = Module::parse(&wat::parse_str(wat).unwrap()).unwrap();
+        let func_idx = export_func_idx(&module, "s");
+
+        let mut prover_global = Global::new(&module).unwrap();
+        let mut prover = Thread::new();
+        prover
+            .call(
+                &module,
+                &mut prover_global,
+                Call {
+                    func_idx,
+                    params: vec![
+                        Param::Private(Value::I32(8)),
+                        Param::Private(Value::I32(0x1122_3344)),
+                    ],
+                },
+            )
+            .unwrap();
+        run_collect(&module, &mut prover_global, &mut prover);
+
+        let mut verifier_global = Global::new(&module).unwrap();
+        let mut verifier = Thread::new();
+        verifier
+            .call(
+                &module,
+                &mut verifier_global,
+                Call {
+                    func_idx,
+                    params: vec![Param::Blind(ValType::I32), Param::Blind(ValType::I32)],
+                },
+            )
+            .unwrap();
+        run_collect(&module, &mut verifier_global, &mut verifier);
+
+        let prover_axis = memory_symbolic_axis(&prover_global);
+        let verifier_axis = memory_symbolic_axis(&verifier_global);
+        assert_eq!(
+            prover_axis, verifier_axis,
+            "symbolic axes must match after a symbolic-address store"
+        );
+        assert!(
+            prover_axis.iter().all(|&b| b),
+            "the whole memory must be smeared symbolic"
+        );
+    }
+
+    #[test]
+    fn symbolic_address_load_leaves_memory_taint_untouched() {
+        let wat = r#"
+            (module
+              (memory 1)
+              (func (export "l") (param i32) (result i32)
+                local.get 0
+                i32.load))
+        "#;
+        let module = Module::parse(&wat::parse_str(wat).unwrap()).unwrap();
+        let func_idx = export_func_idx(&module, "l");
+
+        let mut prover_global = Global::new(&module).unwrap();
+        let mut prover = Thread::new();
+        prover
+            .call(
+                &module,
+                &mut prover_global,
+                Call {
+                    func_idx,
+                    params: vec![Param::Private(Value::I32(8))],
+                },
+            )
+            .unwrap();
+        let before = memory_symbolic_axis(&prover_global);
+        let directives = run_collect(&module, &mut prover_global, &mut prover);
+
+        let mut verifier_global = Global::new(&module).unwrap();
+        let mut verifier = Thread::new();
+        verifier
+            .call(
+                &module,
+                &mut verifier_global,
+                Call {
+                    func_idx,
+                    params: vec![Param::Blind(ValType::I32)],
+                },
+            )
+            .unwrap();
+        run_collect(&module, &mut verifier_global, &mut verifier);
+
+        assert!(
+            directives
+                .iter()
+                .any(|d| matches!(d, Directive::Op(Op::Load { .. }))),
+            "a symbolic-address load must emit its directive"
+        );
+        assert_eq!(
+            memory_symbolic_axis(&prover_global),
+            before,
+            "a symbolic-address load must not touch memory taint"
+        );
+        assert!(
+            memory_symbolic_axis(&verifier_global).iter().all(|&b| !b),
+            "a symbolic-address load must not touch memory taint on the verifier"
+        );
+    }
+
+    #[test]
+    fn concrete_store_stays_silent_and_logs() {
+        let overwrite_wat = r#"
+            (module
+              (memory 1)
+              (func (export "f") (param i32)
+                i32.const 0
+                local.get 0
+                i32.store
+                i32.const 0
+                i32.const 42
+                i32.store))
+        "#;
+        let module = Module::parse(&wat::parse_str(overwrite_wat).unwrap()).unwrap();
+        let func_idx = export_func_idx(&module, "f");
+        let mut global = Global::new(&module).unwrap();
+        global.enable_access_log();
+        let mut thread = Thread::new();
+        thread
+            .call(
+                &module,
+                &mut global,
+                Call {
+                    func_idx,
+                    params: vec![Param::Private(Value::I32(7))],
+                },
+            )
+            .unwrap();
+        let directives = run_collect(&module, &mut global, &mut thread);
+        let concrete_stores = directives
+            .iter()
+            .filter(|d| {
+                matches!(
+                    d,
+                    Directive::Op(Op::Store {
+                        val: Operand::Concrete(_),
+                        ..
+                    })
+                )
+            })
+            .count();
+        assert_eq!(
+            concrete_stores, 0,
+            "a concrete store must stay silent even when overwriting symbolic bytes"
+        );
+        let log = global.access_log().expect("access log should be enabled");
+        let overwrite = log
+            .entries()
+            .iter()
+            .find(|a| matches!(a.kind, AccessKind::Write) && a.value == Some(42))
+            .expect("the concrete overwrite should be logged");
+        assert!(
+            !overwrite.emitted,
+            "the logged overwrite must be marked unemitted"
+        );
+
+        let public_wat = r#"
+            (module
+              (memory 1)
+              (func (export "g")
+                i32.const 0
+                i32.const 42
+                i32.store))
+        "#;
+        let module = Module::parse(&wat::parse_str(public_wat).unwrap()).unwrap();
+        let func_idx = export_func_idx(&module, "g");
+        let mut global = Global::new(&module).unwrap();
+        let mut thread = Thread::new();
+        thread
+            .call(
+                &module,
+                &mut global,
+                Call {
+                    func_idx,
+                    params: vec![],
+                },
+            )
+            .unwrap();
+        let directives = run_collect(&module, &mut global, &mut thread);
+        let stores = directives
+            .iter()
+            .filter(|d| matches!(d, Directive::Op(Op::Store { .. })))
+            .count();
+        assert_eq!(
+            stores, 0,
+            "a concrete store over public bytes must stay silent"
+        );
+    }
+
+    const MIXED_WAT: &str = r#"
+        (module
+          (memory 1)
+          (func (export "mixed") (param i32 i32)
+            ;; silent public store at address 0
+            i32.const 0
+            i32.const 42
+            i32.store
+            ;; fast-path public load at address 0
+            i32.const 0
+            i32.load
+            drop
+            ;; symbolic-value store at public address 8
+            i32.const 8
+            local.get 0
+            i32.store
+            ;; concrete store overwriting the symbolic bytes at address 8
+            i32.const 8
+            i32.const 99
+            i32.store
+            ;; symbolic-address store
+            local.get 1
+            i32.const 7
+            i32.store))
+    "#;
+
+    fn mixed_module() -> Module {
+        Module::parse(&wat::parse_str(MIXED_WAT).expect("wat should compile"))
+            .expect("module should parse")
+    }
+
+    fn prover_mixed_params() -> Vec<Param> {
+        vec![
+            Param::Private(Value::I32(0x1122_3344)),
+            Param::Private(Value::I32(16)),
+        ]
+    }
+
+    fn verifier_mixed_params() -> Vec<Param> {
+        vec![Param::Blind(ValType::I32), Param::Blind(ValType::I32)]
+    }
+
+    fn run_mixed(params: Vec<Param>, enable_log: bool) -> (Global, Vec<Directive>) {
+        let module = mixed_module();
+        let func_idx = export_func_idx(&module, "mixed");
+        let mut global = Global::new(&module).unwrap();
+        if enable_log {
+            global.enable_access_log();
+        }
+        let mut thread = Thread::new();
+        thread
+            .call(&module, &mut global, Call { func_idx, params })
+            .unwrap();
+        let directives = run_collect(&module, &mut global, &mut thread);
+        (global, directives)
+    }
+
+    /// Collapses a directive to its shape, ignoring operand values, so two runs
+    /// can be compared for a matching directive skeleton.
+    fn directive_skeleton(d: &Directive) -> &'static str {
+        match d {
+            Directive::Call { .. } => "call",
+            Directive::Return { .. } => "return",
+            Directive::Branch { .. } => "branch",
+            Directive::Op(Op::Load { .. }) => "load",
+            Directive::Op(Op::Store { .. }) => "store",
+            Directive::Op(_) => "op",
+        }
+    }
+
+    #[test]
+    fn access_log_disabled_by_default() {
+        let (global, _directives) = run_mixed(prover_mixed_params(), false);
+        assert!(
+            global.access_log().is_none(),
+            "the access log must be off by default"
+        );
+    }
+
+    #[test]
+    fn access_log_does_not_change_behavior() {
+        let (off_global, off_dirs) = run_mixed(prover_mixed_params(), false);
+        let (on_global, on_dirs) = run_mixed(prover_mixed_params(), true);
+
+        let off_skeleton: Vec<_> = off_dirs.iter().map(directive_skeleton).collect();
+        let on_skeleton: Vec<_> = on_dirs.iter().map(directive_skeleton).collect();
+        assert_eq!(
+            off_skeleton, on_skeleton,
+            "enabling the log must not change the directive stream"
+        );
+        assert_eq!(
+            memory_symbolic_axis(&off_global),
+            memory_symbolic_axis(&on_global),
+            "enabling the log must not change memory taint"
+        );
+    }
+
+    #[test]
+    fn prover_verifier_access_logs_match() {
+        let (prover_global, _) = run_mixed(prover_mixed_params(), true);
+        let (verifier_global, _) = run_mixed(verifier_mixed_params(), true);
+
+        let prover = prover_global.access_log().expect("log enabled");
+        let verifier = verifier_global.access_log().expect("log enabled");
+        assert_eq!(
+            prover.entries(),
+            verifier.entries(),
+            "the access log must match field-for-field on both parties"
+        );
+
+        let prover_sym = prover
+            .entries()
+            .last()
+            .expect("the symbolic-address store is the last access");
+        let verifier_sym = verifier
+            .entries()
+            .last()
+            .expect("the symbolic-address store is the last access");
+        assert!(
+            matches!(prover_sym.addr, AccessAddr::Symbolic),
+            "the symbolic-address store must have a symbolic addr on the prover"
+        );
+        assert!(
+            matches!(verifier_sym.addr, AccessAddr::Symbolic),
+            "the symbolic-address store must have a symbolic addr on the verifier"
+        );
+    }
+
+    #[test]
+    fn emitted_entries_zip_memory_directives() {
+        let (global, directives) = run_mixed(prover_mixed_params(), true);
+        let log = global.access_log().expect("log enabled");
+
+        let emitted: Vec<&Access> = log.entries().iter().filter(|a| a.emitted).collect();
+        let mem_dirs: Vec<&Directive> = directives
+            .iter()
+            .filter(|d| {
+                matches!(
+                    d,
+                    Directive::Op(Op::Load { .. }) | Directive::Op(Op::Store { .. })
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            emitted.len(),
+            mem_dirs.len(),
+            "each emitted entry corresponds to one memory directive"
+        );
+        for (access, directive) in emitted.iter().zip(mem_dirs.iter()) {
+            match (access.kind, directive) {
+                (AccessKind::Read, Directive::Op(Op::Load { .. })) => {}
+                (AccessKind::Write, Directive::Op(Op::Store { .. })) => {}
+                _ => panic!("emitted entry {access:?} does not match directive {directive:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn drain_upto_advances_base_and_preserves_clock() {
+        let (mut global, _) = run_mixed(prover_mixed_params(), true);
+        let all: Vec<Access> = global.access_log().expect("log enabled").entries().to_vec();
+        let clock = global.access_log().expect("log enabled").clock();
+        assert_eq!(clock, all.len() as u64);
+
+        let log = global.access_log_mut().expect("log enabled");
+        log.drain_upto(2);
+        assert_eq!(log.base(), 2, "draining two entries advances base to 2");
+        assert_eq!(
+            log.clock(),
+            clock,
+            "draining must not change the next clock"
+        );
+        assert_eq!(
+            log.entries(),
+            &all[2..],
+            "the resident suffix must start at clock 2"
+        );
+
+        let end = log.clock();
+        log.drain_upto(end);
+        assert!(
+            log.entries().is_empty(),
+            "draining up to the clock empties the log"
+        );
+        assert_eq!(
+            log.base(),
+            clock,
+            "the emptied log keeps the full clock as its base"
+        );
+        assert_eq!(log.clock(), clock);
     }
 }

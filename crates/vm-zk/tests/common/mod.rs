@@ -1,15 +1,9 @@
-//! Shared test utilities.
-
 use std::sync::Once;
 
 use tracing_subscriber::{EnvFilter, fmt};
 
 static INIT_TRACING: Once = Once::new();
 
-/// Install a `tracing-subscriber` once per test process. Filter
-/// defaults to `mpz_vm_zk=info` and is overridable via `RUST_LOG`.
-/// Output goes to stderr; cargo test captures it unless `--nocapture`
-/// is passed.
 pub fn init_tracing() {
     INIT_TRACING.call_once(|| {
         let filter =

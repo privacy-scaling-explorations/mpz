@@ -19,8 +19,8 @@ mod memory;
 mod registers;
 mod state;
 
-pub use auth::{AuthValue, AuthValueType, AuthValueWidth, Bit, Byte, F32, F64, I32, I64, Wire};
-pub use memory::LinearMemory;
+pub use auth::{AuthValue, AuthValueType, AuthValueWidth, Bit, Byte, F32, F64, I32, I64};
+pub use memory::{LinearMemory, SharedMemory};
 pub use mpz_vm_ir::ValType;
-pub use registers::Registers;
+pub use registers::{RegDelta, Registers, SharedRegs};
 pub use state::AuthState;

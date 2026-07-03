@@ -15,15 +15,15 @@ impl I32Clz {
         crate::clz_advice_values(a as u64, 32) as u32
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>) -> I32<C::Wire> {
         I32::from(crate::clz_n::<C, 32>(ctx, a.to_wires()))
     }
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        a: I32,
-        advice: I32,
-    ) -> Result<I32, C::Error> {
+        a: I32<C::Wire>,
+        advice: I32<C::Wire>,
+    ) -> Result<I32<C::Wire>, C::Error> {
         let out = crate::clz_advice_n::<C, 32>(ctx, a.to_wires(), advice.to_wires())?;
         Ok(I32::from(out))
     }
@@ -42,15 +42,15 @@ impl I32Ctz {
         crate::ctz_advice_values(a as u64, 32) as u32
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>) -> I32<C::Wire> {
         I32::from(crate::ctz_n::<C, 32>(ctx, a.to_wires()))
     }
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        a: I32,
-        advice: I32,
-    ) -> Result<I32, C::Error> {
+        a: I32<C::Wire>,
+        advice: I32<C::Wire>,
+    ) -> Result<I32<C::Wire>, C::Error> {
         let out = crate::ctz_advice_n::<C, 32>(ctx, a.to_wires(), advice.to_wires())?;
         Ok(I32::from(out))
     }
@@ -61,7 +61,7 @@ pub struct I32Popcnt;
 impl I32Popcnt {
     pub const COST: usize = 88;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>) -> I32<C::Wire> {
         I32::from(crate::popcnt_tree_n::<C, 32>(ctx, a.to_wires()))
     }
 }
@@ -79,15 +79,15 @@ impl I64Clz {
         crate::clz_advice_values(a, 64)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>) -> I64<C::Wire> {
         I64::from(crate::clz_n::<C, 64>(ctx, a.to_wires()))
     }
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        a: I64,
-        advice: I64,
-    ) -> Result<I64, C::Error> {
+        a: I64<C::Wire>,
+        advice: I64<C::Wire>,
+    ) -> Result<I64<C::Wire>, C::Error> {
         let out = crate::clz_advice_n::<C, 64>(ctx, a.to_wires(), advice.to_wires())?;
         Ok(I64::from(out))
     }
@@ -106,15 +106,15 @@ impl I64Ctz {
         crate::ctz_advice_values(a, 64)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>) -> I64<C::Wire> {
         I64::from(crate::ctz_n::<C, 64>(ctx, a.to_wires()))
     }
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        a: I64,
-        advice: I64,
-    ) -> Result<I64, C::Error> {
+        a: I64<C::Wire>,
+        advice: I64<C::Wire>,
+    ) -> Result<I64<C::Wire>, C::Error> {
         let out = crate::ctz_advice_n::<C, 64>(ctx, a.to_wires(), advice.to_wires())?;
         Ok(I64::from(out))
     }
@@ -125,7 +125,7 @@ pub struct I64Popcnt;
 impl I64Popcnt {
     pub const COST: usize = 183;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>) -> I64<C::Wire> {
         I64::from(crate::popcnt_tree_n::<C, 64>(ctx, a.to_wires()))
     }
 }

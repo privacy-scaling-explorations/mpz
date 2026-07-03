@@ -1,8 +1,3 @@
-//! A function that does symbolic work (real gates over a private input) but
-//! returns a public constant. Per the VC spec, a concrete return value is
-//! already public, so the prover transmits no output and binds nothing — the
-//! verifier reconstructs the result locally.
-
 mod common;
 
 use futures::{executor::block_on, future::join};
@@ -27,8 +22,6 @@ fn func_idx(module: &Module, name: &str) -> u32 {
 #[test]
 fn symbolic_work_public_const_return() {
     common::init_tracing();
-    // Adds the private input to itself (a symbolic gate), discards it into an
-    // unused local, then returns the public constant 42.
     let wat = r#"
         (module
             (func $f (export "f") (param i32) (result i32)
@@ -53,8 +46,6 @@ fn symbolic_work_public_const_return() {
 
     let (mut ctx_p, mut ctx_v) = test_st_context(1024 * 1024);
 
-    // Plain `join`: if the prover still errored mid-protocol on the concrete
-    // output, the verifier would block on a recv and this would never return.
     let (result_p, result_v) = block_on(join(
         async {
             prover

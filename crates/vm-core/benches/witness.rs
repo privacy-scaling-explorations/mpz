@@ -74,9 +74,6 @@ fn bench_witness_sha256(c: &mut Criterion) {
 
     let msg: Vec<u8> = (0..MSG_LEN).map(|i| i as u8).collect();
 
-    // Allocate the message buffer inside the running module via its canonical
-    // `cabi_realloc` export, exactly as the zk harness does, so the staged
-    // region is in bounds and memory is grown by the guest's own allocator.
     let mut global = Global::new(&module).unwrap();
     let ptr = {
         let mut thread = Thread::new();
@@ -101,8 +98,6 @@ fn bench_witness_sha256(c: &mut Criterion) {
         }
     };
 
-    // Stage the message privately: its loads become symbolic, so the whole hash
-    // executes symbolically and emits the full directive trace (the witness).
     let stage = |global: &mut Global| {
         global.memory_mut().unwrap().write_bytes(ptr, &msg).unwrap();
         global.set_memory_visibility(ptr, MSG_LEN, Visibility::Private);
@@ -114,9 +109,6 @@ fn bench_witness_sha256(c: &mut Criterion) {
         Param::Public(Value::I32(MSG_LEN as i32)),
     ];
 
-    // Validate once: the witnessed run must produce a correct SHA-256 digest
-    // (the prover evaluates the private computation concretely). `hash` returns
-    // the address of the digest it wrote to its own freshly allocated buffer.
     {
         let mut thread = Thread::new();
         thread

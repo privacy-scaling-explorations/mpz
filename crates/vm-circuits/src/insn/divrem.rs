@@ -20,12 +20,20 @@ impl I32DivS {
         (q as u32 as i32, r as u32 as i32)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, dividend: I32, divisor: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I32<C::Wire>,
+        divisor: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let (q, _r) = crate::divrem_s_n::<C, 32>(ctx, dividend.to_wires(), divisor.to_wires());
         I32::from(q)
     }
 
-    pub fn eval_const_divisor<C: CircuitContext>(ctx: &mut C, dividend: I32, divisor: i32) -> I32 {
+    pub fn eval_const_divisor<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I32<C::Wire>,
+        divisor: i32,
+    ) -> I32<C::Wire> {
         let d = const_i32(ctx, divisor);
         let (q, _r) = crate::divrem_s_n::<C, 32>(ctx, dividend.to_wires(), d.to_wires());
         I32::from(q)
@@ -33,11 +41,11 @@ impl I32DivS {
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        dividend: I32,
-        divisor: I32,
-        q: I32,
-        r: I32,
-    ) -> Result<I32, C::Error> {
+        dividend: I32<C::Wire>,
+        divisor: I32<C::Wire>,
+        q: I32<C::Wire>,
+        r: I32<C::Wire>,
+    ) -> Result<I32<C::Wire>, C::Error> {
         let (quot, _rem) = crate::divrem_s_advice_n::<C, 32>(
             ctx,
             dividend.to_wires(),
@@ -64,12 +72,20 @@ impl I32DivU {
         (q as u32, r as u32)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, dividend: I32, divisor: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I32<C::Wire>,
+        divisor: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let (q, _r) = crate::divrem_u_n::<C, 32>(ctx, dividend.to_wires(), divisor.to_wires());
         I32::from(q)
     }
 
-    pub fn eval_const_divisor<C: CircuitContext>(ctx: &mut C, dividend: I32, divisor: i32) -> I32 {
+    pub fn eval_const_divisor<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I32<C::Wire>,
+        divisor: i32,
+    ) -> I32<C::Wire> {
         let d = const_i32(ctx, divisor);
         let (q, _r) = crate::divrem_u_n::<C, 32>(ctx, dividend.to_wires(), d.to_wires());
         I32::from(q)
@@ -77,11 +93,11 @@ impl I32DivU {
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        dividend: I32,
-        divisor: I32,
-        q: I32,
-        r: I32,
-    ) -> Result<I32, C::Error> {
+        dividend: I32<C::Wire>,
+        divisor: I32<C::Wire>,
+        q: I32<C::Wire>,
+        r: I32<C::Wire>,
+    ) -> Result<I32<C::Wire>, C::Error> {
         let (quot, _rem) = crate::divrem_u_advice_n::<C, 32>(
             ctx,
             dividend.to_wires(),
@@ -109,12 +125,20 @@ impl I32RemS {
         (q as u32 as i32, r as u32 as i32)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, dividend: I32, divisor: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I32<C::Wire>,
+        divisor: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let (_q, r) = crate::divrem_s_n::<C, 32>(ctx, dividend.to_wires(), divisor.to_wires());
         I32::from(r)
     }
 
-    pub fn eval_const_divisor<C: CircuitContext>(ctx: &mut C, dividend: I32, divisor: i32) -> I32 {
+    pub fn eval_const_divisor<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I32<C::Wire>,
+        divisor: i32,
+    ) -> I32<C::Wire> {
         let d = const_i32(ctx, divisor);
         let (_q, r) = crate::divrem_s_n::<C, 32>(ctx, dividend.to_wires(), d.to_wires());
         I32::from(r)
@@ -122,11 +146,11 @@ impl I32RemS {
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        dividend: I32,
-        divisor: I32,
-        q: I32,
-        r: I32,
-    ) -> Result<I32, C::Error> {
+        dividend: I32<C::Wire>,
+        divisor: I32<C::Wire>,
+        q: I32<C::Wire>,
+        r: I32<C::Wire>,
+    ) -> Result<I32<C::Wire>, C::Error> {
         let (_quot, rem) = crate::divrem_s_advice_n::<C, 32>(
             ctx,
             dividend.to_wires(),
@@ -153,12 +177,20 @@ impl I32RemU {
         (q as u32, r as u32)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, dividend: I32, divisor: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I32<C::Wire>,
+        divisor: I32<C::Wire>,
+    ) -> I32<C::Wire> {
         let (_q, r) = crate::divrem_u_n::<C, 32>(ctx, dividend.to_wires(), divisor.to_wires());
         I32::from(r)
     }
 
-    pub fn eval_const_divisor<C: CircuitContext>(ctx: &mut C, dividend: I32, divisor: i32) -> I32 {
+    pub fn eval_const_divisor<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I32<C::Wire>,
+        divisor: i32,
+    ) -> I32<C::Wire> {
         let d = const_i32(ctx, divisor);
         let (_q, r) = crate::divrem_u_n::<C, 32>(ctx, dividend.to_wires(), d.to_wires());
         I32::from(r)
@@ -166,11 +198,11 @@ impl I32RemU {
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        dividend: I32,
-        divisor: I32,
-        q: I32,
-        r: I32,
-    ) -> Result<I32, C::Error> {
+        dividend: I32<C::Wire>,
+        divisor: I32<C::Wire>,
+        q: I32<C::Wire>,
+        r: I32<C::Wire>,
+    ) -> Result<I32<C::Wire>, C::Error> {
         let (_quot, rem) = crate::divrem_u_advice_n::<C, 32>(
             ctx,
             dividend.to_wires(),
@@ -197,12 +229,20 @@ impl I64DivS {
         (q as i64, r as i64)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, dividend: I64, divisor: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I64<C::Wire>,
+        divisor: I64<C::Wire>,
+    ) -> I64<C::Wire> {
         let (q, _r) = crate::divrem_s_n::<C, 64>(ctx, dividend.to_wires(), divisor.to_wires());
         I64::from(q)
     }
 
-    pub fn eval_const_divisor<C: CircuitContext>(ctx: &mut C, dividend: I64, divisor: i64) -> I64 {
+    pub fn eval_const_divisor<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I64<C::Wire>,
+        divisor: i64,
+    ) -> I64<C::Wire> {
         let d = const_i64(ctx, divisor);
         let (q, _r) = crate::divrem_s_n::<C, 64>(ctx, dividend.to_wires(), d.to_wires());
         I64::from(q)
@@ -210,11 +250,11 @@ impl I64DivS {
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        dividend: I64,
-        divisor: I64,
-        q: I64,
-        r: I64,
-    ) -> Result<I64, C::Error> {
+        dividend: I64<C::Wire>,
+        divisor: I64<C::Wire>,
+        q: I64<C::Wire>,
+        r: I64<C::Wire>,
+    ) -> Result<I64<C::Wire>, C::Error> {
         let (quot, _rem) = crate::divrem_s_advice_n::<C, 64>(
             ctx,
             dividend.to_wires(),
@@ -240,12 +280,20 @@ impl I64DivU {
         crate::divrem_u_advice_values(dividend, divisor, 64)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, dividend: I64, divisor: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I64<C::Wire>,
+        divisor: I64<C::Wire>,
+    ) -> I64<C::Wire> {
         let (q, _r) = crate::divrem_u_n::<C, 64>(ctx, dividend.to_wires(), divisor.to_wires());
         I64::from(q)
     }
 
-    pub fn eval_const_divisor<C: CircuitContext>(ctx: &mut C, dividend: I64, divisor: i64) -> I64 {
+    pub fn eval_const_divisor<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I64<C::Wire>,
+        divisor: i64,
+    ) -> I64<C::Wire> {
         let d = const_i64(ctx, divisor);
         let (q, _r) = crate::divrem_u_n::<C, 64>(ctx, dividend.to_wires(), d.to_wires());
         I64::from(q)
@@ -253,11 +301,11 @@ impl I64DivU {
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        dividend: I64,
-        divisor: I64,
-        q: I64,
-        r: I64,
-    ) -> Result<I64, C::Error> {
+        dividend: I64<C::Wire>,
+        divisor: I64<C::Wire>,
+        q: I64<C::Wire>,
+        r: I64<C::Wire>,
+    ) -> Result<I64<C::Wire>, C::Error> {
         let (quot, _rem) = crate::divrem_u_advice_n::<C, 64>(
             ctx,
             dividend.to_wires(),
@@ -284,12 +332,20 @@ impl I64RemS {
         (q as i64, r as i64)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, dividend: I64, divisor: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I64<C::Wire>,
+        divisor: I64<C::Wire>,
+    ) -> I64<C::Wire> {
         let (_q, r) = crate::divrem_s_n::<C, 64>(ctx, dividend.to_wires(), divisor.to_wires());
         I64::from(r)
     }
 
-    pub fn eval_const_divisor<C: CircuitContext>(ctx: &mut C, dividend: I64, divisor: i64) -> I64 {
+    pub fn eval_const_divisor<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I64<C::Wire>,
+        divisor: i64,
+    ) -> I64<C::Wire> {
         let d = const_i64(ctx, divisor);
         let (_q, r) = crate::divrem_s_n::<C, 64>(ctx, dividend.to_wires(), d.to_wires());
         I64::from(r)
@@ -297,11 +353,11 @@ impl I64RemS {
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        dividend: I64,
-        divisor: I64,
-        q: I64,
-        r: I64,
-    ) -> Result<I64, C::Error> {
+        dividend: I64<C::Wire>,
+        divisor: I64<C::Wire>,
+        q: I64<C::Wire>,
+        r: I64<C::Wire>,
+    ) -> Result<I64<C::Wire>, C::Error> {
         let (_quot, rem) = crate::divrem_s_advice_n::<C, 64>(
             ctx,
             dividend.to_wires(),
@@ -327,12 +383,20 @@ impl I64RemU {
         crate::divrem_u_advice_values(dividend, divisor, 64)
     }
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, dividend: I64, divisor: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I64<C::Wire>,
+        divisor: I64<C::Wire>,
+    ) -> I64<C::Wire> {
         let (_q, r) = crate::divrem_u_n::<C, 64>(ctx, dividend.to_wires(), divisor.to_wires());
         I64::from(r)
     }
 
-    pub fn eval_const_divisor<C: CircuitContext>(ctx: &mut C, dividend: I64, divisor: i64) -> I64 {
+    pub fn eval_const_divisor<C: CircuitContext>(
+        ctx: &mut C,
+        dividend: I64<C::Wire>,
+        divisor: i64,
+    ) -> I64<C::Wire> {
         let d = const_i64(ctx, divisor);
         let (_q, r) = crate::divrem_u_n::<C, 64>(ctx, dividend.to_wires(), d.to_wires());
         I64::from(r)
@@ -340,11 +404,11 @@ impl I64RemU {
 
     pub fn eval_with_advice<C: CircuitContext>(
         ctx: &mut C,
-        dividend: I64,
-        divisor: I64,
-        q: I64,
-        r: I64,
-    ) -> Result<I64, C::Error> {
+        dividend: I64<C::Wire>,
+        divisor: I64<C::Wire>,
+        q: I64<C::Wire>,
+        r: I64<C::Wire>,
+    ) -> Result<I64<C::Wire>, C::Error> {
         let (_quot, rem) = crate::divrem_u_advice_n::<C, 64>(
             ctx,
             dividend.to_wires(),

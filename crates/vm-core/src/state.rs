@@ -1,6 +1,11 @@
 use mpz_vm_ir::{ConstExpr, ElementItems, ElementKind, Instruction, Module};
 
-use crate::{Error, Memory, Trap, Visibility, taint::Taints, value::Value};
+use crate::{
+    Error, Memory, Trap, Visibility,
+    access_log::{Access, AccessAddr, AccessKind, AccessLog},
+    taint::Taints,
+    value::Value,
+};
 
 /// State shared across all calls executing against a single [`Module`].
 ///
@@ -14,6 +19,7 @@ pub struct Global {
     globals: Vec<Value>,
     global_taints: Taints,
     table: Vec<Option<u32>>,
+    access_log: Option<AccessLog>,
 }
 
 impl Global {
@@ -75,6 +81,49 @@ impl Global {
     pub fn set_memory_visibility(&mut self, addr: u32, len: usize, visibility: Visibility) {
         self.memory_taints.set_range(addr, len, visibility.into());
     }
+
+    /// Enables the [`AccessLog`], causing every subsequent memory access to be
+    /// recorded.
+    ///
+    /// Must be called before execution begins so the log captures the whole
+    /// run. Idempotent: calling it again leaves an already-enabled log (and its
+    /// entries) intact. Recording is off by default, so a disabled log costs
+    /// nothing beyond an `Option` check per access.
+    pub fn enable_access_log(&mut self) {
+        self.access_log.get_or_insert_with(AccessLog::new);
+    }
+
+    /// Returns the [`AccessLog`], or `None` if recording is disabled.
+    pub fn access_log(&self) -> Option<&AccessLog> {
+        self.access_log.as_ref()
+    }
+
+    /// Returns a mutable reference to the [`AccessLog`], or `None` if recording
+    /// is disabled. The embedder's hook for draining consumed entries.
+    pub fn access_log_mut(&mut self) -> Option<&mut AccessLog> {
+        self.access_log.as_mut()
+    }
+
+    /// Records an embedder-initiated (host-call) write into the access log.
+    ///
+    /// Thread memory ops record their own accesses; this is the channel for
+    /// writes the embedder performs outside them (e.g. a precompile writing
+    /// its output in place). No-op when the log is disabled. The entry is
+    /// never `emitted`: host writes do not surface as memory-op directives, so
+    /// the emitted-entries ↔ memory-op-directives zip is preserved.
+    pub fn log_host_write(&mut self, addr: u32, width: u8, symbolic_mask: u8, value: Option<u64>) {
+        if let Some(log) = self.access_log.as_mut() {
+            log.push(Access {
+                kind: AccessKind::Write,
+                addr: AccessAddr::Public(addr),
+                width,
+                symbolic_mask,
+                value,
+                emitted: false,
+                host: true,
+            });
+        }
+    }
 }
 
 impl Global {
@@ -128,9 +177,6 @@ impl Global {
             }
         }
 
-        // Size the vector before evaluating initializers so that an
-        // initializer referencing an earlier global resolves against a
-        // populated slot.
         globals.resize(module.globals().len(), Value::I32(0));
 
         for (i, global) in module.globals().iter().enumerate() {
@@ -187,6 +233,7 @@ impl Global {
             globals,
             global_taints: Taints::new(),
             table,
+            access_log: None,
         })
     }
 }
@@ -215,4 +262,48 @@ fn eval_elem_expr(expr: &[Instruction]) -> Result<Option<u32>, Error> {
         }
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn global_with_memory() -> Global {
+        let module = Module::parse(&wat::parse_str("(module (memory 1))").unwrap()).unwrap();
+        Global::new(&module).unwrap()
+    }
+
+    #[test]
+    fn log_host_write_is_noop_when_disabled() {
+        let mut global = global_with_memory();
+        global.log_host_write(0x100, 8, 0, Some(0xdead_beef));
+        assert!(
+            global.access_log().is_none(),
+            "log_host_write must not enable the log"
+        );
+    }
+
+    #[test]
+    fn log_host_write_appends_entry_and_advances_clock() {
+        let mut global = global_with_memory();
+        global.enable_access_log();
+        let before = global.access_log().expect("log enabled").clock();
+        global.log_host_write(0x100, 8, 0, Some(0xdead_beef));
+
+        let log = global.access_log().expect("log enabled");
+        assert_eq!(log.clock(), before + 1, "the host write advances the clock");
+        assert_eq!(
+            log.entries(),
+            &[Access {
+                kind: AccessKind::Write,
+                addr: AccessAddr::Public(0x100),
+                width: 8,
+                symbolic_mask: 0,
+                value: Some(0xdead_beef),
+                emitted: false,
+                host: true,
+            }],
+            "the host write appends the expected unemitted entry"
+        );
+    }
 }

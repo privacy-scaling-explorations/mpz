@@ -1,5 +1,5 @@
 use mpz_circuits::Context;
-use mpz_fields::{gf2::Gf2, gf2_128::Gf2_128};
+use mpz_fields::gf2::Gf2;
 use mpz_vm_core::{Reg, value::Value};
 
 use mpz_vm_memory::AuthState;
@@ -12,11 +12,11 @@ use crate::{
 pub(crate) fn bind_output<C>(
     state: &ReplayState,
     exec: &mut C,
-    auth: &AuthState,
+    auth: &AuthState<C::Wire>,
     output: Option<Value>,
 ) -> Result<()>
 where
-    C: Context<Wire = Gf2_128, Field = Gf2>,
+    C: Context<Field = Gf2>,
     C::Error: std::fmt::Debug,
 {
     let reg = state.output_reg.ok_or(ZkVmError::OutputRegMissing)?;
@@ -24,9 +24,14 @@ where
     assert_output(exec, auth, reg, value)
 }
 
-pub(crate) fn assert_output<C>(exec: &mut C, auth: &AuthState, reg: Reg, value: Value) -> Result<()>
+pub(crate) fn assert_output<C>(
+    exec: &mut C,
+    auth: &AuthState<C::Wire>,
+    reg: Reg,
+    value: Value,
+) -> Result<()>
 where
-    C: Context<Wire = Gf2_128, Field = Gf2>,
+    C: Context<Field = Gf2>,
     C::Error: std::fmt::Debug,
 {
     let av = auth

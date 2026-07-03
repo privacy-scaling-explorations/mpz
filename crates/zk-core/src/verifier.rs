@@ -17,46 +17,22 @@ use crate::{
 
 /// The verifier side of the zero-knowledge protocol.
 ///
-/// A `Verifier` holds the global MAC key `delta` and walks the circuits once,
-/// with the flow tracked as a typestate:
-///
-/// 1. [`Verifier<Committed>`](Committed) is constructed from the received
-///    commitment (the adjustment bits) and the key tape.
-///    [`accumulate`](Self::accumulate) installs the challenge stream provided
-///    by the caller.
-/// 2. [`Verifier<Accumulate>`](Accumulate) implements [`Context`] directly,
-///    folding every multiplication and assertion into the running check state
-///    as the circuits are evaluated. [`finish`](Self::finish) yields a
-///    [`VerifierOutput`].
+/// A `Verifier` holds the global MAC key `delta`, the key and adjustment tapes,
+/// and the installed challenge stream. It walks the circuits once, implementing
+/// [`Context`] directly: every multiplication and assertion is folded into the
+/// running check state as the circuits are evaluated. [`finish`](Self::finish)
+/// yields a [`VerifierOutput`].
 ///
 /// The caller masks `w` with the VOPE correlation
 /// ([`vope_sender`](crate::vope_sender)) and accepts the prover's proof iff
 /// `w == u + delta * v` and the assertion hashes match.
 #[derive(Debug)]
-pub struct Verifier<'a, S> {
+pub struct Verifier<'a, R> {
     keys: &'a [Gf2_128],
     adjust: &'a [bool],
     delta: Gf2_128,
     key_one: Gf2_128,
     cursor: usize,
-    state: S,
-}
-
-/// Committed state for the [`Verifier`].
-///
-/// The prover's commitment has been received; the verifier awaits the
-/// challenge stream before beginning the accumulate pass.
-#[derive(Debug)]
-pub struct Committed;
-
-/// Accumulate-phase state for the [`Verifier`].
-///
-/// Holds the challenge stream and the running check state folded during
-/// evaluation, split into the `Σ χᵢ·xᵢyᵢ` and `Σ χᵢ·zᵢ` accumulators so
-/// reduction and the `delta` factor are both applied once at
-/// [`finish`](Verifier::finish).
-#[derive(Debug)]
-pub struct Accumulate<R> {
     assertions: Hasher,
     rng: R,
     xy: Gf2_128Accumulator,
@@ -64,8 +40,9 @@ pub struct Accumulate<R> {
     poly: VerifierPoly,
 }
 
-impl<'a> Verifier<'a, Committed> {
-    /// Creates a new verifier with the global MAC key `delta`.
+impl<'a, R> Verifier<'a, R> {
+    /// Creates a new verifier with the global MAC key `delta`, drawing
+    /// challenge weights from `rng`.
     ///
     /// `keys` is the tape of verifier keys, one entry per input bit and per
     /// AND gate, consumed in evaluation order. `adjust` is the corresponding
@@ -73,8 +50,10 @@ impl<'a> Verifier<'a, Committed> {
     /// each entry selects whether the matching key is offset by `delta`.
     ///
     /// When folding a sub-range of a trace, pass the sub-range's tape slices
-    /// and seek the challenge stream to the sub-range's gate offset: the `w`
-    /// outputs of the sub-ranges sum to the full trace's `w`.
+    /// and seek `rng` to the sub-range's gate offset: the `w` outputs of the
+    /// sub-ranges sum to the full trace's `w`. Each multiplication and each
+    /// polynomial constraint ([`PolyContext::assert_zero`] of degree ≥ 1, or
+    /// [`PolyContext::materialize`]) consumes 16 bytes of the stream.
     ///
     /// The polynomial check ([`VerifierPoly::check`]) needs the powers of
     /// `delta` ([`DeltaPowers`](crate::poly::DeltaPowers)); the accumulate pass
@@ -84,7 +63,7 @@ impl<'a> Verifier<'a, Committed> {
     /// # Errors
     ///
     /// Returns [`Error`] if `keys` and `adjust` differ in length.
-    pub fn new(delta: Gf2_128, keys: &'a [Gf2_128], adjust: &'a [bool]) -> Result<Self> {
+    pub fn new(delta: Gf2_128, keys: &'a [Gf2_128], adjust: &'a [bool], rng: R) -> Result<Self> {
         if keys.len() != adjust.len() {
             return Err(Error::tape_len("adjust", keys.len(), adjust.len()));
         }
@@ -94,37 +73,14 @@ impl<'a> Verifier<'a, Committed> {
             delta,
             key_one: MAC_ONE + delta,
             cursor: 0,
-            state: Committed,
+            assertions: Hasher::default(),
+            rng,
+            xy: Gf2_128Accumulator::zero(),
+            z: Gf2_128Accumulator::zero(),
+            poly: VerifierPoly::default(),
         })
     }
 
-    /// Begins the accumulate pass, drawing challenge weights from `rng`.
-    ///
-    /// Each multiplication and each polynomial constraint
-    /// ([`PolyContext::assert_zero`] of degree ≥ 1, or
-    /// [`PolyContext::materialize`]) consumes 16 bytes of the stream, so `rng`
-    /// must be positioned to match the trace evaluated: the caller derives it
-    /// from the challenge it sampled and seeks it when folding a sub-range of
-    /// the trace.
-    pub fn accumulate<R: RngCore>(self, rng: R) -> Verifier<'a, Accumulate<R>> {
-        Verifier {
-            keys: self.keys,
-            adjust: self.adjust,
-            delta: self.delta,
-            key_one: self.key_one,
-            cursor: self.cursor,
-            state: Accumulate {
-                assertions: Hasher::default(),
-                rng,
-                xy: Gf2_128Accumulator::zero(),
-                z: Gf2_128Accumulator::zero(),
-                poly: VerifierPoly::default(),
-            },
-        }
-    }
-}
-
-impl<'a, R> Verifier<'a, Accumulate<R>> {
     /// Consumes the next input from the tapes and returns its verifier key.
     ///
     /// The key is offset by `delta` when the corresponding adjustment bit is
@@ -170,16 +126,16 @@ impl<'a, R> Verifier<'a, Accumulate<R>> {
         if self.cursor != self.adjust.len() {
             return Err(Error::tape_unconsumed(self.cursor, self.adjust.len()));
         }
-        let w = self.state.xy.reduce() + self.delta * self.state.z.reduce();
+        let w = self.xy.reduce() + self.delta * self.z.reduce();
         Ok(VerifierOutput {
             w,
-            poly: self.state.poly,
-            assertions: *self.state.assertions.finalize().as_bytes(),
+            poly: self.poly,
+            assertions: *self.assertions.finalize().as_bytes(),
         })
     }
 }
 
-impl<R: RngCore> Context for Verifier<'_, Accumulate<R>> {
+impl<R: RngCore> Context for Verifier<'_, R> {
     type Error = Error;
     type Wire = Gf2_128;
     type Field = Gf2;
@@ -209,10 +165,10 @@ impl<R: RngCore> Context for Verifier<'_, Accumulate<R>> {
         set_lsb(&mut key, false);
         self.cursor = i + 1;
 
-        let chi = draw_chi(&mut self.state.rng);
+        let chi = draw_chi(&mut self.rng);
 
-        self.state.xy.add_product(a * b, chi);
-        self.state.z.add_product(key, chi);
+        self.xy.add_product(a * b, chi);
+        self.z.add_product(key, chi);
 
         key
     }
@@ -223,13 +179,13 @@ impl<R: RngCore> Context for Verifier<'_, Accumulate<R>> {
 
     fn assert_const(&mut self, v: Gf2_128, expected: Gf2) -> Result<()> {
         let mac = if expected.0 { v + self.delta } else { v };
-        self.state.assertions.update(&mac.to_inner().to_le_bytes());
+        self.assertions.update(&mac.to_inner().to_le_bytes());
 
         Ok(())
     }
 }
 
-impl<R: RngCore> PolyContext for Verifier<'_, Accumulate<R>> {
+impl<R: RngCore> PolyContext for Verifier<'_, R> {
     type Coeffs = VerifierCoeffs;
 
     fn lift(&self, wire: Gf2_128) -> Expr<VerifierCoeffs, U1> {
@@ -248,15 +204,14 @@ impl<R: RngCore> PolyContext for Verifier<'_, Accumulate<R>> {
         let wire = self.input();
         // Pin the fresh wire to the expression: `expr - wire == 0`.
         let constraint = expr - self.lift(wire);
-        let chi = draw_chi(&mut self.state.rng);
-        self.state
-            .poly
+        let chi = draw_chi(&mut self.rng);
+        self.poly
             .fold_expr(&constraint, Maximum::<N, U1>::USIZE, chi);
         wire
     }
 
     fn assert_zero<N: Degree>(&mut self, expr: Expr<VerifierCoeffs, N>) -> Result<()> {
-        let Self { state, .. } = self;
-        state.poly.assert_expr(&expr, || draw_chi(&mut state.rng))
+        let Self { poly, rng, .. } = self;
+        poly.assert_expr(&expr, || draw_chi(&mut *rng))
     }
 }

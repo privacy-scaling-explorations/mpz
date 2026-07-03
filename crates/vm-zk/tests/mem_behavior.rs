@@ -1,12 +1,3 @@
-//! Behavioral memory I/O tests for the zkVM, via the shared
-//! [`mpz_vm_test_harness::behavior`] harness. Distinct from the WASM spec
-//! conformance tests in `spec.rs`: these drive the host-side write/reveal/read
-//! surface through the real prover/verifier protocol.
-//!
-//! The verifier is the blind party and never holds private data, so scenarios
-//! that write a private value on party B are expected to surface an
-//! `Unsupported` error and are recorded as skips.
-
 use futures::{
     executor::block_on,
     future::{join, try_join},
@@ -94,9 +85,6 @@ impl MemVm for ZkPair {
                         .ok_or_else(|| ZkVmError::Internal(format!("no export {func}")))?;
                     let params: Vec<Param> = args.iter().copied().map(Param::Public).collect();
                     let (mut ctx_p, mut ctx_v) = test_st_context(1024 * 1024);
-                    // `join` (not `try_join`): drive both parties to completion
-                    // so a divergence surfaces as a disagreement rather than
-                    // aborting the scenario.
                     let (a, b) = block_on(join(
                         self.prover.call(&mut ctx_p, idx, params.clone()),
                         self.verifier.call(&mut ctx_v, idx, params),
@@ -147,8 +135,6 @@ fn agreement(
 
 mpz_vm_test_harness::mem_behavior_tests!(ZkPair);
 
-/// `call_local` refuses a private parameter: committing it requires a proving
-/// round.
 #[test]
 fn call_local_rejects_private_param() {
     let module =
@@ -166,10 +152,6 @@ fn call_local_rejects_private_param() {
     );
 }
 
-/// `call_local` refuses to run once execution turns symbolic: a committed
-/// private write feeds a load, which can only be evaluated under proof. The
-/// same program runs fine through a full `call` (see
-/// `commit_then_call_consumes_memory`).
 #[test]
 fn call_local_rejects_symbolic_execution() {
     let module = parse_module(

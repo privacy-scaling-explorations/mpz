@@ -140,8 +140,8 @@ where
     }
 
     /// Returns the number of base COTs to pull on the next bootstrap: just the
-    /// outstanding demand when it is below the bootstrap cost (served directly),
-    /// otherwise a full bootstrap batch.
+    /// outstanding demand when it is below the bootstrap cost (served
+    /// directly), otherwise a full bootstrap batch.
     fn bootstrap_count(&self) -> usize {
         let missing = self.alloc.saturating_sub(self.available());
         if self.config.direct_passthrough() && missing > 0 && missing < self.config.bootstrap_cost()
@@ -210,9 +210,11 @@ where
 
         // Derandomize the SPCOT keys in place: this is their only read, so we
         // avoid copying them out and reuse their buffer space for the output.
-        let cs = self
-            .spcot
-            .derandomize(&spcot_lengths, &self.keys[len - spcot_count..], &derandomize.flip)?;
+        let cs = self.spcot.derandomize(
+            &spcot_lengths,
+            &self.keys[len - spcot_count..],
+            &derandomize.flip,
+        )?;
 
         // The LPN input and check keys must survive into `check`/`finish`,
         // where the SPCOT output overwrites their old location, so copy them

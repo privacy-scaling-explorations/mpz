@@ -44,7 +44,8 @@ struct RecordedData {
     cot_recv_seed: u64,
     /// Seed for Ferret receiver.
     receiver_seed: Block,
-    /// Correlations actually produced (OT_COUNT rounded up to whole iterations).
+    /// Correlations actually produced (OT_COUNT rounded up to whole
+    /// iterations).
     actual_count: usize,
 }
 
@@ -144,7 +145,8 @@ struct RecordedDataMt {
     cot_recv_seed: u64,
     /// Seed for Ferret receiver.
     receiver_seed: Block,
-    /// Correlations actually produced (OT_COUNT rounded up to whole iterations).
+    /// Correlations actually produced (OT_COUNT rounded up to whole
+    /// iterations).
     actual_count: usize,
 }
 

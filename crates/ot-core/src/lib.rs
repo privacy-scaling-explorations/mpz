@@ -28,10 +28,10 @@ pub mod chou_orlandi;
 pub mod cot;
 pub mod ferret;
 pub mod ideal;
-pub mod softspoken;
 pub mod ot;
 pub mod rcot;
 pub mod rot;
+pub mod softspoken;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test;
 

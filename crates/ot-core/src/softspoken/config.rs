@@ -3,7 +3,8 @@ use derive_builder::Builder;
 use crate::softspoken::{CSP, SUPPORTED_K};
 
 // Large by default for throughput; trade down for lower first-flush latency.
-// Small allocations are unaffected (each batch is `min(batch_size, remaining)`).
+// Small allocations are unaffected (each batch is `min(batch_size,
+// remaining)`).
 const DEFAULT_BATCH_SIZE: usize = 1 << 18;
 const DEFAULT_K: usize = 4;
 
@@ -19,8 +20,8 @@ fn validate_k(k: usize) -> Result<(), String> {
     Ok(())
 }
 
-/// Defines a SoftSpoken config type. The sender and receiver configs differ only
-/// in their name and docs; the fields, builder validation, defaults, and
+/// Defines a SoftSpoken config type. The sender and receiver configs differ
+/// only in their name and docs; the fields, builder validation, defaults, and
 /// accessors are identical, so they share this definition.
 macro_rules! softspoken_config {
     (
@@ -108,7 +109,10 @@ mod tests {
     #[test]
     fn builder_validates_k_for_both_configs() {
         for k in [0usize, 1, 3, 5, 16] {
-            assert!(SenderConfig::builder().k(k).build().is_err(), "sender k={k}");
+            assert!(
+                SenderConfig::builder().k(k).build().is_err(),
+                "sender k={k}"
+            );
             assert!(
                 ReceiverConfig::builder().k(k).build().is_err(),
                 "receiver k={k}"

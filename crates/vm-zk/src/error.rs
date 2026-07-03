@@ -5,11 +5,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ZkVmError {
-    /// An interpreter or instantiation fault from `mpz-vm-core`.
     #[error(transparent)]
     Core(#[from] CoreError),
 
-    /// A runtime trap proven during execution.
     #[error("trap: {0}")]
     Trap(Trap),
 
@@ -67,8 +65,6 @@ pub enum ZkVmError {
 }
 
 impl ZkVmError {
-    /// Returns `true` if this error reflects a feature the zkVM intentionally
-    /// does not support (used by the spec harness to skip rather than fail).
     pub fn is_expected_unsupported(&self) -> bool {
         matches!(
             self,

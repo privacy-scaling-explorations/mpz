@@ -1,6 +1,7 @@
 //! Circuits over `GF(2^64)` with `GF(2^128)` MACs (a subfield IT-MAC).
 //!
-//! The boolean path ([`Prover`](crate::Prover)/[`Verifier`](crate::Verifier))
+//! The boolean path
+//! ([`Accumulate`](crate::Accumulate)/[`Verifier`](crate::Verifier))
 //! packs the committed bit into the MAC's LSB (the pointer-bit trick); a 64-bit
 //! value cannot be packed that way, so this path carries the value explicitly.
 //!
@@ -11,8 +12,8 @@
 //! `GF(2^128)`. The prover wire is [`Auth64`] (value + MAC); the verifier wire
 //! is the key alone.
 //!
-//! The protocol matches the boolean path otherwise: a mask-only commit pass
-//! ([`Commit`]) records the per-wire adjustment `adjust = value − choice ∈
+//! The protocol matches the boolean path otherwise: a mask-only witness pass
+//! ([`Witness`]) records the per-wire adjustment `adjust = value − choice ∈
 //! GF(2^64)`, and the accumulate passes fold each multiplication into the
 //! QuickSilver triple check under a streamed challenge. The two specializations
 //! relative to the boolean path are (1) the value is tracked in [`Auth64`]
@@ -58,10 +59,10 @@ pub struct Auth64 {
 }
 
 // ===========================================================================
-// Commit pass
+// Witness pass
 // ===========================================================================
 
-/// The prover's commit-pass context over `GF(2^64)`.
+/// The prover's witness-pass context over `GF(2^64)`.
 ///
 /// Pure cleartext evaluation over the values. Each input and multiplication
 /// records its adjustment `value − choice` into the mask tape in place (the
@@ -69,13 +70,13 @@ pub struct Auth64 {
 /// are sent to the verifier. Circuits must be re-walked with the same inputs in
 /// the accumulate pass.
 #[derive(Debug)]
-pub struct Commit<'a> {
+pub struct Witness<'a> {
     masks: &'a mut [Gf2_64],
     cursor: usize,
 }
 
-impl<'a> Commit<'a> {
-    /// Creates a commit-pass context over the mask tape.
+impl<'a> Witness<'a> {
+    /// Creates a witness-pass context over the mask tape.
     pub fn new(masks: &'a mut [Gf2_64]) -> Self {
         Self { masks, cursor: 0 }
     }
@@ -102,7 +103,7 @@ impl<'a> Commit<'a> {
         value
     }
 
-    /// Completes the commit pass.
+    /// Completes the witness pass.
     ///
     /// # Errors
     ///
@@ -116,7 +117,7 @@ impl<'a> Commit<'a> {
     }
 }
 
-impl Context for Commit<'_> {
+impl Context for Witness<'_> {
     type Error = Error;
     type Wire = Gf2_64;
     type Field = Gf2_64;
@@ -155,7 +156,7 @@ impl Context for Commit<'_> {
     }
 }
 
-impl PolyContext for Commit<'_> {
+impl PolyContext for Witness<'_> {
     /// Plaintext evaluation: an expression is just its cleartext `GF(2^64)`
     /// value, so polynomial gadgets compile down to field operations.
     type Coeffs = PlainCoeffs<Gf2_64>;
@@ -188,27 +189,16 @@ impl PolyContext for Commit<'_> {
 // Prover
 // ===========================================================================
 
-/// The prover side of the `GF(2^64)` protocol.
+/// The prover's accumulate-pass context over `GF(2^64)`.
 ///
-/// Mirrors [`Prover`](crate::Prover): a mask-only [`Commit`] pass, then an
-/// accumulate pass from [`Prover::committed`] that folds every multiplication
-/// into the running proof under the installed challenge stream.
-/// [`finish`](Prover::finish) yields a [`ProverOutput`], which the caller
-/// masks with the VOPE correlation.
+/// Mirrors [`Accumulate`](crate::Accumulate): the second pass after the
+/// mask-only [`Witness`] pass, folding every multiplication into the running
+/// proof under the installed challenge stream. [`finish`](Self::finish) yields
+/// a [`ProverOutput`], which the caller masks with the VOPE correlation.
 #[derive(Debug)]
-pub struct Prover<'a, S> {
+pub struct Accumulate<'a, R> {
     macs: &'a [Gf2_128],
     cursor: usize,
-    state: S,
-}
-
-/// Committed state for the [`Prover`].
-#[derive(Debug)]
-pub struct Committed;
-
-/// Accumulate-phase state for the [`Prover`].
-#[derive(Debug)]
-pub struct Accumulate<R> {
     assertions: Hasher,
     rng: R,
     u: Gf2_128Accumulator,
@@ -216,36 +206,24 @@ pub struct Accumulate<R> {
     poly: ProverPoly,
 }
 
-impl<'a> Prover<'a, Committed> {
-    /// Creates a prover directly in the committed state over the MAC tape.
-    pub fn committed(macs: &'a [Gf2_128]) -> Self {
-        Self {
-            macs,
-            cursor: 0,
-            state: Committed,
-        }
-    }
-
-    /// Begins the accumulate pass, drawing challenge weights from `rng`.
+impl<'a, R> Accumulate<'a, R> {
+    /// Creates the accumulate context over the MAC tape, drawing challenge
+    /// weights from `rng`.
     ///
     /// Each multiplication consumes 16 bytes of the stream, so `rng` must be
     /// positioned to match the gates evaluated.
-    pub fn accumulate<R: RngCore>(self, rng: R) -> Prover<'a, Accumulate<R>> {
-        Prover {
-            macs: self.macs,
-            cursor: self.cursor,
-            state: Accumulate {
-                assertions: Hasher::default(),
-                rng,
-                u: Gf2_128Accumulator::zero(),
-                v: Gf2_128Accumulator::zero(),
-                poly: ProverPoly::default(),
-            },
+    pub fn new(macs: &'a [Gf2_128], rng: R) -> Self {
+        Self {
+            macs,
+            cursor: 0,
+            assertions: Hasher::default(),
+            rng,
+            u: Gf2_128Accumulator::zero(),
+            v: Gf2_128Accumulator::zero(),
+            poly: ProverPoly::default(),
         }
     }
-}
 
-impl<'a, R> Prover<'a, Accumulate<R>> {
     /// Consumes the next tape entry for a private input `value`, returning its
     /// authenticated wire (the raw sVOLE MAC; the verifier adjusts its key).
     ///
@@ -281,15 +259,15 @@ impl<'a, R> Prover<'a, Accumulate<R>> {
             return Err(Error::tape_unconsumed(self.cursor, self.macs.len()));
         }
         Ok(ProverOutput {
-            u: self.state.u.reduce(),
-            v: self.state.v.reduce(),
-            poly: self.state.poly,
-            assertions: *self.state.assertions.finalize().as_bytes(),
+            u: self.u.reduce(),
+            v: self.v.reduce(),
+            poly: self.poly,
+            assertions: *self.assertions.finalize().as_bytes(),
         })
     }
 }
 
-impl<R: RngCore> Context for Prover<'_, Accumulate<R>> {
+impl<R: RngCore> Context for Accumulate<'_, R> {
     type Error = Error;
     type Wire = Auth64;
     type Field = Gf2_64;
@@ -314,13 +292,13 @@ impl<R: RngCore> Context for Prover<'_, Accumulate<R>> {
         self.cursor = i + 1;
 
         let value = a.value * b.value;
-        let chi = draw_chi(&mut self.state.rng);
+        let chi = draw_chi(&mut self.rng);
 
         // QuickSilver triple check: u accumulates `M_x·M_y`, v accumulates
         // `embed(x)·M_y + embed(y)·M_x + M_z` (the subfield-scaled body).
         let body_v = scale(b.mac, a.value) + scale(a.mac, b.value) + mac;
-        self.state.u.add_product(a.mac * b.mac, chi);
-        self.state.v.add_product(body_v, chi);
+        self.u.add_product(a.mac * b.mac, chi);
+        self.v.add_product(body_v, chi);
 
         Auth64 { value, mac }
     }
@@ -333,12 +311,12 @@ impl<R: RngCore> Context for Prover<'_, Accumulate<R>> {
         if v.value != expected {
             return Err(Error::assert());
         }
-        self.state.assertions.update(v.mac.as_bytes());
+        self.assertions.update(v.mac.as_bytes());
         Ok(())
     }
 }
 
-impl<R: RngCore> PolyContext for Prover<'_, Accumulate<R>> {
+impl<R: RngCore> PolyContext for Accumulate<'_, R> {
     type Coeffs = ProverCoeffs<Gf2_64>;
 
     fn lift(&self, wire: Auth64) -> Expr<ProverCoeffs<Gf2_64>, U1> {
@@ -357,14 +335,14 @@ impl<R: RngCore> PolyContext for Prover<'_, Accumulate<R>> {
         let wire = self.input(expr.value());
         // Pin the fresh wire to the expression: `expr - wire == 0`.
         let constraint = expr - self.lift(wire);
-        let chi = draw_chi(&mut self.state.rng);
-        self.state.poly.fold_expr(&constraint, chi);
+        let chi = draw_chi(&mut self.rng);
+        self.poly.fold_expr(&constraint, chi);
         wire
     }
 
     fn assert_zero<N: Degree>(&mut self, expr: Expr<ProverCoeffs<Gf2_64>, N>) -> Result<()> {
-        let Self { state, .. } = self;
-        state.poly.assert_expr(&expr, || draw_chi(&mut state.rng))
+        let Self { poly, rng, .. } = self;
+        poly.assert_expr(&expr, || draw_chi(&mut *rng))
     }
 }
 
@@ -375,26 +353,16 @@ impl<R: RngCore> PolyContext for Prover<'_, Accumulate<R>> {
 /// The verifier side of the `GF(2^64)` protocol.
 ///
 /// Mirrors [`Verifier`](crate::Verifier): constructed from the commitment
-/// (per-wire adjustments) and the key tape, it installs the challenge stream
-/// and folds every multiplication into the check state. [`finish`](Self::finish)
-/// yields a [`VerifierOutput`]; the caller accepts iff `w == u + Δ·v` (after
-/// VOPE masking) and the assertion hashes match.
+/// (per-wire adjustments), the key tape, and the challenge stream, it folds
+/// every multiplication into the check state. [`finish`](Self::finish) yields a
+/// [`VerifierOutput`]; the caller accepts iff `w == u + Δ·v` (after VOPE
+/// masking) and the assertion hashes match.
 #[derive(Debug)]
-pub struct Verifier<'a, S> {
+pub struct Verifier<'a, R> {
     keys: &'a [Gf2_128],
     adjust: &'a [Gf2_64],
     delta: Gf2_128,
     cursor: usize,
-    state: S,
-}
-
-/// Committed state for the [`Verifier`].
-#[derive(Debug)]
-pub struct VerifierCommitted;
-
-/// Accumulate-phase state for the [`Verifier`].
-#[derive(Debug)]
-pub struct VerifierAccumulate<R> {
     assertions: Hasher,
     rng: R,
     xy: Gf2_128Accumulator,
@@ -402,14 +370,15 @@ pub struct VerifierAccumulate<R> {
     poly: VerifierPoly,
 }
 
-impl<'a> Verifier<'a, VerifierCommitted> {
-    /// Creates a verifier with the global MAC key `delta`, the key tape, and
-    /// the adjustment tape received as the commitment.
+impl<'a, R> Verifier<'a, R> {
+    /// Creates a verifier with the global MAC key `delta`, the key tape, the
+    /// adjustment tape received as the commitment, and the challenge stream
+    /// `rng`.
     ///
     /// # Errors
     ///
     /// Returns [`Error`] if `keys` and `adjust` differ in length.
-    pub fn new(delta: Gf2_128, keys: &'a [Gf2_128], adjust: &'a [Gf2_64]) -> Result<Self> {
+    pub fn new(delta: Gf2_128, keys: &'a [Gf2_128], adjust: &'a [Gf2_64], rng: R) -> Result<Self> {
         if keys.len() != adjust.len() {
             return Err(Error::tape_len("adjust", keys.len(), adjust.len()));
         }
@@ -418,29 +387,14 @@ impl<'a> Verifier<'a, VerifierCommitted> {
             adjust,
             delta,
             cursor: 0,
-            state: VerifierCommitted,
+            assertions: Hasher::default(),
+            rng,
+            xy: Gf2_128Accumulator::zero(),
+            z: Gf2_128Accumulator::zero(),
+            poly: VerifierPoly::default(),
         })
     }
 
-    /// Begins the accumulate pass, drawing challenge weights from `rng`.
-    pub fn accumulate<R: RngCore>(self, rng: R) -> Verifier<'a, VerifierAccumulate<R>> {
-        Verifier {
-            keys: self.keys,
-            adjust: self.adjust,
-            delta: self.delta,
-            cursor: self.cursor,
-            state: VerifierAccumulate {
-                assertions: Hasher::default(),
-                rng,
-                xy: Gf2_128Accumulator::zero(),
-                z: Gf2_128Accumulator::zero(),
-                poly: VerifierPoly::default(),
-            },
-        }
-    }
-}
-
-impl<'a, R> Verifier<'a, VerifierAccumulate<R>> {
     /// Consumes the next input from the tapes and returns its verifier key,
     /// adjusted by `embed(adjust)·Δ`.
     ///
@@ -475,16 +429,16 @@ impl<'a, R> Verifier<'a, VerifierAccumulate<R>> {
         if self.cursor != self.adjust.len() {
             return Err(Error::tape_unconsumed(self.cursor, self.adjust.len()));
         }
-        let w = self.state.xy.reduce() + self.delta * self.state.z.reduce();
+        let w = self.xy.reduce() + self.delta * self.z.reduce();
         Ok(VerifierOutput {
             w,
-            poly: self.state.poly,
-            assertions: *self.state.assertions.finalize().as_bytes(),
+            poly: self.poly,
+            assertions: *self.assertions.finalize().as_bytes(),
         })
     }
 }
 
-impl<R: RngCore> Context for Verifier<'_, VerifierAccumulate<R>> {
+impl<R: RngCore> Context for Verifier<'_, R> {
     type Error = Error;
     type Wire = Gf2_128;
     type Field = Gf2_64;
@@ -510,10 +464,10 @@ impl<R: RngCore> Context for Verifier<'_, VerifierAccumulate<R>> {
         self.cursor = i + 1;
 
         let key = raw + scale(self.delta, adj);
-        let chi = draw_chi(&mut self.state.rng);
+        let chi = draw_chi(&mut self.rng);
 
-        self.state.xy.add_product(a * b, chi);
-        self.state.z.add_product(key, chi);
+        self.xy.add_product(a * b, chi);
+        self.z.add_product(key, chi);
 
         key
     }
@@ -526,12 +480,12 @@ impl<R: RngCore> Context for Verifier<'_, VerifierAccumulate<R>> {
         // If the committed value is `expected`, the prover's MAC equals
         // `v + embed(expected)·Δ`; hash that to match the prover.
         let mac = v + scale(self.delta, expected);
-        self.state.assertions.update(mac.as_bytes());
+        self.assertions.update(mac.as_bytes());
         Ok(())
     }
 }
 
-impl<R: RngCore> PolyContext for Verifier<'_, VerifierAccumulate<R>> {
+impl<R: RngCore> PolyContext for Verifier<'_, R> {
     type Coeffs = VerifierCoeffs;
 
     fn lift(&self, wire: Gf2_128) -> Expr<VerifierCoeffs, U1> {
@@ -550,15 +504,14 @@ impl<R: RngCore> PolyContext for Verifier<'_, VerifierAccumulate<R>> {
         let wire = self.input();
         // Pin the fresh wire to the expression: `expr - wire == 0`.
         let constraint = expr - self.lift(wire);
-        let chi = draw_chi(&mut self.state.rng);
-        self.state
-            .poly
+        let chi = draw_chi(&mut self.rng);
+        self.poly
             .fold_expr(&constraint, Maximum::<N, U1>::USIZE, chi);
         wire
     }
 
     fn assert_zero<N: Degree>(&mut self, expr: Expr<VerifierCoeffs, N>) -> Result<()> {
-        let Self { state, .. } = self;
-        state.poly.assert_expr(&expr, || draw_chi(&mut state.rng))
+        let Self { poly, rng, .. } = self;
+        poly.assert_expr(&expr, || draw_chi(&mut *rng))
     }
 }

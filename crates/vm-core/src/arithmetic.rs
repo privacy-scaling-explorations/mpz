@@ -478,7 +478,6 @@ fn i64_extend32_s(v: i64) -> i64 {
     (v as i32) as i64
 }
 
-// WebAssembly `nearest` rounds halfway cases to the nearest even integer.
 fn f32_nearest(v: f32) -> f32 {
     v.round_ties_even()
 }
@@ -487,8 +486,6 @@ fn f64_nearest(v: f64) -> f64 {
     v.round_ties_even()
 }
 
-// WebAssembly min/max propagate NaN and have defined behavior for signed
-// zeros, neither of which is guaranteed by the std f32/f64 min/max methods.
 fn f32_min(a: f32, b: f32) -> f32 {
     if a.is_nan() || b.is_nan() {
         f32::NAN

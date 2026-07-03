@@ -10,11 +10,11 @@ impl I32And {
     pub const COST: usize = 32;
     pub const COST_CONST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32, b: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>, b: I32<C::Wire>) -> I32<C::Wire> {
         I32::from(crate::and_arr::<C, 32>(ctx, a.to_wires(), b.to_wires()))
     }
 
-    pub fn eval_const<C: CircuitContext>(ctx: &mut C, a: I32, konst: i32) -> I32 {
+    pub fn eval_const<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>, konst: i32) -> I32<C::Wire> {
         let k = const_i32(ctx, konst);
         I32::from(crate::and_arr::<C, 32>(ctx, a.to_wires(), k.to_wires()))
     }
@@ -26,11 +26,11 @@ impl I32Or {
     pub const COST: usize = 32;
     pub const COST_CONST: usize = 32;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32, b: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>, b: I32<C::Wire>) -> I32<C::Wire> {
         I32::from(crate::or_arr::<C, 32>(ctx, a.to_wires(), b.to_wires()))
     }
 
-    pub fn eval_const<C: CircuitContext>(ctx: &mut C, a: I32, konst: i32) -> I32 {
+    pub fn eval_const<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>, konst: i32) -> I32<C::Wire> {
         let k = const_i32(ctx, konst);
         I32::from(crate::or_arr::<C, 32>(ctx, a.to_wires(), k.to_wires()))
     }
@@ -41,7 +41,7 @@ pub struct I32Xor;
 impl I32Xor {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32, b: I32) -> I32 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I32<C::Wire>, b: I32<C::Wire>) -> I32<C::Wire> {
         I32::from(crate::xor_arr::<C, 32>(ctx, a.to_wires(), b.to_wires()))
     }
 }
@@ -52,11 +52,11 @@ impl I64And {
     pub const COST: usize = 64;
     pub const COST_CONST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64, b: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>, b: I64<C::Wire>) -> I64<C::Wire> {
         I64::from(crate::and_arr::<C, 64>(ctx, a.to_wires(), b.to_wires()))
     }
 
-    pub fn eval_const<C: CircuitContext>(ctx: &mut C, a: I64, konst: i64) -> I64 {
+    pub fn eval_const<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>, konst: i64) -> I64<C::Wire> {
         let k = const_i64(ctx, konst);
         I64::from(crate::and_arr::<C, 64>(ctx, a.to_wires(), k.to_wires()))
     }
@@ -68,11 +68,11 @@ impl I64Or {
     pub const COST: usize = 64;
     pub const COST_CONST: usize = 64;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64, b: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>, b: I64<C::Wire>) -> I64<C::Wire> {
         I64::from(crate::or_arr::<C, 64>(ctx, a.to_wires(), b.to_wires()))
     }
 
-    pub fn eval_const<C: CircuitContext>(ctx: &mut C, a: I64, konst: i64) -> I64 {
+    pub fn eval_const<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>, konst: i64) -> I64<C::Wire> {
         let k = const_i64(ctx, konst);
         I64::from(crate::or_arr::<C, 64>(ctx, a.to_wires(), k.to_wires()))
     }
@@ -83,7 +83,7 @@ pub struct I64Xor;
 impl I64Xor {
     pub const COST: usize = 0;
 
-    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64, b: I64) -> I64 {
+    pub fn eval<C: CircuitContext>(ctx: &mut C, a: I64<C::Wire>, b: I64<C::Wire>) -> I64<C::Wire> {
         I64::from(crate::xor_arr::<C, 64>(ctx, a.to_wires(), b.to_wires()))
     }
 }

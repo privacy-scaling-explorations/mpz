@@ -29,13 +29,13 @@
 //!
 //! Run with: `cargo bench -p mpz-zk-core --bench product_gf64`
 
-use std::time::Duration;
+use std::{hint::black_box, time::Duration};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use mpz_fields::{ExtensionField, gf2_64::Gf2_64, gf2_128::Gf2_128};
 use mpz_zk_core::{
-    DeltaPowers, PolyContext, Proof, ProverOutput, VerifierOutput,
-    gf64::{Auth64, Commit, Prover, Verifier},
+    DeltaPowers, PolyContext, ProverOutput, VerifierOutput,
+    gf64::{Accumulate, Auth64, Verifier, Witness},
     poly::Expr,
 };
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -276,9 +276,8 @@ fn witness<Ch: Chunk>(rng: &mut StdRng) -> (Vec<Gf2_64>, Gf2_64) {
 
 struct Inputs {
     delta: Gf2_128,
-    d_max: usize,
     r: Gf2_64,
-    /// Cleartext committed values (for the commit pass).
+    /// Cleartext committed values (for the witness pass).
     values: Vec<Gf2_64>,
     /// Prover input wires (value + raw MAC).
     mac_wires: Vec<Auth64>,
@@ -325,10 +324,10 @@ fn setup<Ch: Chunk>() -> Inputs {
     let chi: [u8; 32] = rng.random();
 
     // One prover run to produce the masked coefficients.
-    let mut commit = Commit::new(&mut []);
+    let mut commit = Witness::new(&mut []);
     eval::<Ch, _>(&mut commit, &values, r);
     commit.finish().expect("commit finish");
-    let mut prover = Prover::committed(&[]).accumulate(ChaCha12Rng::from_seed(chi));
+    let mut prover = Accumulate::new(&[], ChaCha12Rng::from_seed(chi));
     eval::<Ch, _>(&mut prover, &mac_wires, r);
     let ProverOutput { poly, .. } = prover.finish().expect("accumulate finish");
     let coefficients: Vec<Gf2_128> = poly
@@ -341,7 +340,6 @@ fn setup<Ch: Chunk>() -> Inputs {
 
     Inputs {
         delta,
-        d_max,
         r,
         values,
         mac_wires,
@@ -353,27 +351,21 @@ fn setup<Ch: Chunk>() -> Inputs {
     }
 }
 
-fn run_prover<Ch: Chunk>(inputs: &Inputs) {
-    let mut commit = Commit::new(&mut []);
-    eval::<Ch, _>(&mut commit, &inputs.values, inputs.r);
-    commit.finish().expect("commit finish");
+fn run_witness<Ch: Chunk>(inputs: &Inputs) {
+    let mut commit = Witness::new(&mut []);
+    eval::<Ch, _>(&mut commit, black_box(&inputs.values), inputs.r);
+    commit.finish().expect("witness finish");
+}
 
-    let mut prover = Prover::committed(&[]).accumulate(ChaCha12Rng::from_seed(inputs.chi));
-    eval::<Ch, _>(&mut prover, &inputs.mac_wires, inputs.r);
-    let ProverOutput { u, v, poly, assertions } = prover.finish().expect("accumulate finish");
-
-    let coefficients: Vec<Gf2_128> = poly.coefficients(inputs.d_max).expect("coefficients");
-    let _proof = Proof {
-        assertions,
-        u,
-        v,
-        coefficients,
-    };
+fn run_accumulate<Ch: Chunk>(inputs: &Inputs) {
+    let mut prover = Accumulate::new(&[], ChaCha12Rng::from_seed(inputs.chi));
+    eval::<Ch, _>(&mut prover, black_box(&inputs.mac_wires), inputs.r);
+    black_box(prover.finish().expect("accumulate finish"));
 }
 
 fn run_verifier<Ch: Chunk>(inputs: &Inputs) {
-    let verifier = Verifier::new(inputs.delta, &[], &[]).expect("new");
-    let mut verifier = verifier.accumulate(ChaCha12Rng::from_seed(inputs.chi));
+    let mut verifier =
+        Verifier::new(inputs.delta, &[], &[], ChaCha12Rng::from_seed(inputs.chi)).expect("new");
     eval::<Ch, _>(&mut verifier, &inputs.key_wires, inputs.r);
     let VerifierOutput { poly, .. } = verifier.finish().expect("finish");
 
@@ -384,14 +376,23 @@ fn run_verifier<Ch: Chunk>(inputs: &Inputs) {
 fn bench_one<Ch: Chunk>(c: &mut Criterion, label: &str) {
     let inputs = setup::<Ch>();
 
-    let mut pg = c.benchmark_group("product_prover");
-    pg.sample_size(10);
-    pg.measurement_time(Duration::from_secs(10));
-    pg.throughput(Throughput::Elements(M as u64));
-    pg.bench_function(BenchmarkId::new("chunk", label), |b| {
-        b.iter(|| run_prover::<Ch>(&inputs))
+    let mut wg = c.benchmark_group("product_witness");
+    wg.sample_size(10);
+    wg.measurement_time(Duration::from_secs(10));
+    wg.throughput(Throughput::Elements(M as u64));
+    wg.bench_function(BenchmarkId::new("chunk", label), |b| {
+        b.iter(|| run_witness::<Ch>(&inputs))
     });
-    pg.finish();
+    wg.finish();
+
+    let mut ag = c.benchmark_group("product_accumulate");
+    ag.sample_size(10);
+    ag.measurement_time(Duration::from_secs(10));
+    ag.throughput(Throughput::Elements(M as u64));
+    ag.bench_function(BenchmarkId::new("chunk", label), |b| {
+        b.iter(|| run_accumulate::<Ch>(&inputs))
+    });
+    ag.finish();
 
     let mut vg = c.benchmark_group("product_verifier");
     vg.sample_size(10);

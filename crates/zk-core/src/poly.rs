@@ -7,9 +7,9 @@
 //! polynomial in `Δ`:
 //!
 //! - The prover holds, per wire, the linear form `mac + value·X`; building `f`
-//!   over these forms yields the coefficient vector of
-//!   `g(X) = Σ_h f_h(mac + value·X)·X^{d-h}` ([`ProverCoeffs<V>`]). The top
-//!   coefficient (`X^d`) is `f(w)`, dropped by the protocol.
+//!   over these forms yields the coefficient vector of `g(X) = Σ_h f_h(mac +
+//!   value·X)·X^{d-h}` ([`ProverCoeffs<V>`]). The top coefficient (`X^d`) is
+//!   `f(w)`, dropped by the protocol.
 //! - The verifier holds, per wire, the key `k = mac + value·Δ`; building `f`
 //!   over the keys yields `g(Δ)` directly ([`VerifierCoeffs`]).
 //!
@@ -35,7 +35,7 @@
 //! The carrier `C` is what differs between the two sides ([`ProverCoeffs<V>`]
 //! keeps a coefficient vector, [`VerifierCoeffs`] keeps the single value
 //! `g(Δ)`); [`PlainCoeffs<V>`] collapses an expression to its cleartext value
-//! for the prover's commit pass.
+//! for the prover's witness pass.
 //!
 //! # Representation
 //!
@@ -99,9 +99,9 @@ impl<N: ArraySize<ArrayType<Gf2_128>: Copy>> Degree for N {}
 /// Build a degree-`d` constraint symbolically over committed wires with the
 /// `+`/`-`/`*` operators on [`Expr`] (free, degree-raising, uncommitted), then
 /// either [`materialize`](Self::materialize) its output as a fresh committed
-/// wire pinned by a degree-`d` constraint, or [`assert_zero`](Self::assert_zero)
-/// it as a pure check. Implemented by the same contexts that implement
-/// [`Context`].
+/// wire pinned by a degree-`d` constraint, or
+/// [`assert_zero`](Self::assert_zero) it as a pure check. Implemented by the
+/// same contexts that implement [`Context`].
 pub trait PolyContext: Context {
     /// The coefficient carrier for this context's side of the protocol.
     type Coeffs: Coeffs;
@@ -126,8 +126,7 @@ pub trait PolyContext: Context {
     ///
     /// Consumes 16 bytes of the challenge stream when `d ≥ 1`; a degree-0
     /// expression is a public assertion checked locally.
-    fn assert_zero<N: Degree>(&mut self, expr: Expr<Self::Coeffs, N>)
-    -> Result<(), Self::Error>;
+    fn assert_zero<N: Degree>(&mut self, expr: Expr<Self::Coeffs, N>) -> Result<(), Self::Error>;
 }
 
 /// Maximum supported constraint degree.
@@ -216,8 +215,8 @@ where
 /// `At<N>` is the storage for a degree-`N` expression. The two non-trivial
 /// operations — top-aligned [`add`](Self::add) and degree-raising
 /// [`mul`](Self::mul) — are degree-generic so [`Expr`]'s operators can delegate
-/// to them. Implemented by [`PlainCoeffs<V>`] (commit pass), [`ProverCoeffs<V>`],
-/// and [`VerifierCoeffs`].
+/// to them. Implemented by [`PlainCoeffs<V>`] (witness pass),
+/// [`ProverCoeffs<V>`], and [`VerifierCoeffs`].
 pub trait Coeffs: Copy {
     /// Storage for a degree-`N` expression.
     type At<N: Degree>: Copy;
@@ -238,9 +237,9 @@ pub trait Coeffs: Copy {
         Sum<A, B>: Degree;
 }
 
-// --- commit-pass carrier ----------------------------------------------------
+// --- witness-pass carrier ----------------------------------------------------
 
-/// Plaintext carrier for the prover's commit pass over the subfield `V`: an
+/// Plaintext carrier for the prover's witness pass over the subfield `V`: an
 /// expression is just its cleartext value, so polynomial gadgets compile down
 /// to subfield operations.
 pub struct PlainCoeffs<V>(PhantomData<V>);
@@ -587,9 +586,10 @@ impl ProverPoly {
 
     /// Records a degree-`d` constraint that `expr == 0`.
     ///
-    /// Surfaces a witness bug early via the top coefficient `f(w) = expr.value`,
-    /// short-circuits the degree-0 public case (no fold, no challenge drawn),
-    /// and otherwise folds the lower coefficients under a freshly drawn `chi`.
+    /// Surfaces a witness bug early via the top coefficient `f(w) =
+    /// expr.value`, short-circuits the degree-0 public case (no fold, no
+    /// challenge drawn), and otherwise folds the lower coefficients under a
+    /// freshly drawn `chi`.
     ///
     /// # Errors
     ///
@@ -928,10 +928,9 @@ mod tests {
             let chi = Gf2_128::new(rng.random());
 
             let pe = {
-                let [a, b, c] =
-                    core::array::from_fn(|i| {
-                        Expr::<ProverCoeffs<Gf2>, U1>::lift_wire(pairs[i].0, lsb(pairs[i].0))
-                    });
+                let [a, b, c] = core::array::from_fn(|i| {
+                    Expr::<ProverCoeffs<Gf2>, U1>::lift_wire(pairs[i].0, lsb(pairs[i].0))
+                });
                 a * b + c
             };
             assert_eq!(pe.value(), Gf2::ZERO, "constraint must be satisfied");
@@ -1036,8 +1035,7 @@ mod tests {
         let delta = random_delta(&mut rng);
         let powers = DeltaPowers::new(delta);
 
-        let pairs: [(Gf2_128, Gf2_128); 6] =
-            core::array::from_fn(|_| wire(&mut rng, false, delta));
+        let pairs: [(Gf2_128, Gf2_128); 6] = core::array::from_fn(|_| wire(&mut rng, false, delta));
         let macs: [Gf2_128; 6] = core::array::from_fn(|i| pairs[i].0);
         let keys: [Gf2_128; 6] = core::array::from_fn(|i| pairs[i].1);
 
@@ -1081,8 +1079,10 @@ mod tests {
     /// level, so the gadget stays generic over the carrier with no extra
     /// bounds.
     fn mux_tree<C: Coeffs>(s: [Expr<C, U1>; 3], x: [Expr<C, U1>; 8]) -> Expr<C, U4> {
-        let m0: [Expr<C, U2>; 4] = core::array::from_fn(|j| x[2 * j] + s[0] * (x[2 * j] + x[2 * j + 1]));
-        let m1: [Expr<C, U3>; 2] = core::array::from_fn(|j| m0[2 * j] + s[1] * (m0[2 * j] + m0[2 * j + 1]));
+        let m0: [Expr<C, U2>; 4] =
+            core::array::from_fn(|j| x[2 * j] + s[0] * (x[2 * j] + x[2 * j + 1]));
+        let m1: [Expr<C, U3>; 2] =
+            core::array::from_fn(|j| m0[2 * j] + s[1] * (m0[2 * j] + m0[2 * j + 1]));
         m1[0] + s[2] * (m1[0] + m1[1])
     }
 

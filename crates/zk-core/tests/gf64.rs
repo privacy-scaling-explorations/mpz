@@ -1,14 +1,14 @@
 //! End-to-end tests for the `GF(2^64)` circuit path: build a small arithmetic
-//! circuit over `Gf2_64`, drive it through the [`Commit`]/[`Prover`]/[`Verifier`]
-//! triple against a simulated subfield sVOLE tape, and check that the
-//! QuickSilver consistency check accepts a correct execution and rejects a
-//! corrupted one.
+//! circuit over `Gf2_64`, drive it through the
+//! [`Witness`]/[`Accumulate`]/[`Verifier`] triple against a simulated subfield
+//! sVOLE tape, and check that the QuickSilver consistency check accepts a
+//! correct execution and rejects a corrupted one.
 
 use mpz_circuits::Context;
 use mpz_fields::{ExtensionField, gf2_64::Gf2_64, gf2_128::Gf2_128};
 use mpz_zk_core::{
     DeltaPowers, PolyContext, ProverOutput, VerifierOutput,
-    gf64::{Auth64, Commit, Prover, Verifier},
+    gf64::{Accumulate, Auth64, Verifier, Witness},
     vope_receiver, vope_sender,
 };
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -52,7 +52,7 @@ struct Setup {
     input_auth: Vec<Auth64>,
     /// Verifier input wires (adjusted keys).
     input_keys: Vec<Gf2_128>,
-    /// Cleartext input values (for the commit pass).
+    /// Cleartext input values (for the witness pass).
     input_values: [Gf2_64; N_IN],
     gate_masks: Vec<Gf2_64>,
     gate_macs: Vec<Gf2_128>,
@@ -96,7 +96,7 @@ fn setup(seed: u64) -> Setup {
         })
         .collect();
 
-    // Gate tape: masks start at the sVOLE choices; the commit pass overwrites
+    // Gate tape: masks start at the sVOLE choices; the witness pass overwrites
     // them with adjustments.
     let gate_masks: Vec<Gf2_64> = choices[N_IN..].to_vec();
     let gate_macs: Vec<Gf2_128> = macs[N_IN..].to_vec();
@@ -136,13 +136,15 @@ fn setup(seed: u64) -> Setup {
 /// and the gate adjust tape for the verifier.
 fn prove(s: &Setup) -> (Gf2_128, Gf2_128, [u8; 32], Vec<Gf2_64>) {
     let mut gate_adjust = s.gate_masks.clone();
-    let mut commit = Commit::new(&mut gate_adjust);
+    let mut commit = Witness::new(&mut gate_adjust);
     circuit(&mut commit, &s.input_values, s.expected).unwrap();
     commit.finish().unwrap();
 
-    let mut prover = Prover::committed(&s.gate_macs).accumulate(ChaCha12Rng::from_seed(s.chi));
+    let mut prover = Accumulate::new(&s.gate_macs, ChaCha12Rng::from_seed(s.chi));
     circuit(&mut prover, &s.input_auth, s.expected).unwrap();
-    let ProverOutput { u, v, assertions, .. } = prover.finish().unwrap();
+    let ProverOutput {
+        u, v, assertions, ..
+    } = prover.finish().unwrap();
 
     let (a_0, a_1) = vope_receiver(&s.vope_choices, &s.vope_ev);
     (u + a_0, v + a_1, assertions, gate_adjust)
@@ -150,8 +152,13 @@ fn prove(s: &Setup) -> (Gf2_128, Gf2_128, [u8; 32], Vec<Gf2_64>) {
 
 /// Runs the verifier's accumulate pass and returns `(w + b, assertions)`.
 fn verify(s: &Setup, gate_adjust: &[Gf2_64]) -> (Gf2_128, [u8; 32]) {
-    let verifier = Verifier::new(s.delta, &s.gate_keys, gate_adjust).unwrap();
-    let mut verifier = verifier.accumulate(ChaCha12Rng::from_seed(s.chi));
+    let mut verifier = Verifier::new(
+        s.delta,
+        &s.gate_keys,
+        gate_adjust,
+        ChaCha12Rng::from_seed(s.chi),
+    )
+    .unwrap();
     circuit(&mut verifier, &s.input_keys, s.expected).unwrap();
     let VerifierOutput { w, assertions, .. } = verifier.finish().unwrap();
     (w + vope_sender(&s.vope_keys), assertions)
@@ -187,11 +194,19 @@ fn wrong_expected_breaks_assertion() {
     let s = setup(3);
     let (_u, _v, p_assertions, gate_adjust) = prove(&s);
 
-    let verifier = Verifier::new(s.delta, &s.gate_keys, &gate_adjust).unwrap();
-    let mut verifier = verifier.accumulate(ChaCha12Rng::from_seed(s.chi));
+    let mut verifier = Verifier::new(
+        s.delta,
+        &s.gate_keys,
+        &gate_adjust,
+        ChaCha12Rng::from_seed(s.chi),
+    )
+    .unwrap();
     let wrong = s.expected + Gf2_64(1);
     circuit(&mut verifier, &s.input_keys, wrong).unwrap();
-    let VerifierOutput { assertions: v_assertions, .. } = verifier.finish().unwrap();
+    let VerifierOutput {
+        assertions: v_assertions,
+        ..
+    } = verifier.finish().unwrap();
 
     assert_ne!(
         p_assertions, v_assertions,
@@ -201,11 +216,11 @@ fn wrong_expected_breaks_assertion() {
 
 #[test]
 fn unsatisfying_witness_fails_commit() {
-    // The commit pass evaluates in cleartext and catches a witness that does
+    // The witness pass evaluates in cleartext and catches a witness that does
     // not satisfy the asserted output early.
     let s = setup(5);
     let mut masks = s.gate_masks.clone();
-    let mut commit = Commit::new(&mut masks);
+    let mut commit = Witness::new(&mut masks);
     let wrong = s.expected + Gf2_64(1);
     assert!(circuit(&mut commit, &s.input_values, wrong).is_err());
 }
@@ -214,7 +229,15 @@ fn unsatisfying_witness_fails_commit() {
 fn tape_length_mismatch_rejected() {
     let s = setup(4);
     let bad_adjust = vec![Gf2_64(0); s.gate_keys.len() + 1];
-    assert!(Verifier::new(s.delta, &s.gate_keys, &bad_adjust).is_err());
+    assert!(
+        Verifier::new(
+            s.delta,
+            &s.gate_keys,
+            &bad_adjust,
+            ChaCha12Rng::from_seed(s.chi)
+        )
+        .is_err()
+    );
 }
 
 // --- polynomial-constraint path --------------------------------------------
@@ -257,7 +280,9 @@ fn poly_round_trip() {
     // Subfield sVOLE for the five input wires.
     let choices: Vec<Gf2_64> = (0..n).map(|_| Gf2_64(rng.random())).collect();
     let keys: Vec<Gf2_128> = (0..n).map(|_| Gf2_128::new(rng.random())).collect();
-    let macs: Vec<Gf2_128> = (0..n).map(|i| keys[i] + embed(choices[i]) * delta).collect();
+    let macs: Vec<Gf2_128> = (0..n)
+        .map(|i| keys[i] + embed(choices[i]) * delta)
+        .collect();
     let input_auth: Vec<Auth64> = (0..n)
         .map(|i| Auth64 {
             value: values[i],
@@ -277,13 +302,13 @@ fn poly_round_trip() {
         pw = pw * delta;
     }
 
-    // Commit pass validates the witness in cleartext.
-    let mut commit = Commit::new(&mut []);
+    // Witness pass validates the witness in cleartext.
+    let mut commit = Witness::new(&mut []);
     poly_gadget(&mut commit, &values).unwrap();
     commit.finish().unwrap();
 
     // Prover accumulate.
-    let mut prover = Prover::committed(&[]).accumulate(ChaCha12Rng::from_seed(chi));
+    let mut prover = Accumulate::new(&[], ChaCha12Rng::from_seed(chi));
     poly_gadget(&mut prover, &input_auth).unwrap();
     let ProverOutput { poly, .. } = prover.finish().unwrap();
     let coefficients: Vec<Gf2_128> = poly
@@ -295,8 +320,7 @@ fn poly_round_trip() {
         .collect();
 
     // Verifier accumulate + check.
-    let verifier = Verifier::new(delta, &[], &[]).unwrap();
-    let mut verifier = verifier.accumulate(ChaCha12Rng::from_seed(chi));
+    let mut verifier = Verifier::new(delta, &[], &[], ChaCha12Rng::from_seed(chi)).unwrap();
     poly_gadget(&mut verifier, &input_keys).unwrap();
     let VerifierOutput { poly: vpoly, .. } = verifier.finish().unwrap();
 
@@ -324,7 +348,9 @@ fn poly_unsatisfied_rejected() {
     let n = values.len();
     let choices: Vec<Gf2_64> = (0..n).map(|_| Gf2_64(rng.random())).collect();
     let keys: Vec<Gf2_128> = (0..n).map(|_| Gf2_128::new(rng.random())).collect();
-    let macs: Vec<Gf2_128> = (0..n).map(|i| keys[i] + embed(choices[i]) * delta).collect();
+    let macs: Vec<Gf2_128> = (0..n)
+        .map(|i| keys[i] + embed(choices[i]) * delta)
+        .collect();
     let input_auth: Vec<Auth64> = (0..n)
         .map(|i| Auth64 {
             value: values[i],
@@ -332,6 +358,6 @@ fn poly_unsatisfied_rejected() {
         })
         .collect();
 
-    let mut prover = Prover::committed(&[]).accumulate(ChaCha12Rng::from_seed(chi));
+    let mut prover = Accumulate::new(&[], ChaCha12Rng::from_seed(chi));
     assert!(poly_gadget(&mut prover, &input_auth).is_err());
 }

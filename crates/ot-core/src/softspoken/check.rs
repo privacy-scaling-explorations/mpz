@@ -125,9 +125,9 @@ mod tests {
     use rand::{Rng, SeedableRng, rngs::StdRng};
 
     /// Independent reference: `t_r = (Σ_{j<m} χ_j · row_r[j]) + row_r[m]` with
-    /// `χ_j = AES_seed(j)`. Uses direct field multiplies — no deferred-reduction
-    /// accumulator and no column chunking — so it genuinely cross-checks the
-    /// optimized fold rather than restating it.
+    /// `χ_j = AES_seed(j)`. Uses direct field multiplies — no
+    /// deferred-reduction accumulator and no column chunking — so it
+    /// genuinely cross-checks the optimized fold rather than restating it.
     fn naive_check_fold(
         seed: Block,
         mac: &[u8],

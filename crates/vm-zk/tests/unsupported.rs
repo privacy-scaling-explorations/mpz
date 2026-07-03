@@ -1,6 +1,3 @@
-//! Float parameters must be rejected at `Vm::call` entry, not later
-//! deep in the pipeline.
-
 mod common;
 
 use futures::executor::block_on;
