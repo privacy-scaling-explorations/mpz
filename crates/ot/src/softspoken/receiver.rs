@@ -30,14 +30,14 @@ impl<BaseOT> State<BaseOT> {
     }
 }
 
-/// SoftSpoken receiver.
+/// SoftSpoken correlated OT receiver, run over the base OT `BaseOT`.
 #[derive(Debug)]
 pub struct Receiver<BaseOT> {
     state: State<BaseOT>,
 }
 
 impl<BaseOT> Receiver<BaseOT> {
-    /// Creates a new Receiver with the given config and base OT.
+    /// Creates a new receiver from the given configuration and base OT.
     pub fn new(config: ReceiverConfig, base_ot: BaseOT) -> Self {
         Self {
             state: State::Initialized {
@@ -152,7 +152,7 @@ where
     }
 }
 
-/// Error for [`Receiver`].
+/// An error returned by the SoftSpoken [`Receiver`].
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct ReceiverError(#[from] ErrorRepr);

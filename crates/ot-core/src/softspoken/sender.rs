@@ -21,11 +21,6 @@ use zerocopy::{FromBytes, IntoBytes};
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
-/// Stretches and folds one punctured VOLE block of this batch into the shared
-/// MAC matrix, deriving the keys in place.
-///
-/// `slab` is the block's `k` contiguous matrix rows; `us_row` is the block's
-/// received derandomization `ū_b`. `delta_bits` are the block's `k` delta bits.
 #[allow(clippy::too_many_arguments)]
 fn fold_block(
     aes: &FixedKeyAes,
@@ -39,8 +34,9 @@ fn fold_block(
     missing: usize,
     delta_bits: &[bool],
     k: usize,
-    total_rb: usize,
-    filled: usize,
+    stride: usize,
+    col_base: usize,
+    ctr_base: u64,
     m: usize,
     tile_blocks: usize,
 ) {
@@ -49,31 +45,27 @@ fn fold_block(
     while tc < m {
         let tw = tile_blocks.min(m - tc);
         let tb = tw * 16;
-        let ctr = (filled + tc) as u64;
+        let ctr = ctr_base + tc as u64;
         fold::stretch(aes, leaves, tw, ctr, src, scratch);
-        // The punctured leaf contributes nothing to the fold.
         scratch[missing * tw..(missing + 1) * tw].fill([0u8; 16]);
 
-        let col = (filled + tc) * 16;
+        let col = (col_base + tc) * 16;
         fold::fold_emit(
             &mut scratch.as_mut_bytes()[..q * tb],
             tb,
             k,
             slab,
-            total_rb,
+            stride,
             col,
             &mut u_tile[..tb],
         );
 
-        // t_b = u_b ⊕ ū_b, then w_i = v_i ⊕ bit_i(Δ_b)·t_b. The delta bit is
-        // applied as an arithmetic mask so the key derivation is constant-time
-        // w.r.t. delta.
         t_b[..tb].copy_from_slice(&u_tile[..tb]);
         fold::xor_into(&mut t_b[..tb], &us_row[tc * 16..tc * 16 + tb]);
         for i in 0..k {
             let mask = [0u8.wrapping_sub(delta_bits[i] as u8); 16];
             fold::xor_masked_into(
-                &mut slab[i * total_rb + col..i * total_rb + col + tb],
+                &mut slab[i * stride + col..i * stride + col + tb],
                 &t_b[..tb],
                 mask,
             );
@@ -88,8 +80,10 @@ struct Queued {
     sender: OutputSender<RCOTSenderOutput<Block>>,
 }
 
-/// SoftSpoken sender.
 #[derive(Debug)]
+/// SoftSpoken correlated OT sender.
+///
+/// The type parameter tracks the protocol state; see [`state`].
 pub struct Sender<T: state::State = state::Initialized> {
     config: SenderConfig,
     alloc: usize,
@@ -103,19 +97,19 @@ impl<T> Sender<T>
 where
     T: state::State,
 {
-    /// Returns the Sender's configuration
+    /// Returns the sender's configuration.
     pub fn config(&self) -> &SenderConfig {
         &self.config
     }
 }
 
 impl Sender<state::Initialized> {
-    /// Creates a new sender with the global COT correlation `delta`.
+    /// Creates a new sender with the given configuration and COT correlation
+    /// `delta`.
     pub fn new(config: SenderConfig, delta: Block) -> Self {
         Sender {
             config,
-            // SSP extra OTs are sacrificed to the consistency check.
-            alloc: SSP,
+            alloc: 0,
             transfer_id: TransferId::default(),
             queue: VecDeque::default(),
             delta,
@@ -123,8 +117,8 @@ impl Sender<state::Initialized> {
         }
     }
 
-    /// Loads the base-OT seeds (chosen by `delta`), advancing to the
-    /// `corrections` step.
+    /// Loads the base OT `seeds`, advancing to the [`Setup`](state::Setup)
+    /// state.
     pub fn setup(self, seeds: [Block; CSP]) -> Sender<state::Setup> {
         Sender {
             config: self.config,
@@ -140,8 +134,8 @@ impl Sender<state::Initialized> {
 }
 
 impl Sender<state::Setup> {
-    /// Reconstructs the punctured GGM trees from the receiver's tree
-    /// corrections, transitioning to the extension phase.
+    /// Applies the receiver's [`Corrections`], advancing to the
+    /// [`Extension`](state::Extension) state.
     pub fn corrections(self, corrections: Corrections) -> Sender<state::Extension> {
         let k = self.config.k();
         let n_blocks = self.config.n_blocks();
@@ -156,8 +150,6 @@ impl Sender<state::Setup> {
         let mut missing = vec![0usize; n_blocks];
         let mut parents = vec![[0u8; 16]; q / 2];
         for b in 0..n_blocks {
-            // The missing leaf of block `b` is the `delta` chunk
-            // `bits[b*k .. b*k + k]`.
             let mut idx = 0;
             for i in 0..k {
                 if delta_bits[b * k + i] {
@@ -186,11 +178,11 @@ impl Sender<state::Setup> {
                 leaf_seeds,
                 missing,
                 mac: Vec::default(),
-                total_rb: 0,
-                filled: 0,
-                out_total: 0,
-                consumed: 0,
-                extended: false,
+                round_rb: 0,
+                round_remaining: 0,
+                col_filled: 0,
+                prg_ctr: 0,
+                output_len: 0,
                 chi: None,
             },
         }
@@ -198,22 +190,38 @@ impl Sender<state::Setup> {
 }
 
 impl Sender<state::Extension> {
-    /// Returns `true` if the sender wants to extend.
+    /// Returns `true` if the sender has work to [`extend`](Self::extend).
     pub fn wants_extend(&self) -> bool {
-        self.alloc != 0
+        self.state.round_remaining != 0 || (self.state.round_rb == 0 && self.alloc != 0)
     }
 
-    /// Returns `true` if the sender wants to run the consistency check.
+    /// Returns `true` if the sender is ready to run the consistency
+    /// [`check`](Self::check).
     pub fn wants_check(&self) -> bool {
-        self.alloc == 0 && !self.state.extended && !self.state.mac.is_empty()
+        self.state.round_rb != 0 && self.state.round_remaining == 0
     }
 
-    /// Processes one extension batch from the receiver's [`Extend`] message.
+    /// Processes one [`Extend`] message from the receiver.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the message does not match the sender's expected
+    /// state.
     pub fn extend(&mut self, extend: Extend) -> Result<(), SenderError> {
-        if self.state.extended {
-            return Err(SenderError::InvalidState(
-                "extending more than once is currently disabled".to_string(),
-            ));
+        if self.state.round_rb == 0 {
+            if self.alloc == 0 {
+                return Err(SenderError::InvalidState("nothing to extend".to_string()));
+            }
+            let round_total = (self.alloc + SSP).next_multiple_of(SSP);
+            self.state.round_rb = round_total / 8;
+            self.state.round_remaining = round_total;
+            self.state.col_filled = 0;
+            self.alloc = 0;
+
+            let needed = self.state.output_len * 16 + CSP * self.state.round_rb;
+            if self.state.mac.len() < needed {
+                self.state.mac.resize(needed, 0);
+            }
         }
 
         let Extend { count, us } = extend;
@@ -222,11 +230,10 @@ impl Sender<state::Extension> {
         let n_blocks = self.config.n_blocks();
         let q = self.config.leaves();
 
-        // Round up to a multiple of SSP (the rows sacrificed to the check).
         let expected_count = self
             .config
             .batch_size()
-            .min(self.alloc)
+            .min(self.state.round_remaining)
             .next_multiple_of(SSP);
         if count != expected_count {
             return Err(SenderError::CountMismatch {
@@ -236,30 +243,25 @@ impl Sender<state::Extension> {
         }
 
         let rb = count / 8;
-        let m = count / CSP; // blocks per row this batch
+        let m = count / CSP;
 
         if us.len() != n_blocks * rb {
             return Err(SenderError::InvalidExtend);
         }
 
-        // First extend: size the matrix from the (now final) demand. The
-        // punctured trees were built in the `corrections` transition.
-        if self.state.mac.is_empty() {
-            let total = self.alloc.next_multiple_of(SSP);
-            self.state.total_rb = total / 8;
-            self.state.mac = vec![0u8; CSP * self.state.total_rb];
-        }
-
         let delta_bits: Vec<bool> = self.delta.iter_lsb0().collect();
 
-        let total_rb = self.state.total_rb;
-        let filled = self.state.filled;
+        let round_rb = self.state.round_rb;
+        let col_filled = self.state.col_filled;
+        let ctr_base = self.state.prg_ctr;
         let tile_blocks = (TILE_TARGET_BLOCKS / q).max(1).min(m);
+
+        let work_start = self.state.output_len * 16;
 
         let hasher = &self.state.hasher;
         let leaf_seeds = &self.state.leaf_seeds;
         let missing = &self.state.missing;
-        let mac = &mut self.state.mac;
+        let work = &mut self.state.mac[work_start..work_start + CSP * round_rb];
         let delta_bits = &delta_bits;
         let make_buf = || {
             (
@@ -274,61 +276,70 @@ impl Sender<state::Extension> {
             if #[cfg(feature = "rayon")] {
                 leaf_seeds
                     .par_chunks(q)
-                    .zip(mac.par_chunks_mut(k * total_rb))
+                    .zip(work.par_chunks_mut(k * round_rb))
                     .zip(us.par_chunks(rb))
                     .enumerate()
                     .for_each_init(make_buf, |(src, scratch, u_tile, t_b), (b, ((leaves, slab), us_row))| {
                         fold_block(
                             hasher, leaves, slab, us_row, src, scratch, u_tile, t_b, missing[b],
-                            &delta_bits[b * k..b * k + k], k, total_rb, filled, m, tile_blocks,
+                            &delta_bits[b * k..b * k + k], k, round_rb, col_filled, ctr_base, m,
+                            tile_blocks,
                         );
                     });
             } else {
                 let (mut src, mut scratch, mut u_tile, mut t_b) = make_buf();
                 leaf_seeds
                     .chunks(q)
-                    .zip(mac.chunks_mut(k * total_rb))
+                    .zip(work.chunks_mut(k * round_rb))
                     .zip(us.chunks(rb))
                     .enumerate()
                     .for_each(|(b, ((leaves, slab), us_row))| {
                         fold_block(
                             hasher, leaves, slab, us_row, &mut src, &mut scratch, &mut u_tile,
-                            &mut t_b, missing[b], &delta_bits[b * k..b * k + k], k, total_rb, filled,
-                            m, tile_blocks,
+                            &mut t_b, missing[b], &delta_bits[b * k..b * k + k], k, round_rb,
+                            col_filled, ctr_base, m, tile_blocks,
                         );
                     });
             }
         }
 
-        self.state.filled = filled + m;
-        self.alloc = self.alloc.saturating_sub(count);
+        self.state.col_filled = col_filled + m;
+        self.state.prg_ctr = ctr_base + m as u64;
+        self.state.round_remaining -= count;
 
         Ok(())
     }
 
-    /// Starts the consistency check by sampling a random seed.
+    /// Samples and returns the challenge seed for the consistency check.
+    ///
+    /// Send it to the receiver, then pass its [`Check`] response to
+    /// [`check`](Self::check).
     pub fn check_start(&mut self) -> Block {
         let chi = rng().random::<Block>();
         self.state.chi = Some(chi);
         chi
     }
 
-    /// Verifies the receiver's [`Check`] and, on success, finalizes the OTs.
+    /// Verifies the receiver's [`Check`] and finalizes the extended OTs, which
+    /// then become available to send.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SenderError::ConsistencyCheckFailed`] if verification fails.
     pub fn check(&mut self, receiver_check: Check) -> Result<(), SenderError> {
         if !self.wants_check() {
             return Err(SenderError::InvalidState("not ready to check".to_string()));
         }
         let chi_seed = mem::take(&mut self.state.chi).ok_or(SenderError::ChiNotSet)?;
 
-        let total_rb = self.state.total_rb;
+        let round_rb = self.state.round_rb;
+        let work_start = self.state.output_len * 16;
+        let work = &self.state.mac[work_start..work_start + CSP * round_rb];
 
-        let (check_q, _) = check::check_fold(chi_seed, &self.state.mac, total_rb, None);
+        let (check_q, _) = check::check_fold(chi_seed, work, round_rb, None);
 
         let Check { x, t } = receiver_check;
 
-        // Constant-time verify: accumulate every row's inequality into one flag
-        // with no early return, so only the final pass/fail — the protocol's
-        // modeled selective-abort leak — is exposed.
         let mut failed = false;
         for ((bit, t), q) in self.delta.iter_lsb0().zip(t).zip(check_q) {
             let xb = x.scale_by_subfield(Gf2(bit));
@@ -338,32 +349,37 @@ impl Sender<state::Extension> {
             return Err(SenderError::ConsistencyCheckFailed);
         }
 
-        // Transpose the matrix in place: it becomes the per-OT keys. The last
-        // SSP OTs are sacrificed to the check.
-        matrix_transpose::transpose_bits(&mut self.state.mac, CSP).expect("matrix is rectangular");
-        self.state.out_total = total_rb * 8 - SSP;
-        self.state.extended = true;
+        let work = &mut self.state.mac[work_start..work_start + CSP * round_rb];
+        matrix_transpose::transpose_bits(work, CSP).expect("matrix is rectangular");
+        self.state.output_len += round_rb * 8 - SSP;
+        self.state.round_rb = 0;
+        self.state.col_filled = 0;
 
-        // Resolve any queued transfers.
-        for Queued { count, sender } in mem::take(&mut self.queue) {
+        self.resolve_queue();
+
+        Ok(())
+    }
+
+    fn resolve_queue(&mut self) {
+        while let Some(front) = self.queue.front() {
+            if front.count > self.state.output_len {
+                break;
+            }
+            let Queued { count, sender } = self.queue.pop_front().expect("front exists");
             let keys = self.take_keys(count);
             sender.send(RCOTSenderOutput {
                 id: self.transfer_id.next(),
                 keys,
             });
         }
-
-        Ok(())
     }
 
-    /// Consumes `count` checked keys from the transposed matrix.
     fn take_keys(&mut self, count: usize) -> Vec<Block> {
-        let start = self.state.consumed;
-        let keys = <[Block]>::ref_from_bytes(&self.state.mac[start * 16..(start + count) * 16])
+        self.state.output_len -= count;
+        let start = self.state.output_len;
+        <[Block]>::ref_from_bytes(&self.state.mac[start * 16..(start + count) * 16])
             .expect("multiple of Block size")
-            .to_vec();
-        self.state.consumed += count;
-        keys
+            .to_vec()
     }
 }
 
@@ -405,19 +421,13 @@ impl RCOTSender<Block> for Sender<state::Extension> {
     type Future = MaybeDone<RCOTSenderOutput<Block>>;
 
     fn alloc(&mut self, count: usize) -> Result<(), Self::Error> {
-        if self.state.extended {
-            return Err(SenderError::InvalidState(
-                "extending more than once is currently disabled".to_string(),
-            ));
-        }
-
         self.alloc += count;
 
         Ok(())
     }
 
     fn available(&self) -> usize {
-        self.state.out_total - self.state.consumed
+        self.state.output_len
     }
 
     fn delta(&self) -> Block {
@@ -447,22 +457,17 @@ impl RCOTSender<Block> for Sender<state::Extension> {
             sender.send(output);
 
             Ok(recv)
-        } else if !self.state.extended {
+        } else {
             let (sender, recv) = new_output();
 
             self.queue.push_back(Queued { count, sender });
 
             Ok(recv)
-        } else {
-            Err(SenderError::InsufficientSetup {
-                expected: count,
-                actual: self.available(),
-            })
         }
     }
 }
 
-/// The sender's state.
+/// Typestates for the [`Sender`].
 pub mod state {
     use super::*;
 
@@ -474,10 +479,10 @@ pub mod state {
         impl Sealed for super::Extension {}
     }
 
-    /// The sender's state.
+    /// A sender protocol state. This trait is sealed.
     pub trait State: sealed::Sealed {}
 
-    /// The sender's initial state.
+    /// The initial state, before base OT setup.
     #[derive(Default)]
     pub struct Initialized {}
 
@@ -485,10 +490,8 @@ pub mod state {
 
     opaque_debug::implement!(Initialized);
 
-    /// The sender's state after base OT, holding the chosen seeds until the
-    /// tree corrections arrive.
+    /// The state after base OT setup, awaiting the receiver's corrections.
     pub struct Setup {
-        /// Base-OT seeds chosen by `delta`.
         pub(super) singles: Vec<[u8; 16]>,
     }
 
@@ -496,30 +499,17 @@ pub mod state {
 
     opaque_debug::implement!(Setup);
 
-    /// The sender's state after the setup phase.
+    /// The extension state, in which OTs are generated and checked.
     pub struct Extension {
-        /// Per-instance MMO hash for the leaf stretch (keyed by the seed `s`).
         pub(super) hasher: mpz_core::aes::FixedKeyAes,
-        /// GGM leaf seeds (`n_blocks * 2^k`); the missing leaf of each block is
-        /// zero and skipped in the fold.
         pub(super) leaf_seeds: Vec<[u8; 16]>,
-        /// Missing (punctured) leaf index of each block.
         pub(super) missing: Vec<usize>,
-        /// The single MAC matrix: `CSP × total_rb` bytes, row-major. Filled
-        /// during extension, then transposed in place to the per-OT keys at the
-        /// consistency check.
         pub(super) mac: Vec<u8>,
-        /// Width of one matrix row in bytes.
-        pub(super) total_rb: usize,
-        /// Blocks filled per row so far (also the PRG stretch counter).
-        pub(super) filled: usize,
-        /// Number of valid (non-sacrificial) OTs available after the check.
-        pub(super) out_total: usize,
-        /// Number of OTs consumed from the output.
-        pub(super) consumed: usize,
-        /// Whether extension has completed (the check has run).
-        pub(super) extended: bool,
-        /// A seed for the random weights χ for the consistency check.
+        pub(super) round_rb: usize,
+        pub(super) round_remaining: usize,
+        pub(super) col_filled: usize,
+        pub(super) prg_ctr: u64,
+        pub(super) output_len: usize,
         pub(super) chi: Option<Block>,
     }
 

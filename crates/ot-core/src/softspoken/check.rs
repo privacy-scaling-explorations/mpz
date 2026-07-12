@@ -1,9 +1,3 @@
-//! Consistency-check fold.
-//!
-//! Computes `Σ_j χ_j · row[j] ⊕ row[m]` for each of the `CSP` coordinate rows
-//! (and the receiver's choices row), where `χ_j = AES_seed(j)` is the
-//! universal-hash challenge. Rows fold into `Gf2_128` accumulators.
-
 use mpz_core::{Block, aes::AesEncryptor};
 use mpz_fields::{
     Accumulator,
@@ -16,14 +10,11 @@ use rayon::prelude::*;
 
 use crate::softspoken::{CSP, fold::ctr_block};
 
-/// Columns folded per parallel chunk.
 #[cfg(feature = "rayon")]
 const CHI_CHUNK: usize = 1 << 11;
 
-/// Per-chunk partial: one accumulator per coordinate row, plus the choices row.
 type Partial = ([Gf2_128Accumulator; CSP], Gf2_128Accumulator);
 
-/// Folds columns `[c0, c1)` of every row into a fresh partial.
 fn fold_range(
     aes: &AesEncryptor,
     mac: &[u8],
@@ -32,7 +23,6 @@ fn fold_range(
     c0: usize,
     c1: usize,
 ) -> Partial {
-    // χ_j = AES_seed(j) for j in [c0, c1).
     let mut chi: Vec<[u8; 16]> = (c0..c1).map(|j| ctr_block(j as u64)).collect();
     aes.encrypt_blocks(&mut chi);
     let chi: Vec<Gf2_128> = chi.iter().map(|&b| Block::from(b).into()).collect();
@@ -57,7 +47,6 @@ fn fold_range(
     (accs, acc_x)
 }
 
-/// Merges `b` into `a`, both unreduced.
 #[cfg(feature = "rayon")]
 fn merge(mut a: Partial, b: Partial) -> Partial {
     for (x, y) in a.0.iter_mut().zip(b.0.iter()) {
@@ -67,7 +56,6 @@ fn merge(mut a: Partial, b: Partial) -> Partial {
     a
 }
 
-/// Reduces `acc` and adds the row's constant term `row[m]`.
 fn finish(acc: Gf2_128Accumulator, row_bytes: &[u8], m: usize) -> Gf2_128 {
     let cst: Gf2_128 = <[Block]>::ref_from_bytes(&row_bytes[m * 16..(m + 1) * 16])
         .expect("multiple of Block size")[0]
@@ -75,9 +63,6 @@ fn finish(acc: Gf2_128Accumulator, row_bytes: &[u8], m: usize) -> Gf2_128 {
     acc.reduce() + cst
 }
 
-/// Folds the consistency check for the `CSP` rows of `mac` (row stride
-/// `total_rb` bytes) and, if given, the `choices` row, returning the per-row
-/// check values and the optional choices check value.
 pub(crate) fn check_fold(
     seed: Block,
     mac: &[u8],
@@ -124,10 +109,6 @@ mod tests {
 
     use rand::{Rng, SeedableRng, rngs::StdRng};
 
-    /// Independent reference: `t_r = (Σ_{j<m} χ_j · row_r[j]) + row_r[m]` with
-    /// `χ_j = AES_seed(j)`. Uses direct field multiplies — no
-    /// deferred-reduction accumulator and no column chunking — so it
-    /// genuinely cross-checks the optimized fold rather than restating it.
     fn naive_check_fold(
         seed: Block,
         mac: &[u8],
@@ -171,8 +152,6 @@ mod tests {
     fn check_fold_matches_naive() {
         let mut rng = StdRng::seed_from_u64(0);
 
-        // `cols == total_rb / 16`; `2050` spans more than one `CHI_CHUNK`, so it
-        // exercises the parallel merge path under `--features rayon`.
         for cols in [2usize, 3, 17, 64, 2050] {
             let total_rb = cols * 16;
             let mac: Vec<u8> = (0..CSP * total_rb).map(|_| rng.random()).collect();
@@ -184,7 +163,6 @@ mod tests {
             assert_eq!(t, t_ref, "cols={cols} t mismatch");
             assert_eq!(x, x_ref, "cols={cols} x mismatch");
 
-            // The choices row is optional and must not perturb the `t` values.
             let (t_none, x_none) = check_fold(seed, &mac, total_rb, None);
             assert_eq!(t_none, t_ref, "cols={cols} t (no choices) mismatch");
             assert!(x_none.is_none());

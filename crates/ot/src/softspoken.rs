@@ -1,10 +1,7 @@
-//! [`SoftSpokenOT`](https://eprint.iacr.org/2022/192) correlated random
-//! oblivious transfer extension with leakage, over a base OT.
+//! Correlated OT extension via SoftSpoken, run over a base OT.
 //!
-//! # Warning
-//!
-//! The user of this protocol must carefully consider if the leakage introduced
-//! in this protocol is acceptable for their specific application.
+//! [`Sender`] and [`Receiver`] wrap the core protocol with the message I/O
+//! needed to run it against a peer.
 
 mod receiver;
 mod sender;
@@ -35,5 +32,16 @@ mod tests {
         let receiver = Receiver::new(ReceiverConfig::default(), base_sender);
 
         test_rcot(sender, receiver, 128, 1).await;
+    }
+
+    #[tokio::test]
+    async fn test_softspoken_rcot_multiple_rounds() {
+        let mut rng = StdRng::seed_from_u64(0);
+        let (base_sender, base_receiver) = ideal_ot();
+        let delta = Block::random(&mut rng);
+        let sender = Sender::new(SenderConfig::default(), delta, base_receiver);
+        let receiver = Receiver::new(ReceiverConfig::default(), base_sender);
+
+        test_rcot(sender, receiver, 200, 4).await;
     }
 }
