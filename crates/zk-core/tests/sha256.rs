@@ -22,11 +22,12 @@ use mpz_zk_core::{
 
 const VOPE_COST: usize = 128;
 
-/// Pack 64 message bytes into 16 u32 words using big-endian byte
-/// order (the SHA-256 message-schedule convention).
+/// Pack 64 message bytes into 16 u32 words using little-endian byte
+/// order (memory order). The `compress` gadget byte-swaps each word
+/// into the big-endian SHA-256 message-schedule convention itself.
 fn msg_bytes_to_words(msg: &[u8; 64]) -> [u32; 16] {
     core::array::from_fn(|i| {
-        u32::from_be_bytes([msg[i * 4], msg[i * 4 + 1], msg[i * 4 + 2], msg[i * 4 + 3]])
+        u32::from_le_bytes([msg[i * 4], msg[i * 4 + 1], msg[i * 4 + 2], msg[i * 4 + 3]])
     })
 }
 
@@ -216,7 +217,9 @@ fn sha256_quicksilver_batch_check_accepts() {
 fn sha2_compress_out_bits(msg_words: [u32; 16], state: [u32; 8]) -> [bool; 256] {
     let mut bytes = [0u8; 64];
     for (i, w) in msg_words.iter().enumerate() {
-        bytes[i * 4..(i + 1) * 4].copy_from_slice(&w.to_be_bytes());
+        // Words are little-endian memory order (matching what the gadget
+        // consumes); the gadget byte-swaps them into the big-endian schedule.
+        bytes[i * 4..(i + 1) * 4].copy_from_slice(&w.to_le_bytes());
     }
     let out = sha2_crate_compress(&bytes, state);
     <[bool; 256]>::from_lsb0_iter(out.iter_lsb0())
