@@ -1,4 +1,4 @@
-/// Errors that can occur when using the SoftSpoken sender.
+/// An error returned by the SoftSpoken [`Sender`](super::Sender).
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum SenderError {
@@ -16,7 +16,7 @@ pub enum SenderError {
     ChiNotSet,
 }
 
-/// Errors that can occur when using the SoftSpoken receiver.
+/// An error returned by the SoftSpoken [`Receiver`](super::Receiver).
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum ReceiverError {

@@ -27,14 +27,14 @@ impl<BaseOT> State<BaseOT> {
     }
 }
 
-/// SoftSpoken sender.
+/// SoftSpoken correlated OT sender, run over the base OT `BaseOT`.
 #[derive(Debug)]
 pub struct Sender<BaseOT> {
     state: State<BaseOT>,
 }
 
 impl<BaseOT> Sender<BaseOT> {
-    /// Creates a new Sender with the given config, global COT correlation
+    /// Creates a new sender from the given configuration, COT correlation
     /// `delta`, and base OT.
     pub fn new(config: SenderConfig, delta: Block, base_ot: BaseOT) -> Self {
         Self {
@@ -152,7 +152,7 @@ where
     }
 }
 
-/// Error for [`Sender`].
+/// An error returned by the SoftSpoken [`Sender`].
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 pub struct SenderError(#[from] ErrorRepr);

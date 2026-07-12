@@ -1,14 +1,14 @@
-//! Correlated random oblivious transfer extension with leakage, via
-//! [`SoftSpokenOT`](https://eprint.iacr.org/2022/192).
+//! Correlated OT extension via SoftSpoken.
 //!
-//! The parameter `k` (one of `{2, 4, 8}`) trades communication for computation:
-//! each extended OT costs `CSP / k` bits but `2^k / k` times the PRG work of
-//! IKNP.
+//! A [`Sender`] and [`Receiver`] turn a fixed number of base OTs into many
+//! correlated OTs. Each party is a state machine driven through setup,
+//! extension, and a consistency check, exchanging the [`Corrections`],
+//! [`Extend`], and [`Check`] messages produced by the other.
 //!
 //! # Warning
 //!
-//! The user of this protocol must carefully consider whether the leakage
-//! introduced is acceptable for their application.
+//! This protocol admits a limited amount of leakage. Callers must carefully
+//! consider whether that leakage is acceptable for their application.
 
 mod check;
 mod config;
@@ -28,17 +28,19 @@ pub use receiver::{Receiver, state as receiver_state};
 pub use sender::{Sender, state as sender_state};
 use serde::{Deserialize, Serialize};
 
-/// Computational security parameter
+/// Computational security parameter, in bits.
 pub const CSP: usize = 128;
-/// Statistical security parameter
+/// Statistical security parameter, in bits.
 pub const SSP: usize = 128;
 
 const TREE_CORRECTIONS: usize = 2 * CSP;
 
 pub(crate) const SUPPORTED_K: [usize; 3] = [2, 4, 8];
 
-/// One-time setup message sent from the receiver to the sender in the
-/// `corrections` transition.
+/// Setup message sent from the [`Receiver`] to the [`Sender`].
+///
+/// Produced by [`Receiver::corrections`] and consumed by
+/// [`Sender::corrections`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "validation::CorrectionsUnchecked")]
 pub struct Corrections {
@@ -46,7 +48,9 @@ pub struct Corrections {
     s: [u8; 16],
 }
 
-/// Extension message sent from the receiver to the sender.
+/// Extension message sent from the [`Receiver`] to the [`Sender`].
+///
+/// Produced by [`Receiver::extend`] and consumed by [`Sender::extend`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "validation::ExtendUnchecked")]
 pub struct Extend {
@@ -54,7 +58,9 @@ pub struct Extend {
     us: Vec<u8>,
 }
 
-/// Check message sent from Receiver to Sender.
+/// Consistency-check message sent from the [`Receiver`] to the [`Sender`].
+///
+/// Produced by [`Receiver::check`] and verified by [`Sender::check`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "validation::CheckUnchecked")]
 pub struct Check {
@@ -102,8 +108,6 @@ mod validation {
                 return Err("count must be a positive multiple of CSP".to_string());
             }
 
-            // `us` is `count / 8 * (CSP / k)` bytes, so `k` is recoverable and
-            // must be a supported value.
             let total = count / 8 * CSP;
             if us.is_empty() || total % us.len() != 0 {
                 return Err("invalid extension matrix size".to_string());
@@ -262,6 +266,53 @@ mod tests {
     }
 
     #[rstest]
+    fn test_softspoken_partial_consume(
+        delta: Block,
+        sender_seeds: [Block; CSP],
+        receiver_seeds: [[Block; 2]; CSP],
+    ) {
+        let count = 512;
+
+        let sender = Sender::new(SenderConfig::default(), delta);
+        let receiver = Receiver::new(ReceiverConfig::default());
+
+        let (mut receiver, corrections) = receiver.setup(receiver_seeds).corrections();
+        let mut sender = sender.setup(sender_seeds).corrections(corrections);
+
+        sender.alloc(count).unwrap();
+        receiver.alloc(count).unwrap();
+
+        while receiver.wants_extend() {
+            sender.extend(receiver.extend().unwrap()).unwrap();
+        }
+
+        let chi_seed = sender.check_start();
+        let receiver_check = receiver.check(chi_seed).unwrap();
+        sender.check(receiver_check).unwrap();
+
+        assert_eq!(sender.available(), count);
+        assert_eq!(receiver.available(), count);
+
+        let mut remaining = count;
+        for chunk in [100usize, 300, 112] {
+            let RCOTSenderOutput { id: sid, keys } = sender.try_send_rcot(chunk).unwrap();
+            let RCOTReceiverOutput {
+                id: rid,
+                choices,
+                msgs,
+            } = receiver.try_recv_rcot(chunk).unwrap();
+
+            assert_eq!(sid, rid);
+            assert_cot(delta, &choices, &keys, &msgs);
+
+            remaining -= chunk;
+            assert_eq!(sender.available(), remaining);
+            assert_eq!(receiver.available(), remaining);
+        }
+        assert_eq!(remaining, 0);
+    }
+
+    #[rstest]
     #[case::k2(2, 128)]
     #[case::k4(4, 128)]
     #[case::k8(8, 128)]
@@ -274,7 +325,6 @@ mod tests {
         sender_seeds: [Block; CSP],
         receiver_seeds: [[Block; 2]; CSP],
     ) {
-        // Small batch so the larger `count` cases span multiple extends.
         let sender_config = SenderConfig::builder()
             .k(k)
             .batch_size(2048)
@@ -366,35 +416,87 @@ mod tests {
     }
 
     #[rstest]
-    fn test_softspoken_extension_multiple_extends_fail(
+    #[case::equal_rounds(&[256, 256])]
+    #[case::growing_rounds(&[128, 512, 2048])]
+    #[case::shrinking_rounds(&[2048, 512, 128])]
+    fn test_softspoken_multiple_rounds(
+        #[case] rounds: &[usize],
         delta: Block,
         sender_seeds: [Block; CSP],
         receiver_seeds: [[Block; 2]; CSP],
     ) {
-        let count = 128;
-
         let sender = Sender::new(SenderConfig::default(), delta);
         let receiver = Receiver::new(ReceiverConfig::default());
 
         let (mut receiver, corrections) = receiver.setup(receiver_seeds).corrections();
         let mut sender = sender.setup(sender_seeds).corrections(corrections);
 
-        sender.alloc(count).unwrap();
-        receiver.alloc(count).unwrap();
+        for &count in rounds {
+            assert!(!sender.wants_extend());
+            assert!(!receiver.wants_extend());
 
-        while receiver.wants_extend() {
-            sender.extend(receiver.extend().unwrap()).unwrap();
+            sender.alloc(count).unwrap();
+            receiver.alloc(count).unwrap();
+
+            while receiver.wants_extend() {
+                sender.extend(receiver.extend().unwrap()).unwrap();
+            }
+
+            let chi_seed = sender.check_start();
+            let receiver_check = receiver.check(chi_seed).unwrap();
+            sender.check(receiver_check).unwrap();
+
+            assert_eq!(sender.available(), count);
+            assert_eq!(receiver.available(), count);
+
+            let RCOTSenderOutput { id: sid, keys } = sender.try_send_rcot(count).unwrap();
+            let RCOTReceiverOutput {
+                id: rid,
+                choices,
+                msgs,
+            } = receiver.try_recv_rcot(count).unwrap();
+
+            assert_eq!(sid, rid);
+            assert_cot(delta, &choices, &keys, &msgs);
         }
+    }
 
-        let chi_seed = sender.check_start();
-        let receiver_check = receiver.check(chi_seed).unwrap();
-        sender.check(receiver_check).unwrap();
+    #[rstest]
+    fn test_softspoken_rounds_accumulate_without_consuming(
+        delta: Block,
+        sender_seeds: [Block; CSP],
+        receiver_seeds: [[Block; 2]; CSP],
+    ) {
+        let sender = Sender::new(SenderConfig::default(), delta);
+        let receiver = Receiver::new(ReceiverConfig::default());
 
-        assert!(sender.alloc(1).is_err());
-        assert!(receiver.alloc(1).is_err());
-        assert!(!sender.wants_extend());
-        assert!(!receiver.wants_extend());
-        assert!(receiver.extend().is_err());
+        let (mut receiver, corrections) = receiver.setup(receiver_seeds).corrections();
+        let mut sender = sender.setup(sender_seeds).corrections(corrections);
+
+        let run_round = |sender: &mut Sender<_>, receiver: &mut Receiver<_>, count: usize| {
+            sender.alloc(count).unwrap();
+            receiver.alloc(count).unwrap();
+            while receiver.wants_extend() {
+                sender.extend(receiver.extend().unwrap()).unwrap();
+            }
+            let chi_seed = sender.check_start();
+            let receiver_check = receiver.check(chi_seed).unwrap();
+            sender.check(receiver_check).unwrap();
+        };
+
+        run_round(&mut sender, &mut receiver, 256);
+        run_round(&mut sender, &mut receiver, 384);
+
+        assert_eq!(sender.available(), 256 + 384);
+        assert_eq!(receiver.available(), 256 + 384);
+
+        for count in [200usize, 300, 140] {
+            let RCOTSenderOutput { keys, .. } = sender.try_send_rcot(count).unwrap();
+            let RCOTReceiverOutput { choices, msgs, .. } = receiver.try_recv_rcot(count).unwrap();
+            assert_cot(delta, &choices, &keys, &msgs);
+        }
+        assert_eq!(sender.available(), 0);
+        assert_eq!(receiver.available(), 0);
     }
 
     #[rstest]
@@ -449,8 +551,6 @@ mod tests {
         while receiver.wants_extend() {
             let mut extend = receiver.extend().unwrap();
 
-            // Flip a bit in the receiver's extension message (breaking the mono-chrome
-            // choice vector)
             *extend.us.first_mut().unwrap() ^= 1;
 
             sender.extend(extend).unwrap();
@@ -464,9 +564,6 @@ mod tests {
     }
 }
 
-/// Deserialization validation of the wire messages (untrusted receiver input).
-/// Each message is built directly, serialized, then deserialized to drive the
-/// `TryFrom` guards.
 #[cfg(test)]
 mod validation_tests {
     use super::{CSP, Check, Corrections, Extend, TREE_CORRECTIONS};
@@ -475,8 +572,6 @@ mod validation_tests {
 
     #[test]
     fn extend_accepts_supported_k_and_rejects_bad_matrix() {
-        // For count = 128, `total = count / 8 * CSP = 2048`, so a valid matrix
-        // has `2048 / k` bytes for k in {2, 4, 8}.
         for (k, us_len) in [(2usize, 1024usize), (4, 512), (8, 256)] {
             let bytes = bincode::serialize(&Extend {
                 count: 128,
@@ -486,7 +581,6 @@ mod validation_tests {
             assert!(bincode::deserialize::<Extend>(&bytes).is_ok(), "k={k}");
         }
 
-        // Empty, non-divisor, and unsupported-k (2048 ⇒ k=1) matrices are rejected.
         for us_len in [0usize, 257, 2048] {
             let bytes = bincode::serialize(&Extend {
                 count: 128,

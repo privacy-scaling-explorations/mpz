@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, mem};
+use std::collections::VecDeque;
 
 use crate::{
     TransferId,
@@ -19,11 +19,6 @@ use zerocopy::{FromBytes, IntoBytes};
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
-/// Stretches and folds one VOLE block of this batch into the shared MAC matrix.
-///
-/// `slab` is the block's `k` contiguous matrix rows (`k * total_rb` bytes);
-/// `us_row` is the block's `rb`-byte derandomization output. `src`/`scratch`/
-/// `u_tile` are reused per-worker buffers.
 #[allow(clippy::too_many_arguments)]
 fn fold_block(
     aes: &FixedKeyAes,
@@ -34,8 +29,9 @@ fn fold_block(
     scratch: &mut [[u8; 16]],
     u_tile: &mut [u8],
     k: usize,
-    total_rb: usize,
-    filled: usize,
+    stride: usize,
+    col_base: usize,
+    ctr_base: u64,
     m: usize,
     tile_blocks: usize,
     choices: &[u8],
@@ -45,20 +41,19 @@ fn fold_block(
     while tc < m {
         let tw = tile_blocks.min(m - tc);
         let tb = tw * 16;
-        let ctr = (filled + tc) as u64;
+        let ctr = ctr_base + tc as u64;
         fold::stretch(aes, leaves, tw, ctr, src, scratch);
-        let col = (filled + tc) * 16;
+        let col = (col_base + tc) * 16;
         fold::fold_emit(
             &mut scratch.as_mut_bytes()[..q * tb],
             tb,
             k,
             slab,
-            total_rb,
+            stride,
             col,
             &mut u_tile[..tb],
         );
-        // ū_b = u_b ⊕ u (the shared monochrome choices for these columns).
-        let ch = &choices[(filled + tc) * 16..(filled + tc) * 16 + tb];
+        let ch = &choices[(col_base + tc) * 16..(col_base + tc) * 16 + tb];
         let dst = &mut us_row[tc * 16..tc * 16 + tb];
         dst.copy_from_slice(&u_tile[..tb]);
         fold::xor_into(dst, ch);
@@ -72,8 +67,10 @@ struct Queued {
     sender: Sender<RCOTReceiverOutput<bool, Block>>,
 }
 
-/// SoftSpoken receiver.
 #[derive(Debug, Default)]
+/// SoftSpoken correlated OT receiver.
+///
+/// The type parameter tracks the protocol state; see [`state`].
 pub struct Receiver<T: state::State = state::Initialized> {
     config: ReceiverConfig,
     alloc: usize,
@@ -86,26 +83,26 @@ impl<T> Receiver<T>
 where
     T: state::State,
 {
-    /// Returns the Receiver's configuration
+    /// Returns the receiver's configuration.
     pub fn config(&self) -> &ReceiverConfig {
         &self.config
     }
 }
 
 impl Receiver {
-    /// Creates a new receiver.
+    /// Creates a new receiver with the given configuration.
     pub fn new(config: ReceiverConfig) -> Self {
         Receiver {
             config,
-            // SSP extra OTs are sacrificed to the consistency check.
-            alloc: SSP,
+            alloc: 0,
             transfer_id: TransferId::default(),
             queue: VecDeque::default(),
             state: state::Initialized {},
         }
     }
 
-    /// Loads the base-OT seed pairs, advancing to the `corrections` step.
+    /// Loads the base OT `seeds`, advancing to the [`Setup`](state::Setup)
+    /// state.
     pub fn setup(self, seeds: [[Block; 2]; CSP]) -> Receiver<state::Setup> {
         Receiver {
             config: self.config,
@@ -123,15 +120,14 @@ impl Receiver {
 }
 
 impl Receiver<state::Setup> {
-    /// Builds the trees and emits the one-time [`Corrections`] for the sender,
-    /// advancing to the extension phase.
+    /// Produces the [`Corrections`] for the sender, advancing to the
+    /// [`Extension`](state::Extension) state.
     pub fn corrections(self) -> (Receiver<state::Extension>, Corrections) {
         let k = self.config.k();
         let n_blocks = self.config.n_blocks();
         let q = self.config.leaves();
 
         let mut rng = rand::rng();
-        // Fresh per-instance key for the MMO leaf stretch.
         let s: [u8; 16] = rng.random();
         let hasher = FixedKeyAes::new(s);
 
@@ -161,12 +157,13 @@ impl Receiver<state::Setup> {
                 hasher,
                 leaf_seeds,
                 mac: Vec::default(),
-                choices: Vec::default(),
-                total_rb: 0,
-                filled: 0,
-                out_total: 0,
-                consumed: 0,
-                extended: false,
+                round_choices: Vec::default(),
+                out_choices: Vec::default(),
+                round_rb: 0,
+                round_remaining: 0,
+                col_filled: 0,
+                prg_ctr: 0,
+                output_len: 0,
             },
         };
 
@@ -175,60 +172,69 @@ impl Receiver<state::Setup> {
 }
 
 impl Receiver<state::Extension> {
-    /// Returns `true` if the receiver wants to extend.
+    /// Returns `true` if the receiver has work to [`extend`](Self::extend).
     pub fn wants_extend(&self) -> bool {
-        self.alloc != 0 && !self.state.extended
+        self.state.round_remaining != 0 || (self.state.round_rb == 0 && self.alloc != 0)
     }
 
-    /// Returns `true` if the receiver wants to run the consistency check.
+    /// Returns `true` if the receiver is ready to run the consistency
+    /// [`check`](Self::check).
     pub fn wants_check(&self) -> bool {
-        self.alloc == 0 && !self.state.extended && !self.state.mac.is_empty()
+        self.state.round_rb != 0 && self.state.round_remaining == 0
     }
 
-    /// Produces one extension batch as an [`Extend`] message.
+    /// Produces the next [`Extend`] message for the sender.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the receiver is not in a state to extend.
     pub fn extend(&mut self) -> Result<Extend, ReceiverError> {
-        if self.state.extended {
-            return Err(ReceiverError::InvalidState(
-                "extending more than once is currently disabled".to_string(),
-            ));
-        }
-
         let k = self.config.k();
         let n_blocks = self.config.n_blocks();
         let q = self.config.leaves();
 
-        // Round up to a multiple of SSP (the rows sacrificed to the check).
+        if self.state.round_rb == 0 {
+            if self.alloc == 0 {
+                return Err(ReceiverError::InvalidState("nothing to extend".to_string()));
+            }
+            let round_total = (self.alloc + SSP).next_multiple_of(SSP);
+            let round_rb = round_total / 8;
+            self.state.round_rb = round_rb;
+            self.state.round_remaining = round_total;
+            self.state.col_filled = 0;
+            self.alloc = 0;
+
+            let needed = self.state.output_len * 16 + CSP * round_rb;
+            if self.state.mac.len() < needed {
+                self.state.mac.resize(needed, 0);
+            }
+            self.state.round_choices.resize(round_rb, 0);
+        }
+
         let count = self
             .config
             .batch_size()
-            .min(self.alloc)
+            .min(self.state.round_remaining)
             .next_multiple_of(SSP);
         let rb = count / 8;
-        let m = count / CSP; // blocks per row this batch
+        let m = count / CSP;
 
-        // First extend: size the single MAC matrix from the (now final) demand.
-        // The GGM trees were already built in the `corrections` transition.
-        if self.state.mac.is_empty() {
-            let total = self.alloc.next_multiple_of(SSP);
-            let total_rb = total / 8;
-            self.state.total_rb = total_rb;
-            self.state.mac = vec![0u8; CSP * total_rb];
-            self.state.choices = vec![0u8; total_rb];
-        }
-
-        let total_rb = self.state.total_rb;
-        let filled = self.state.filled;
+        let round_rb = self.state.round_rb;
+        let col_filled = self.state.col_filled;
+        let ctr_base = self.state.prg_ctr;
         let tile_blocks = (TILE_TARGET_BLOCKS / q).max(1).min(m);
 
-        // The shared monochrome choice vector for this batch's OTs.
-        rand::rng().fill_bytes(&mut self.state.choices[filled * 16..filled * 16 + rb]);
+        rand::rng()
+            .fill_bytes(&mut self.state.round_choices[col_filled * 16..col_filled * 16 + rb]);
 
         let mut us = vec![0u8; n_blocks * rb];
 
+        let work_start = self.state.output_len * 16;
+
         let hasher = &self.state.hasher;
         let leaf_seeds = &self.state.leaf_seeds;
-        let mac = &mut self.state.mac;
-        let choices = &self.state.choices;
+        let work = &mut self.state.mac[work_start..work_start + CSP * round_rb];
+        let choices = &self.state.round_choices;
         let make_buf = || {
             (
                 vec![[0u8; 16]; q * tile_blocks],
@@ -241,36 +247,43 @@ impl Receiver<state::Extension> {
             if #[cfg(feature = "rayon")] {
                 leaf_seeds
                     .par_chunks(q)
-                    .zip(mac.par_chunks_mut(k * total_rb))
+                    .zip(work.par_chunks_mut(k * round_rb))
                     .zip(us.par_chunks_mut(rb))
                     .for_each_init(make_buf, |(src, scratch, u_tile), ((leaves, slab), us_row)| {
                         fold_block(
-                            hasher, leaves, slab, us_row, src, scratch, u_tile, k, total_rb, filled,
-                            m, tile_blocks, choices,
+                            hasher, leaves, slab, us_row, src, scratch, u_tile, k, round_rb,
+                            col_filled, ctr_base, m, tile_blocks, choices,
                         );
                     });
             } else {
                 let (mut src, mut scratch, mut u_tile) = make_buf();
                 leaf_seeds
                     .chunks(q)
-                    .zip(mac.chunks_mut(k * total_rb))
+                    .zip(work.chunks_mut(k * round_rb))
                     .zip(us.chunks_mut(rb))
                     .for_each(|((leaves, slab), us_row)| {
                         fold_block(
                             hasher, leaves, slab, us_row, &mut src, &mut scratch, &mut u_tile, k,
-                            total_rb, filled, m, tile_blocks, choices,
+                            round_rb, col_filled, ctr_base, m, tile_blocks, choices,
                         );
                     });
             }
         }
 
-        self.state.filled = filled + m;
-        self.alloc = self.alloc.saturating_sub(count);
+        self.state.col_filled = col_filled + m;
+        self.state.prg_ctr = ctr_base + m as u64;
+        self.state.round_remaining -= count;
 
         Ok(Extend { count, us })
     }
 
-    /// Computes the consistency [`Check`] over all extended OTs.
+    /// Answers the sender's challenge `chi_seed`, producing the [`Check`]
+    /// message and finalizing the extended OTs, which then become available to
+    /// receive.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the receiver is not ready to check.
     pub fn check(&mut self, chi_seed: Block) -> Result<Check, ReceiverError> {
         if !self.wants_check() {
             return Err(ReceiverError::InvalidState(
@@ -278,31 +291,31 @@ impl Receiver<state::Extension> {
             ));
         }
 
-        let total_rb = self.state.total_rb;
+        let round_rb = self.state.round_rb;
+        let work_start = self.state.output_len * 16;
+        let round_out = round_rb * 8 - SSP;
 
         let (check_t, check_x) = check::check_fold(
             chi_seed,
-            &self.state.mac,
-            total_rb,
-            Some(&self.state.choices),
+            &self.state.mac[work_start..work_start + CSP * round_rb],
+            round_rb,
+            Some(&self.state.round_choices[..round_rb]),
         );
         let check_x = check_x.expect("choices were provided");
 
-        // Transpose the matrix in place: it becomes the per-OT MACs. The last
-        // SSP OTs are sacrificed to the check.
-        matrix_transpose::transpose_bits(&mut self.state.mac, CSP).expect("matrix is rectangular");
-        self.state.out_total = total_rb * 8 - SSP;
-        self.state.extended = true;
-
-        // Resolve any queued transfers.
-        for Queued { count, sender } in mem::take(&mut self.queue) {
-            let (choices, msgs) = self.take_output(count);
-            sender.send(RCOTReceiverOutput {
-                id: self.transfer_id.next(),
-                choices,
-                msgs,
-            });
+        {
+            let choices = &self.state.round_choices;
+            let out = &mut self.state.out_choices;
+            out.extend((0..round_out).map(|i| (choices[i / 8] >> (i % 8)) & 1 == 1));
         }
+
+        let work = &mut self.state.mac[work_start..work_start + CSP * round_rb];
+        matrix_transpose::transpose_bits(work, CSP).expect("matrix is rectangular");
+        self.state.output_len += round_out;
+        self.state.round_rb = 0;
+        self.state.col_filled = 0;
+
+        self.resolve_queue();
 
         Ok(Check {
             x: check_x,
@@ -310,16 +323,29 @@ impl Receiver<state::Extension> {
         })
     }
 
-    /// Consumes `count` checked OTs from the transposed matrix.
+    fn resolve_queue(&mut self) {
+        while let Some(front) = self.queue.front() {
+            if front.count > self.state.output_len {
+                break;
+            }
+            let Queued { count, sender } = self.queue.pop_front().expect("front exists");
+            let (choices, msgs) = self.take_output(count);
+            sender.send(RCOTReceiverOutput {
+                id: self.transfer_id.next(),
+                choices,
+                msgs,
+            });
+        }
+    }
+
     fn take_output(&mut self, count: usize) -> (Vec<bool>, Vec<Block>) {
-        let start = self.state.consumed;
-        let choices = (start..start + count)
-            .map(|i| (self.state.choices[i / 8] >> (i % 8)) & 1 == 1)
-            .collect();
+        self.state.output_len -= count;
+        let start = self.state.output_len;
         let msgs = <[Block]>::ref_from_bytes(&self.state.mac[start * 16..(start + count) * 16])
             .expect("multiple of Block size")
             .to_vec();
-        self.state.consumed += count;
+        let choices = self.state.out_choices[start..start + count].to_vec();
+        self.state.out_choices.truncate(start);
         (choices, msgs)
     }
 }
@@ -361,19 +387,13 @@ impl RCOTReceiver<bool, Block> for Receiver<state::Extension> {
     type Future = MaybeDone<RCOTReceiverOutput<bool, Block>>;
 
     fn alloc(&mut self, count: usize) -> Result<(), Self::Error> {
-        if self.state.extended {
-            return Err(ReceiverError::InvalidState(
-                "extending more than once is currently disabled".to_string(),
-            ));
-        }
-
         self.alloc += count;
 
         Ok(())
     }
 
     fn available(&self) -> usize {
-        self.state.out_total - self.state.consumed
+        self.state.output_len
     }
 
     fn try_recv_rcot(
@@ -403,22 +423,17 @@ impl RCOTReceiver<bool, Block> for Receiver<state::Extension> {
             sender.send(output);
 
             Ok(recv)
-        } else if !self.state.extended {
+        } else {
             let (sender, recv) = new_output();
 
             self.queue.push_back(Queued { count, sender });
 
             Ok(recv)
-        } else {
-            Err(ReceiverError::InsufficientSetup {
-                expected: count,
-                actual: self.available(),
-            })
         }
     }
 }
 
-/// The receiver's state.
+/// Typestates for the [`Receiver`].
 pub mod state {
     mod sealed {
         pub trait Sealed {}
@@ -428,10 +443,10 @@ pub mod state {
         impl Sealed for super::Extension {}
     }
 
-    /// The receiver's state.
+    /// A receiver protocol state. This trait is sealed.
     pub trait State: sealed::Sealed {}
 
-    /// The receiver's initial state.
+    /// The initial state, before base OT setup.
     #[derive(Default)]
     pub struct Initialized {}
 
@@ -439,10 +454,8 @@ pub mod state {
 
     opaque_debug::implement!(Initialized);
 
-    /// The receiver's state after base OT, holding the seed pairs until the
-    /// tree corrections are sent.
+    /// The state after base OT setup, before producing the corrections.
     pub struct Setup {
-        /// Base-OT seed pairs.
         pub(super) seeds: Vec<[[u8; 16]; 2]>,
     }
 
@@ -450,28 +463,18 @@ pub mod state {
 
     opaque_debug::implement!(Setup);
 
-    /// The receiver's state after the setup phase.
+    /// The extension state, in which OTs are generated and checked.
     pub struct Extension {
-        /// Per-instance MMO hash for the leaf stretch (keyed by the seed `s`).
         pub(super) hasher: mpz_core::aes::FixedKeyAes,
-        /// GGM leaf seeds (`n_blocks * 2^k`), stretched with the MMO PRG.
         pub(super) leaf_seeds: Vec<[u8; 16]>,
-        /// The single MAC matrix: `CSP × total_rb` bytes, row-major. Filled
-        /// column-by-column during extension, then transposed in place to the
-        /// per-OT MACs at the consistency check.
         pub(super) mac: Vec<u8>,
-        /// Packed monochrome choices, `total_rb` bytes (one bit per OT).
-        pub(super) choices: Vec<u8>,
-        /// Width of one matrix row in bytes.
-        pub(super) total_rb: usize,
-        /// Blocks filled per row so far (also the PRG stretch counter).
-        pub(super) filled: usize,
-        /// Number of valid (non-sacrificial) OTs available after the check.
-        pub(super) out_total: usize,
-        /// Number of OTs consumed from the output.
-        pub(super) consumed: usize,
-        /// Whether extension has completed (the check has run).
-        pub(super) extended: bool,
+        pub(super) round_choices: Vec<u8>,
+        pub(super) out_choices: Vec<bool>,
+        pub(super) round_rb: usize,
+        pub(super) round_remaining: usize,
+        pub(super) col_filled: usize,
+        pub(super) prg_ctr: u64,
+        pub(super) output_len: usize,
     }
 
     impl State for Extension {}
