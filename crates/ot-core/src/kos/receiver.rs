@@ -8,7 +8,7 @@ use crate::{
 
 use itybity::{BitLength, FromBitIterator, IntoBitIterator, IntoBits};
 use mpz_common::future::{MaybeDone, Sender, new_output};
-use mpz_core::{Block, prg::Prg};
+use mpz_core::{Block, aes::FIXED_KEY_AES, prg::Prg};
 
 use rand::{Rng as _, SeedableRng};
 use rand_core::RngCore;
@@ -29,6 +29,7 @@ pub struct Receiver<T: state::State = state::Initialized> {
     alloc: usize,
     transfer_id: TransferId,
     queue: VecDeque<Queued>,
+    instance_id: Block,
     state: T,
 }
 
@@ -48,7 +49,8 @@ impl Receiver {
     /// # Arguments
     ///
     /// * `config` - The Receiver's configuration
-    pub fn new(config: ReceiverConfig) -> Self {
+    /// * `instance_id` - Domain separator; must match the paired sender.
+    pub fn new(config: ReceiverConfig, instance_id: Block) -> Self {
         Receiver {
             config,
             // We need to extend SSP OTs for the consistency check.
@@ -57,6 +59,7 @@ impl Receiver {
             alloc: SSP,
             transfer_id: TransferId::default(),
             queue: VecDeque::default(),
+            instance_id,
             state: state::Initialized {},
         }
     }
@@ -67,15 +70,19 @@ impl Receiver {
     ///
     /// * `seeds` - The receiver's rng seeds
     pub fn setup(self, seeds: [[Block; 2]; CSP]) -> Receiver<state::Extension> {
+        let instance_id = self.instance_id;
         Receiver {
             config: self.config,
             alloc: self.alloc,
             transfer_id: self.transfer_id,
             queue: self.queue,
+            instance_id,
             state: state::Extension {
                 rngs: seeds
                     .into_iter()
-                    .map(|seeds| seeds.map(Prg::from_seed))
+                    .map(|seeds| {
+                        seeds.map(|seed| Prg::from_seed(FIXED_KEY_AES.tccr(instance_id, seed)))
+                    })
                     .collect(),
                 msgs: Vec::default(),
                 choices: Vec::default(),
