@@ -13,8 +13,9 @@ impl CallStack {
         self.inner.iter()
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.inner.is_empty()
+    /// Returns the total number of AND gates currently in the callstack.
+    pub(crate) fn and_count(&self) -> usize {
+        self.and_count
     }
 
     /// Returns the ready calls based on the provided predicate.
@@ -54,9 +55,5 @@ impl CallStack {
     pub(crate) fn push(&mut self, value: (Call, Slice)) {
         self.and_count += value.0.circ().and_count();
         self.inner.push(value);
-    }
-
-    pub(crate) fn and_count(&self) -> usize {
-        self.and_count
     }
 }
