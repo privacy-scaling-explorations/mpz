@@ -141,6 +141,22 @@ where
                 break;
             }
 
+            if self.config.batch_gate_ots() {
+                // Retain one check's OTs in addition to the ready gates. This keeps
+                // the existing consistency-check boundaries intact while bounding
+                // OT memory by the execution batch rather than total proof size.
+                let required = ready_calls
+                    .iter()
+                    .map(|(circ, _, _)| circ.and_count())
+                    .sum::<usize>()
+                    + 128;
+                let missing = required.saturating_sub(self.ot.available());
+                if missing > 0 {
+                    self.ot.alloc(missing).map_err(VmError::execute)?;
+                    self.ot.flush(ctx).await.map_err(VmError::execute)?;
+                }
+            }
+
             let mut tasks = Vec::with_capacity(ready_calls.len());
             for (circ, input_keys, output) in ready_calls {
                 let RCOTSenderOutput {
@@ -208,9 +224,8 @@ where
                 .map_err(VmError::execute)?;
         }
 
-        // Pre-allocate OTs for the next execute() call's final check
-        // if circuits remain in the callstack.
-        if !self.callstack.is_empty() {
+        // Eager mode reserves the next final check before the shared OT flush.
+        if !self.config.batch_gate_ots() && !self.callstack.is_empty() {
             self.ot.alloc(128).map_err(VmError::execute)?;
         }
 
@@ -225,31 +240,38 @@ where
     fn call_raw(&mut self, call: Call) -> VmResult<Slice> {
         let output = self.store.alloc_output(call.circ().outputs().len());
 
-        let count = call.circ().and_count();
+        // Gate OTs are generated for the next executable batch, not the whole
+        // callstack. A response hash can enqueue millions of gates while only
+        // one dependent compression circuit is ready at a time.
+        // Eager preprocessing lets independent users of shared OT finish
+        // at different times without needing another collective flush.
+        if !self.config.batch_gate_ots() {
+            let count = call.circ().and_count();
 
-        if count == 0 {
-            self.callstack.push((call, output));
-            return Ok(output);
+            if count == 0 {
+                self.callstack.push((call, output));
+                return Ok(output);
+            }
+
+            // The number of additional consistency checks to allocate for.
+            let mut check_count = 0;
+
+            let partial_len = self.callstack.and_count() % self.config.batch_size();
+
+            if partial_len == 0 {
+                // Allocate for the first batch or when the previous batch
+                // landed exactly on the batch boundary.
+                check_count += 1;
+            }
+
+            // Using -1 because we allocate whenever a batch boundary is
+            // **crossed**, not when we land exactly on the boundary.
+            check_count += (partial_len + count - 1) / self.config.batch_size();
+
+            self.ot
+                .alloc(count + check_count * 128)
+                .map_err(VmError::execute)?;
         }
-
-        // The number of additional consistency checks to allocate for.
-        let mut check_count = 0;
-
-        let partial_len = self.callstack.and_count() % self.config.batch_size();
-
-        if partial_len == 0 {
-            // Allocate for the first batch or when the previous batch
-            // landed exactly on the batch boundary.
-            check_count += 1;
-        }
-
-        // Using -1 because we allocate whenever a batch boundary is
-        // **crossed**, not when we land exactly on the boundary.
-        check_count += (partial_len + count - 1) / self.config.batch_size();
-
-        self.ot
-            .alloc(count + check_count * 128)
-            .map_err(VmError::execute)?;
 
         self.callstack.push((call, output));
 

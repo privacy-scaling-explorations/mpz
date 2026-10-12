@@ -1698,11 +1698,13 @@ dependencies = [
  "mpz-circuits",
  "mpz-common",
  "mpz-core",
+ "mpz-hash",
  "mpz-ot",
  "mpz-vm-core",
  "mpz-zk-core",
  "rand 0.10.2",
  "serio",
+ "sha2",
  "thiserror",
  "tokio",
 ]

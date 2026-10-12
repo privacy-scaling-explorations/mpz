@@ -14,12 +14,24 @@ pub struct ProverConfig {
     /// that batch.
     #[builder(default = "DEFAULT_BATCH_SIZE")]
     batch_size: usize,
+    /// Generate gate OTs for each execution batch instead of all queued calls.
+    ///
+    /// This bounds gate-OT storage by the ready batch (individual circuits are
+    /// not split), at the cost of interleaving OT communication with execution.
+    /// Both parties must use the same setting. During execution this VM must be
+    /// the only active consumer of its OT source: any shared handles must be
+    /// dropped or parked, since OT flush may require all consumers to participate.
+    /// Eager preprocessing remains the default so independent shared consumers
+    /// may finish at different times without an additional collective flush.
+    #[builder(default)]
+    batch_gate_ots: bool,
 }
 
 impl Default for ProverConfig {
     fn default() -> Self {
         Self {
             batch_size: DEFAULT_BATCH_SIZE,
+            batch_gate_ots: false,
         }
     }
 }
@@ -34,6 +46,11 @@ impl ProverConfig {
     pub fn batch_size(&self) -> usize {
         self.batch_size
     }
+
+    /// Returns whether gate OTs are generated per execution batch.
+    pub fn batch_gate_ots(&self) -> bool {
+        self.batch_gate_ots
+    }
 }
 
 /// Verifier configuration.
@@ -47,12 +64,24 @@ pub struct VerifierConfig {
     /// that batch.
     #[builder(default = "DEFAULT_BATCH_SIZE")]
     batch_size: usize,
+    /// Generate gate OTs for each execution batch instead of all queued calls.
+    ///
+    /// This bounds gate-OT storage by the ready batch (individual circuits are
+    /// not split), at the cost of interleaving OT communication with execution.
+    /// Both parties must use the same setting. During execution this VM must be
+    /// the only active consumer of its OT source: any shared handles must be
+    /// dropped or parked, since OT flush may require all consumers to participate.
+    /// Eager preprocessing remains the default so independent shared consumers
+    /// may finish at different times without an additional collective flush.
+    #[builder(default)]
+    batch_gate_ots: bool,
 }
 
 impl Default for VerifierConfig {
     fn default() -> Self {
         Self {
             batch_size: DEFAULT_BATCH_SIZE,
+            batch_gate_ots: false,
         }
     }
 }
@@ -66,5 +95,10 @@ impl VerifierConfig {
     /// Returns target number of AND gates per consistency-check batch.
     pub fn batch_size(&self) -> usize {
         self.batch_size
+    }
+
+    /// Returns whether gate OTs are generated per execution batch.
+    pub fn batch_gate_ots(&self) -> bool {
+        self.batch_gate_ots
     }
 }

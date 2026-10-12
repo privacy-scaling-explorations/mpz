@@ -31,6 +31,7 @@ tokio = { workspace = true, features = [
     "macros",
     "rt",
     "rt-multi-thread",
+    "time",
 ] }
 rand = { workspace = true }
 mpz-circuits = { workspace = true, features = ["aes"] }
@@ -41,6 +42,8 @@ mpz-common = { workspace = true, features = [
 ] }
 mpz-ot = { workspace = true, features = ["ideal"] }
 criterion = { workspace = true }
+mpz-hash = { path = "../hash", default-features = false, features = ["sha256"] }
+sha2 = { workspace = true }
 
 [[bench]]
 name = "prover"
