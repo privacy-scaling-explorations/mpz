@@ -1,7 +1,5 @@
 //! QuickSilver consistency check.
 
-use std::mem;
-
 use blake3::Hasher;
 use cfg_if::cfg_if;
 use mpz_core::{
@@ -86,7 +84,7 @@ impl Check {
         let adjust_len = self.adjust.len();
         transcript.update(&self.adjust.as_raw_slice().as_bytes()[..adjust_len.div_ceil(8)]);
 
-        let macs = mem::take(&mut self.triples);
+        let macs = &self.triples;
 
         let seed = *transcript.finalize().as_bytes();
         let rng = ChaCha12Rng::from_seed(seed);
@@ -142,6 +140,12 @@ impl Check {
             }
         }
 
+        // WHY: consecutive batches reuse this large buffer. Taking and dropping
+        // it forces every check to reallocate the same triples, leaving freed
+        // arenas resident even though only one batch is live. Clear before the
+        // fallible VOLE validation to preserve consumption on error.
+        self.triples.clear();
+
         let (a_0, a_1) = vole_receiver(
             svole_choices.try_into().map_err(|_| CheckError::SVole)?,
             svole_ev.try_into().map_err(|_| CheckError::SVole)?,
@@ -177,7 +181,7 @@ impl Check {
         let adjust_len = self.adjust.len();
         transcript.update(&self.adjust.as_raw_slice().as_bytes()[..adjust_len.div_ceil(8)]);
 
-        let keys = mem::take(&mut self.triples);
+        let keys = &self.triples;
 
         let seed = *transcript.finalize().as_bytes();
         let rng = ChaCha12Rng::from_seed(seed);
@@ -228,6 +232,10 @@ impl Check {
                     .fold(Block::ZERO, |w1, w2| w1 ^ w2);
             }
         }
+
+        // WHY: preserve the allocation for the next batch without retaining
+        // unchecked triples, including when VOLE validation returns an error.
+        self.triples.clear();
 
         let b = vole_sender(svole_keys.try_into().map_err(|_| CheckError::SVole)?);
 

@@ -161,9 +161,14 @@ async fn private_sha256_uses_bounded_real_ot_and_rejects_inconsistent_public_inp
     }
     let peak = PEAK_BYTES.load(Ordering::Relaxed);
     eprintln!("peak Rust allocation: {peak} bytes");
-    eprintln!(
-        "total successful allocation requests: {} bytes",
-        TOTAL_ALLOCATION_BYTES.load(Ordering::Relaxed)
+    let total = TOTAL_ALLOCATION_BYTES.load(Ordering::Relaxed);
+    eprintln!("total successful allocation requests: {total} bytes");
+    // WHY: bounded live memory alone missed consistency-check buffers being
+    // freed and regrown for every batch. Count successful allocation requests
+    // across the real proof so that repeated multi-megabyte churn stays caught.
+    assert!(
+        (total as u64) < 9_u64 * 1024 * 1024 * 1024,
+        "private SHA-256 requested {total} bytes across its allocations"
     );
     assert!(
         peak < 256 * 1024 * 1024,
