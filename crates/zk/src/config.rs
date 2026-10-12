@@ -20,9 +20,10 @@ pub struct ProverConfig {
     /// not split), at the cost of interleaving OT communication with execution.
     /// Both parties must use the same setting. During execution this VM must be
     /// the only active consumer of its OT source: any shared handles must be
-    /// dropped or parked, since OT flush may require all consumers to participate.
-    /// Eager preprocessing remains the default so independent shared consumers
-    /// may finish at different times without an additional collective flush.
+    /// dropped or parked, since OT flush may require all consumers to
+    /// participate. Eager preprocessing remains the default so independent
+    /// shared consumers may finish at different times without an additional
+    /// collective flush.
     #[builder(default)]
     batch_gate_ots: bool,
 }
@@ -70,9 +71,10 @@ pub struct VerifierConfig {
     /// not split), at the cost of interleaving OT communication with execution.
     /// Both parties must use the same setting. During execution this VM must be
     /// the only active consumer of its OT source: any shared handles must be
-    /// dropped or parked, since OT flush may require all consumers to participate.
-    /// Eager preprocessing remains the default so independent shared consumers
-    /// may finish at different times without an additional collective flush.
+    /// dropped or parked, since OT flush may require all consumers to
+    /// participate. Eager preprocessing remains the default so independent
+    /// shared consumers may finish at different times without an additional
+    /// collective flush.
     #[builder(default)]
     batch_gate_ots: bool,
 }

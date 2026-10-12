@@ -41,9 +41,7 @@ fn enqueue(
 async fn shared_real_ot_completes_unequal_hash_batches() {
     let mut rng = StdRng::seed_from_u64(43);
     let delta = Delta::random(&mut rng);
-    let config = ferret::FerretConfig::builder()
-        .build()
-        .unwrap();
+    let config = ferret::FerretConfig::builder().build().unwrap();
     let send = ferret::Sender::new(
         config.clone(),
         Block::random(&mut rng),

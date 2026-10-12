@@ -142,9 +142,10 @@ where
             }
 
             if self.config.batch_gate_ots() {
-                // Retain one check's OTs in addition to the ready gates. This keeps
-                // the existing consistency-check boundaries intact while bounding
-                // OT memory by the execution batch rather than total proof size.
+                // Retain one check's OTs in addition to the ready gates. This
+                // keeps the existing consistency-check
+                // boundaries intact while bounding OT memory by
+                // the execution batch rather than total proof size.
                 let required = ready_calls
                     .iter()
                     .map(|(circ, _, _)| circ.and_count())
