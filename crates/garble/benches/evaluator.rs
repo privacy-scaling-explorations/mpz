@@ -29,8 +29,11 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         group.throughput(Throughput::Elements(actual_gates));
 
-        let recorded =
-            block_on(body::record_for_evaluator_st(circuit.clone(), circuit_count, 0));
+        let recorded = block_on(body::record_for_evaluator_st(
+            circuit.clone(),
+            circuit_count,
+            0,
+        ));
 
         let circuit_clone = circuit.clone();
         group.bench_function(BenchmarkId::new("st", name), |b| {
@@ -66,8 +69,11 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         group_mt.throughput(Throughput::Elements(actual_gates));
 
-        let recorded_mt =
-            block_on(body::record_for_evaluator_mt(circuit.clone(), circuit_count, 0));
+        let recorded_mt = block_on(body::record_for_evaluator_mt(
+            circuit.clone(),
+            circuit_count,
+            0,
+        ));
 
         let circuit_clone = circuit.clone();
         group_mt.bench_function(BenchmarkId::new("mt", name), |b| {

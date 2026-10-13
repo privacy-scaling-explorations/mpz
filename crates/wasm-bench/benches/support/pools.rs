@@ -5,8 +5,10 @@
 //! `rayon`, `web-spawn` and `wasm-bindgen-futures`.
 #![allow(dead_code)]
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 use js_sys::Promise;
 use mpz_common::{ThreadPool, ThreadPoolBuildError};
@@ -37,12 +39,10 @@ async fn start_spawner() {
 pub async fn init_mpz() {
     start_spawner().await;
 
-    let builder = ThreadPool::builder()
-        .num_threads(num_threads())
-        .spawn(|f| {
-            let _ = web_spawn::spawn(f);
-            Ok(())
-        });
+    let builder = ThreadPool::builder().num_threads(num_threads()).spawn(|f| {
+        let _ = web_spawn::spawn(f);
+        Ok(())
+    });
 
     match builder.build_global() {
         Ok(()) | Err(ThreadPoolBuildError::AlreadyInitialized) => {}

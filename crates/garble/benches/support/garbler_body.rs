@@ -6,11 +6,13 @@
 use std::sync::Arc;
 
 use mpz_circuits::Circuit;
-use mpz_common::context::{
-    RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
-    replay_mt_context_with_limit, replay_st_context,
+use mpz_common::{
+    Context, Session,
+    context::{
+        RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
+        replay_mt_context_with_limit, replay_st_context,
+    },
 };
-use mpz_common::{Context, Session};
 use mpz_garble::protocol::semihonest::{Evaluator, Garbler};
 use mpz_memory_core::{Array, binary::U8, correlated::Delta};
 use mpz_ot::ideal::cot::ideal_cot;
@@ -19,8 +21,7 @@ use rand::{SeedableRng, rngs::StdRng};
 
 /// Gate-count thresholds shared by the native criterion bench and the browser
 /// harness.
-pub const THRESHOLDS: &[(u64, &str)] =
-    &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
+pub const THRESHOLDS: &[(u64, &str)] = &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
 
 /// Calculate max frame length based on workload size.
 pub fn max_frame_length(circuit: &Circuit, circuit_count: usize) -> usize {

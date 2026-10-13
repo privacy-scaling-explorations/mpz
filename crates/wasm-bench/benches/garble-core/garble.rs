@@ -13,7 +13,8 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_bench]
 fn garble(_c: &mut Criterion) {
-    // Native benches use sample_size(10); the macro's criterion can't be reconfigured.
+    // Native benches use sample_size(10); the macro's criterion can't be
+    // reconfigured.
     let mut c = Criterion::default()
         .with_location(file!(), module_path!())
         .sample_size(10);

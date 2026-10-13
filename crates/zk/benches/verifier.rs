@@ -1,7 +1,7 @@
 //! Isolated verifier benchmarks.
 //!
-//! The ST/MT protocol bodies live in `support/verifier_body.rs` (shared verbatim
-//! with `crates/wasm-bench` via `#[path]`).
+//! The ST/MT protocol bodies live in `support/verifier_body.rs` (shared
+//! verbatim with `crates/wasm-bench` via `#[path]`).
 //!
 //! Run with: cargo bench -p mpz-zk --features mock --bench verifier
 

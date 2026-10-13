@@ -11,11 +11,13 @@
 //! variants are suffixed `_st`/`_mt`.
 
 use mpz_circuits::AES128;
-use mpz_common::context::{
-    RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
-    replay_mt_context_with_limit, replay_st_context,
+use mpz_common::{
+    Context, Session,
+    context::{
+        RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
+        replay_mt_context_with_limit, replay_st_context,
+    },
 };
-use mpz_common::{Context, Session};
 use mpz_ot::ideal::rcot::ideal_rcot;
 use mpz_vm_core::{
     Call,
@@ -27,8 +29,7 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 /// Gate-count thresholds shared by the native criterion bench and the browser
 /// harness (`prover/{st,mt}/{100K,1M,10M}`).
-pub const THRESHOLDS: &[(u64, &str)] =
-    &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
+pub const THRESHOLDS: &[(u64, &str)] = &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
 
 /// Calculate max frame length based on workload size.
 pub fn max_frame_length(circuit: &mpz_circuits::Circuit, circuit_count: usize) -> usize {
@@ -262,10 +263,8 @@ pub async fn run_protocol_record_verifier_mt(
 /// Runs on the process-wide `ThreadPool`, so callers must install a global pool
 /// (with a `web_spawn` spawn callback on wasm) before calling this.
 pub async fn record_for_prover_mt(circuit_count: usize, seed: u64) -> RecordedMtData {
-    let (mut exec_p, mut exec_v, recorded) = recording_mt_context_with_limit(
-        1024 * 1024,
-        max_frame_length(&AES128, circuit_count),
-    );
+    let (mut exec_p, mut exec_v, recorded) =
+        recording_mt_context_with_limit(1024 * 1024, max_frame_length(&AES128, circuit_count));
     run_protocol_record_verifier_mt(&mut exec_p, &mut exec_v, circuit_count, seed).await;
     recorded.lock().unwrap().clone()
 }

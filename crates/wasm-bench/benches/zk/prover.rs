@@ -6,8 +6,8 @@
 //! Run with:
 //!   CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner \
 //!     WASM_BINDGEN_TEST_TIMEOUT=1800 WASM_BINDGEN_TEST_DRIVER_TIMEOUT=1800 \
-//!     cargo +nightly bench --no-default-features --target wasm32-unknown-unknown \
-//!       --bench zk_prover -Zbuild-std=panic_abort,std
+//!     cargo +nightly bench --no-default-features --target
+//! wasm32-unknown-unknown \       --bench zk_prover -Zbuild-std=panic_abort,std
 
 use mpz_circuits::AES128;
 use wasm_bindgen_test::{Criterion, wasm_bindgen_bench, wasm_bindgen_test_configure};
@@ -21,12 +21,14 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 // Thresholds come from the shared body. The runner kills the browser if a test
 // exceeds its default timeout, so the larger sizes need a raised
-// `WASM_BINDGEN_TEST_TIMEOUT` (and `WASM_BINDGEN_TEST_DRIVER_TIMEOUT`), e.g. 1800.
+// `WASM_BINDGEN_TEST_TIMEOUT` (and `WASM_BINDGEN_TEST_DRIVER_TIMEOUT`), e.g.
+// 1800.
 
 /// Multi-threaded prover (`prover/mt/*`).
 #[wasm_bindgen_bench]
 async fn prover(_c: &mut Criterion) {
-    // Native benches use sample_size(10); the macro's criterion can't be reconfigured.
+    // Native benches use sample_size(10); the macro's criterion can't be
+    // reconfigured.
     let mut c = Criterion::default()
         .with_location(file!(), module_path!())
         .sample_size(10);
@@ -60,7 +62,8 @@ async fn prover(_c: &mut Criterion) {
 /// the futures are driven by the JS event loop.
 #[wasm_bindgen_bench]
 async fn prover_st(_c: &mut Criterion) {
-    // Native benches use sample_size(10); the macro's criterion can't be reconfigured.
+    // Native benches use sample_size(10); the macro's criterion can't be
+    // reconfigured.
     let mut c = Criterion::default()
         .with_location(file!(), module_path!())
         .sample_size(10);

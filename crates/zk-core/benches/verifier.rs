@@ -1,12 +1,11 @@
 //! Benchmarks for QuickSilver ZK verifier.
 //!
-//! Body shared verbatim with `crates/wasm-bench/benches/zk-core/verifier.rs` via
-//! the `#[path]`-included `support/verifier_body.rs`.
+//! Body shared verbatim with `crates/wasm-bench/benches/zk-core/verifier.rs`
+//! via the `#[path]`-included `support/verifier_body.rs`.
 //!
 //! Run with: cargo bench -p mpz-zk-core --bench verifier
 
-use std::hint::black_box;
-use std::sync::Arc;
+use std::{hint::black_box, sync::Arc};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use mpz_circuits::AES128;

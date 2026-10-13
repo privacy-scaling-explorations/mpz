@@ -3,14 +3,18 @@
 //! Included via `#[path]` by `crates/ot/benches/ferret/receiver.rs` (and later
 //! by the browser harness). ST/MT suffixed.
 
-use mpz_common::context::{
-    RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
-    replay_mt_context_with_limit, replay_st_context,
+use mpz_common::{
+    Context, Flush, Session,
+    context::{
+        RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
+        replay_mt_context_with_limit, replay_st_context,
+    },
 };
-use mpz_common::{Context, Flush, Session};
 use mpz_core::Block;
-use mpz_ot::ferret::{FerretConfig, Receiver, Sender};
-use mpz_ot::ideal::rcot::{IdealRCOTReceiver, ideal_rcot};
+use mpz_ot::{
+    ferret::{FerretConfig, Receiver, Sender},
+    ideal::rcot::{IdealRCOTReceiver, ideal_rcot},
+};
 use mpz_ot_core::rcot::{RCOTReceiver, RCOTSender};
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
@@ -205,7 +209,8 @@ pub async fn record_for_receiver_mt(seed: u64, ot_count: usize) -> RecordedRecei
     }
 }
 
-/// Builds an MT replay session for the receiver on the process-wide thread pool.
+/// Builds an MT replay session for the receiver on the process-wide thread
+/// pool.
 pub fn replay_receiver_mt(data: RecordedMtData) -> Session {
     replay_mt_context_with_limit(data, max_frame_length())
 }

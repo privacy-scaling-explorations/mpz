@@ -1,10 +1,10 @@
-//! Shared, target-agnostic body for the `mpz-garble-core` evaluation benchmarks.
+//! Shared, target-agnostic body for the `mpz-garble-core` evaluation
+//! benchmarks.
 //!
 //! Included via `#[path]` by `crates/garble-core/benches/evaluate.rs` and
 //! `crates/wasm-bench/benches/garble-core/evaluate.rs`.
 
-use std::hint::black_box;
-use std::sync::Arc;
+use std::{hint::black_box, sync::Arc};
 
 use mpz_circuits::{AES128, Circuit};
 use mpz_garble_core::{
@@ -15,8 +15,7 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 /// Gate-count thresholds shared by the native criterion bench and the browser
 /// harness.
-pub const THRESHOLDS: &[(u64, &str)] =
-    &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
+pub const THRESHOLDS: &[(u64, &str)] = &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
 
 /// Prepared argument for [`evaluate`].
 pub type GarbledInput = (Arc<Circuit>, Vec<Mac>, GarbledCircuit);
@@ -112,7 +111,8 @@ impl EvaluateBench {
     }
 }
 
-/// Half-gates evaluation scenario over many circuits (`evaluate_garbled_circuits`).
+/// Half-gates evaluation scenario over many circuits
+/// (`evaluate_garbled_circuits`).
 pub struct EvaluateParallelBench {
     circuit: Arc<Circuit>,
     eval_inputs: Vec<Mac>,

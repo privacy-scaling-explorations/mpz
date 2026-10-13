@@ -6,8 +6,9 @@
 //! Run with:
 //!   CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner \
 //!     WASM_BINDGEN_TEST_TIMEOUT=1800 WASM_BINDGEN_TEST_DRIVER_TIMEOUT=1800 \
-//!     cargo +nightly bench --no-default-features --target wasm32-unknown-unknown \
-//!       --bench garble_evaluator -Zbuild-std=panic_abort,std
+//!     cargo +nightly bench --no-default-features --target
+//! wasm32-unknown-unknown \       --bench garble_evaluator
+//! -Zbuild-std=panic_abort,std
 
 use core::time::Duration;
 use std::sync::Arc;
@@ -28,7 +29,8 @@ wasm_bindgen_test_configure!(run_in_browser);
 /// Single-threaded evaluator.
 #[wasm_bindgen_bench]
 async fn evaluator_st(_c: &mut Criterion) {
-    // Native benches use sample_size(10); the macro's criterion can't be reconfigured.
+    // Native benches use sample_size(10); the macro's criterion can't be
+    // reconfigured.
     let mut c = Criterion::default()
         .with_location(file!(), module_path!())
         .sample_size(10);
@@ -79,7 +81,8 @@ async fn evaluator_st(_c: &mut Criterion) {
 /// Multi-threaded evaluator.
 #[wasm_bindgen_bench]
 async fn evaluator_mt(_c: &mut Criterion) {
-    // Native benches use sample_size(10); the macro's criterion can't be reconfigured.
+    // Native benches use sample_size(10); the macro's criterion can't be
+    // reconfigured.
     let mut c = Criterion::default()
         .with_location(file!(), module_path!())
         .sample_size(10);

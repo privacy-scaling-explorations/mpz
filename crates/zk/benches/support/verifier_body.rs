@@ -11,11 +11,13 @@
 //! variants are suffixed `_st`/`_mt`.
 
 use mpz_circuits::AES128;
-use mpz_common::context::{
-    RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
-    replay_mt_context_with_limit, replay_st_context,
+use mpz_common::{
+    Context, Session,
+    context::{
+        RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
+        replay_mt_context_with_limit, replay_st_context,
+    },
 };
-use mpz_common::{Context, Session};
 use mpz_core::Block;
 use mpz_ot::ideal::rcot::ideal_rcot;
 use mpz_vm_core::{
@@ -28,8 +30,7 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 /// Gate-count thresholds shared by the native criterion bench and the browser
 /// harness (`verifier/{st,mt}/{100K,1M,10M}`).
-pub const THRESHOLDS: &[(u64, &str)] =
-    &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
+pub const THRESHOLDS: &[(u64, &str)] = &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
 
 /// Calculate max frame length based on workload size.
 pub fn max_frame_length(circuit: &mpz_circuits::Circuit, circuit_count: usize) -> usize {
@@ -123,12 +124,9 @@ pub async fn run_protocol_record_prover_st(
     );
 }
 
-/// Records prover->verifier messages for ST verifier replay. Also returns the OT
-/// seed and delta so the verifier's OT stream can be rebuilt on replay.
-pub async fn record_for_verifier_st(
-    circuit_count: usize,
-    seed: u64,
-) -> (Vec<u8>, Block, Delta) {
+/// Records prover->verifier messages for ST verifier replay. Also returns the
+/// OT seed and delta so the verifier's OT stream can be rebuilt on replay.
+pub async fn record_for_verifier_st(circuit_count: usize, seed: u64) -> (Vec<u8>, Block, Delta) {
     // exec_v's writes are recorded, so prover uses exec_v.
     let (mut ctx_v, mut ctx_p, recorded) =
         recording_st_context_with_limit(1024 * 1024, max_frame_length(&AES128, circuit_count));
@@ -273,8 +271,8 @@ pub async fn run_protocol_record_prover_mt(
     );
 }
 
-/// Records prover->verifier messages for MT verifier replay. Also returns the OT
-/// seed and delta so the verifier's OT stream can be rebuilt on replay.
+/// Records prover->verifier messages for MT verifier replay. Also returns the
+/// OT seed and delta so the verifier's OT stream can be rebuilt on replay.
 ///
 /// Runs on the process-wide `ThreadPool`, so callers must install a global pool
 /// (with a `web_spawn` spawn callback on wasm) before calling this.
@@ -283,10 +281,8 @@ pub async fn record_for_verifier_mt(
     seed: u64,
 ) -> (RecordedMtData, Block, Delta) {
     // exec_v's writes are recorded, so prover uses exec_v.
-    let (mut exec_v, mut exec_p, recorded) = recording_mt_context_with_limit(
-        1024 * 1024,
-        max_frame_length(&AES128, circuit_count),
-    );
+    let (mut exec_v, mut exec_p, recorded) =
+        recording_mt_context_with_limit(1024 * 1024, max_frame_length(&AES128, circuit_count));
 
     let mut rng = StdRng::seed_from_u64(seed);
     let delta = Delta::random(&mut rng);
@@ -297,7 +293,8 @@ pub async fn record_for_verifier_mt(
     (recorded.lock().unwrap().clone(), ot_seed, delta)
 }
 
-/// Builds an MT replay session for the verifier on the process-wide thread pool.
+/// Builds an MT replay session for the verifier on the process-wide thread
+/// pool.
 pub fn replay_verifier_mt(recorded: RecordedMtData, circuit_count: usize) -> Session {
     replay_mt_context_with_limit(recorded, max_frame_length(&AES128, circuit_count))
 }

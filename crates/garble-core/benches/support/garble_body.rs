@@ -3,8 +3,7 @@
 //! Included via `#[path]` by `crates/garble-core/benches/garble.rs` and
 //! `crates/wasm-bench/benches/garble-core/garble.rs`.
 
-use std::hint::black_box;
-use std::sync::Arc;
+use std::{hint::black_box, sync::Arc};
 
 use mpz_circuits::{AES128, Circuit};
 use mpz_garble_core::{Garbler, Key};
@@ -13,8 +12,7 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 /// Gate-count thresholds shared by the native criterion bench and the browser
 /// harness.
-pub const THRESHOLDS: &[(u64, &str)] =
-    &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
+pub const THRESHOLDS: &[(u64, &str)] = &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
 
 /// Half-gates garbling scenario.
 pub struct GarbleBench {

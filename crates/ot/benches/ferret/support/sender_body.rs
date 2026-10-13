@@ -3,14 +3,18 @@
 //! Included via `#[path]` by `crates/ot/benches/ferret/sender.rs` (and later by
 //! the browser harness). ST/MT suffixed.
 
-use mpz_common::context::{
-    RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
-    replay_mt_context_with_limit, replay_st_context,
+use mpz_common::{
+    Context, Flush, Session,
+    context::{
+        RecordedMtData, recording_mt_context_with_limit, recording_st_context_with_limit,
+        replay_mt_context_with_limit, replay_st_context,
+    },
 };
-use mpz_common::{Context, Flush, Session};
 use mpz_core::Block;
-use mpz_ot::ferret::{FerretConfig, Receiver, Sender};
-use mpz_ot::ideal::rcot::{IdealRCOTSender, ideal_rcot};
+use mpz_ot::{
+    ferret::{FerretConfig, Receiver, Sender},
+    ideal::rcot::{IdealRCOTSender, ideal_rcot},
+};
 use mpz_ot_core::rcot::{RCOTReceiver, RCOTSender};
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
