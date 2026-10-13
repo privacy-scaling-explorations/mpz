@@ -53,11 +53,14 @@ tokio = { workspace = true, features = [
 [[bench]]
 name = "shared"
 harness = false
+path = "benches/rcot/shared.rs"
 
 [[bench]]
 name = "ferret_sender"
 harness = false
+path = "benches/ferret/sender.rs"
 
 [[bench]]
 name = "ferret_receiver"
 harness = false
+path = "benches/ferret/receiver.rs"

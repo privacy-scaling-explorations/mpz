@@ -49,7 +49,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: nightly
-          components: rustfmt, clippy
+          components: rustfmt, clippy, rust-src
           targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2.7.7
@@ -62,10 +62,10 @@ jobs:
 
       - name: Run Clippy on wasm-bench
         working-directory: crates/wasm-bench
-        run: cargo +nightly clippy --lib --target wasm32-unknown-unknown -- -D warnings
+        run: cargo +nightly clippy --benches -- -D warnings
 
   wasm:
-    name: "Build and Test WASM bench"
+    name: "Build WASM benches"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,21 +79,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2.7.7
 
-      - name: Install Chrome
-        uses: browser-actions/setup-chrome@v2
-        with:
-          chrome-version: stable
-
-      - name: Build WASM bundle
+      # Compiles every browser bench for wasm32 (atomics/SIMD/shared-memory
+      # flags from crates/wasm-bench/.cargo/config.toml). Executing them needs a
+      # headless browser plus a version-matched wasm-bindgen-test-runner, so the
+      # suite is not run here; see crates/wasm-bench/README.md.
+      - name: Build wasm benches
         working-directory: crates/wasm-bench
-        run: ./build-wasm.sh
-
-      - name: Build benchmark runner
-        run: cargo build --release --bin wasm-bench-runner
-
-      - name: Smoke-test in headless Chrome
-        working-directory: crates/wasm-bench
-        run: ../../target/release/wasm-bench-runner -b garbler_core/half_gates --iterations 1 --samples 1
+        run: cargo +nightly build --benches
 
   miri:
     if: ( ! github.event.pull_request.draft )

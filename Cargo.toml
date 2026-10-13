@@ -35,12 +35,6 @@ rust-version = "1.95"
 [profile.release]
 lto = true
 
-[profile.wasm]
-inherits = "release"
-lto = true
-panic = "abort"
-codegen-units = 1
-
 [workspace.lints.rust]
 # unsafe_code = "forbid"
 unexpected_cfgs = { level = "warn", check-cfg = [
@@ -146,11 +140,3 @@ web-sys = "0.3"
 web-spawn = "0.3"
 getrandom = "0.4"
 aes-wasm = "0.1"
-
-# http / runner
-chromiumoxide = "0.9"
-serde_json = "1.0"
-hyper = "1"
-hyper-util = "0.1"
-http-body-util = "0.1"
-mime_guess = "2.0"

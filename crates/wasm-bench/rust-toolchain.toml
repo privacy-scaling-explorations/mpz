@@ -1,0 +1,6 @@
+# The browser benches need nightly (build-std) plus the wasm target and the
+# standard-library sources. rustup installs all of these on first use.
+[toolchain]
+channel = "nightly"
+targets = ["wasm32-unknown-unknown"]
+components = ["rust-src"]
