@@ -6,9 +6,6 @@ edition = "2024"
 [lints]
 workspace = true
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
 [dependencies]
 mpz-garble-core = { workspace = true }
 mpz-garble = { workspace = true }
@@ -47,18 +44,47 @@ aes = { workspace = true }
 [dev-dependencies]
 wasm-bindgen-test = { workspace = true }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-chromiumoxide = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "process", "net", "io-util"] }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
-futures = { workspace = true }
-hyper = { workspace = true, features = ["server", "http1"] }
-hyper-util = { workspace = true, features = ["tokio"] }
-http-body-util = { workspace = true }
-mime_guess = { workspace = true }
+# Browser benches mirroring the native criterion crate layout. Each bench target
+# shares its measurement body verbatim via `#[path]` with the corresponding
+# native bench and is driven by wasm-bindgen-test's vendored criterion in a
+# headless browser. See README.md for how to run them.
 
-[[bin]]
-name = "wasm-bench-runner"
-path = "src/bin/runner.rs"
-required-features = []
+[[bench]]
+name = "zk_prover"
+path = "benches/zk/prover.rs"
+
+[[bench]]
+name = "zk_verifier"
+path = "benches/zk/verifier.rs"
+
+[[bench]]
+name = "zk_core_prover"
+path = "benches/zk-core/prover.rs"
+
+[[bench]]
+name = "zk_core_verifier"
+path = "benches/zk-core/verifier.rs"
+
+[[bench]]
+name = "ot_ferret_sender"
+path = "benches/ot/ferret/sender.rs"
+
+[[bench]]
+name = "ot_ferret_receiver"
+path = "benches/ot/ferret/receiver.rs"
+
+[[bench]]
+name = "garble_garbler"
+path = "benches/garble/garbler.rs"
+
+[[bench]]
+name = "garble_evaluator"
+path = "benches/garble/evaluator.rs"
+
+[[bench]]
+name = "garble_core_garble"
+path = "benches/garble-core/garble.rs"
+
+[[bench]]
+name = "garble_core_evaluate"
+path = "benches/garble-core/evaluate.rs"

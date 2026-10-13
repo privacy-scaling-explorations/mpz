@@ -1,60 +1,57 @@
 # mpz-wasm-bench
 
-WASM benchmarks for mpz libraries. Runs in headless Chrome via chromiumoxide to measure real browser performance with Web Workers and SharedArrayBuffer.
+Browser benchmarks for the mpz libraries, compiled to `wasm32-unknown-unknown`
+with atomics + SIMD and run in headless Chrome via `wasm-bindgen-test`. They mirror
+the native criterion benches and share each measurement body verbatim (`#[path]`)
+with the corresponding native bench, so the WASM numbers measure the same code.
 
 ## Prerequisites
 
-- Rust with `wasm32-unknown-unknown` target
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
-- Chrome/Chromium browser
+- Rust **nightly** with the `wasm32-unknown-unknown` target and the `rust-src`
+  component (`-Zbuild-std` rebuilds std with atomics + SIMD). `rust-toolchain.toml`
+  requests all three, so `rustup` installs them automatically the first time you
+  run `cargo` here; manually:
 
-## Quick Start
+  ```sh
+  rustup toolchain install nightly --target wasm32-unknown-unknown --component rust-src
+  ```
 
-```bash
-# Build WASM module
-./build-wasm.sh
+- `wasm-bindgen-test-runner`, which ships with `wasm-bindgen-cli`. The version
+  must match the `wasm-bindgen` crate pinned in `Cargo.lock` (currently
+  `0.2.128`):
 
-# Build runner
-cargo build --release --bin wasm-bench-runner
+  ```sh
+  cargo install wasm-bindgen-cli --version 0.2.128
+  ```
 
-# Run all benchmarks
-../../target/release/wasm-bench-runner
+- Chrome and a matching `chromedriver` on `PATH` (or `CHROMEDRIVER` pointing at
+  it). `wasm-bindgen-test` drives the broker through WebDriver.
 
-# Run specific group
-../../target/release/wasm-bench-runner -g garble --iterations 1 --samples 1
+## Running
 
-# List available benchmarks
-../../target/release/wasm-bench-runner --list
+Run these **from this directory** (`crates/wasm-bench`). When cargo is invoked
+from the workspace root it does not read this member's `.cargo/config.toml`, so
+the wasm target and runner would not apply, and the benches would try to build
+for the host and fail.
+
+```sh
+cd crates/wasm-bench
+cargo bench --bench zk_prover   # one bench
+cargo bench                     # every bench
 ```
 
-## Available Benchmark Groups
+`webdriver.json` (auto-loaded from this directory by `wasm-bindgen-test-runner`)
+raises ChromeDriver's default 30 second script timeout to match
+`WASM_BINDGEN_TEST_TIMEOUT`. Without it, any benchmark whose synchronous body
+blocks the renderer for more than 30 seconds fails with
+`Error: missing field 'chunk'` / `Timed out receiving message from renderer`.
 
-| Group | Description |
-|-------|-------------|
-| `garbler_core` | Half-gates garbling primitives |
-| `evaluator_core` | Half-gates evaluation primitives |
-| `garble` | Garbler and evaluator |
-| `zk_prover_core` | QuickSilver ZK prover primitives |
-| `zk_verifier_core` | QuickSilver ZK verifier primitives |
-| `zk_prover` | ZK prover |
-| `zk_verifier` | ZK verifier |
-| `ferret_sender` | Ferret OT sender |
+List them without launching Chrome (this still needs `wasm-bindgen-test-runner`
+from Prerequisites — cargo runs the bench through the runner even to list):
 
-## CLI Options
-
+```sh
+cargo bench -- --list                    # all bench targets, entry points
+cargo bench --bench zk_prover -- --list  # just one target
+cargo bench --bench zk_prover -- --help  # runner filters/options
 ```
-Usage: wasm-bench-runner [OPTIONS]
 
-Options:
-  --iterations <N>      Number of iterations per benchmark (default: 100)
-  --samples <N>         Number of samples per benchmark (default: 10)
-  --concurrency, -c <N> Thread count for MT benchmarks (default: auto, min: 2)
-  --sweep               Run MT benchmarks with 2,3,4,6,8,12,16 threads
-  --group, -g <GROUP>   Run all benchmarks in a group (can be repeated)
-  --bench, -b <NAME>    Run specific benchmark (can be repeated)
-  --list, -l            List available groups and benchmarks
-  --headed              Run with visible browser window (for debugging)
-  --help, -h            Show help
-
-Groups: garbler_core, evaluator_core, zk_prover_core, zk_verifier_core, zk_prover, zk_verifier, garble, ferret_sender
-```

@@ -1,28 +1,23 @@
 //! Benchmarks for half-gates garbling.
 //!
+//! The scenario lives in `support/garble_body.rs` (shared verbatim with
+//! `crates/wasm-bench` via `#[path]`).
+//!
 //! Run with: `cargo bench -p mpz-garble-core --bench garble`
-
-use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use mpz_circuits::AES128;
-use mpz_garble_core::{Garbler, Key};
-use mpz_memory_core::correlated::Delta;
-use rand::{RngExt, SeedableRng, rngs::StdRng};
 
-// Gate count thresholds
-const THRESHOLDS: &[(u64, &str)] = &[(100_000, "100K"), (1_000_000, "1M"), (10_000_000, "10M")];
+#[path = "support/garble_body.rs"]
+mod body;
+
+use body::{GarbleBench, THRESHOLDS};
 
 fn bench_garble(c: &mut Criterion) {
     let mut group = c.benchmark_group("garble");
     group.sample_size(10);
-    let circuit = &*AES128;
 
-    let mut rng = StdRng::seed_from_u64(0);
-    let delta = Delta::random(&mut rng);
-    let inputs: Vec<Key> = (0..256).map(|_| rng.random()).collect();
-
-    let gates_per_circuit = circuit.and_count() as u64;
+    let gates_per_circuit = AES128.and_count() as u64;
 
     for &(threshold, name) in THRESHOLDS {
         let iterations = threshold.div_ceil(gates_per_circuit) as usize;
@@ -31,27 +26,15 @@ fn bench_garble(c: &mut Criterion) {
         group.throughput(Throughput::Elements(actual_gates));
 
         // Iterator-based (one gate at a time)
+        let mut iter_bench = GarbleBench::new(iterations);
         group.bench_function(BenchmarkId::new("iter", name), |b| {
-            let mut gb = Garbler::default();
-            b.iter(|| {
-                for _ in 0..iterations {
-                    let mut iter = gb.generate(circuit, delta, &inputs).unwrap();
-                    let _: Vec<_> = iter.by_ref().collect();
-                    black_box(iter.finish().unwrap());
-                }
-            })
+            b.iter(|| iter_bench.run_iter());
         });
 
         // Batched (multiple gates at a time)
+        let mut batched_bench = GarbleBench::new(iterations);
         group.bench_function(BenchmarkId::new("batched", name), |b| {
-            let mut gb = Garbler::default();
-            b.iter(|| {
-                for _ in 0..iterations {
-                    let mut iter = gb.generate_batched(circuit, delta, &inputs).unwrap();
-                    let _: Vec<_> = iter.by_ref().collect();
-                    black_box(iter.finish().unwrap());
-                }
-            })
+            b.iter(|| batched_bench.run_batched());
         });
     }
 

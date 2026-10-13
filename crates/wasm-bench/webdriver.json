@@ -1,0 +1,7 @@
+{
+  "timeouts": {
+    "script": 1800000,
+    "pageLoad": 1800000,
+    "implicit": 0
+  }
+}

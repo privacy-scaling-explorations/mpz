@@ -1,4 +1,21 @@
+# Defaults for the browser benches, so a run is just `cargo bench --bench <name>`
+# (`cargo bench` for all; `cargo bench -- --list` to list them). See README.md.
+
+[build]
+target = "wasm32-unknown-unknown"
+
+# Cargo sets these for the process it spawns (the wasm-bindgen-test runner).
+# They are defaults only: a value set on the command line still wins.
+[env]
+WASM_BINDGEN_TEST_TIMEOUT = "1800"
+WASM_BINDGEN_TEST_DRIVER_TIMEOUT = "1800"
+
+# `-Zbuild-std` rebuilds std with the atomics/SIMD features below.
+[unstable]
+build-std = ["panic_abort", "std"]
+
 [target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"
 rustflags = [
     "-Ctarget-feature=+atomics,+bulk-memory,+mutable-globals,+simd128",
     "-Clink-arg=--shared-memory",
