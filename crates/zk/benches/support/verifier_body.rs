@@ -89,9 +89,7 @@ pub async fn run_protocol_record_prover_st(
                 std::mem::drop(prover.decode(ciphertext).unwrap());
             }
 
-            prover.flush(ctx_p).await.unwrap();
-            prover.execute(ctx_p).await.unwrap();
-            prover.flush(ctx_p).await.unwrap();
+            prover.execute_all(ctx_p).await.unwrap();
         },
         async {
             let key: Array<U8, 16> = verifier.alloc().unwrap();
@@ -117,9 +115,7 @@ pub async fn run_protocol_record_prover_st(
                 std::mem::drop(verifier.decode(ciphertext).unwrap());
             }
 
-            verifier.flush(ctx_v).await.unwrap();
-            verifier.execute(ctx_v).await.unwrap();
-            verifier.flush(ctx_v).await.unwrap();
+            verifier.execute_all(ctx_v).await.unwrap();
         }
     );
 }
@@ -179,9 +175,7 @@ pub async fn run_verifier_with_replay_st(
         std::mem::drop(verifier.decode(ciphertext).unwrap());
     }
 
-    verifier.flush(ctx).await.unwrap();
-    verifier.execute(ctx).await.unwrap();
-    verifier.flush(ctx).await.unwrap();
+    verifier.execute_all(ctx).await.unwrap();
 }
 
 // ============================================================================
@@ -236,9 +230,7 @@ pub async fn run_protocol_record_prover_mt(
                 std::mem::drop(prover.decode(ciphertext).unwrap());
             }
 
-            prover.flush(&mut ctx_p).await.unwrap();
-            prover.execute(&mut ctx_p).await.unwrap();
-            prover.flush(&mut ctx_p).await.unwrap();
+            prover.execute_all(&mut ctx_p).await.unwrap();
         },
         async {
             let key: Array<U8, 16> = verifier.alloc().unwrap();
@@ -264,9 +256,7 @@ pub async fn run_protocol_record_prover_mt(
                 std::mem::drop(verifier.decode(ciphertext).unwrap());
             }
 
-            verifier.flush(&mut ctx_v).await.unwrap();
-            verifier.execute(&mut ctx_v).await.unwrap();
-            verifier.flush(&mut ctx_v).await.unwrap();
+            verifier.execute_all(&mut ctx_v).await.unwrap();
         }
     );
 }
@@ -335,7 +325,5 @@ pub async fn run_verifier_with_replay_mt(
         std::mem::drop(verifier.decode(ciphertext).unwrap());
     }
 
-    verifier.flush(&mut ctx).await.unwrap();
-    verifier.execute(&mut ctx).await.unwrap();
-    verifier.flush(&mut ctx).await.unwrap();
+    verifier.execute_all(&mut ctx).await.unwrap();
 }

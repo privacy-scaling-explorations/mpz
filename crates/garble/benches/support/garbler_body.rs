@@ -77,9 +77,7 @@ pub async fn run_protocol_record_evaluator_st(
                 std::mem::drop(gb.decode(ciphertext).unwrap());
             }
 
-            gb.flush(ctx_gb).await.unwrap();
-            gb.execute(ctx_gb).await.unwrap();
-            gb.flush(ctx_gb).await.unwrap();
+            gb.execute_all(ctx_gb).await.unwrap();
         },
         async {
             let key: Array<U8, 16> = ev.alloc().unwrap();
@@ -105,9 +103,7 @@ pub async fn run_protocol_record_evaluator_st(
                 std::mem::drop(ev.decode(ciphertext).unwrap());
             }
 
-            ev.flush(ctx_ev).await.unwrap();
-            ev.execute(ctx_ev).await.unwrap();
-            ev.flush(ctx_ev).await.unwrap();
+            ev.execute_all(ctx_ev).await.unwrap();
         }
     );
 }
@@ -172,9 +168,7 @@ pub async fn run_garbler_with_replay_st(
         std::mem::drop(gb.decode(ciphertext).unwrap());
     }
 
-    gb.flush(ctx).await.unwrap();
-    gb.execute(ctx).await.unwrap();
-    gb.flush(ctx).await.unwrap();
+    gb.execute_all(ctx).await.unwrap();
 }
 
 // ============================================================================
@@ -226,9 +220,7 @@ pub async fn run_protocol_record_evaluator_mt(
                 std::mem::drop(gb.decode(ciphertext).unwrap());
             }
 
-            gb.flush(&mut ctx_gb).await.unwrap();
-            gb.execute(&mut ctx_gb).await.unwrap();
-            gb.flush(&mut ctx_gb).await.unwrap();
+            gb.execute_all(&mut ctx_gb).await.unwrap();
         },
         async {
             let key: Array<U8, 16> = ev.alloc().unwrap();
@@ -254,9 +246,7 @@ pub async fn run_protocol_record_evaluator_mt(
                 std::mem::drop(ev.decode(ciphertext).unwrap());
             }
 
-            ev.flush(&mut ctx_ev).await.unwrap();
-            ev.execute(&mut ctx_ev).await.unwrap();
-            ev.flush(&mut ctx_ev).await.unwrap();
+            ev.execute_all(&mut ctx_ev).await.unwrap();
         }
     );
 }
@@ -324,7 +314,5 @@ pub async fn run_garbler_with_replay_mt(
         std::mem::drop(gb.decode(ciphertext).unwrap());
     }
 
-    gb.flush(&mut ctx).await.unwrap();
-    gb.execute(&mut ctx).await.unwrap();
-    gb.flush(&mut ctx).await.unwrap();
+    gb.execute_all(&mut ctx).await.unwrap();
 }

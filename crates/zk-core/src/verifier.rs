@@ -12,6 +12,7 @@ use crate::{
 
 type Result<T> = core::result::Result<T, VerifierError>;
 
+#[derive(Debug)]
 pub struct Verifier {
     delta: Delta,
     check: Arc<Mutex<Check>>,

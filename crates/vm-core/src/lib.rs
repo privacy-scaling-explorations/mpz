@@ -74,7 +74,12 @@ pub trait Execute {
     /// Returns `true` if the VM has calls which can be executed.
     fn wants_execute(&self) -> bool;
 
-    /// Executes the callstack.
+    /// Executes a subset of the calls which are ready to be executed.
+    ///
+    /// How much is executed in one call is up to the VM and may be less than
+    /// the whole callstack; callers must not assume it is drained. Use
+    /// [`execute_all`](Self::execute_all) to execute the callstack to
+    /// completion.
     async fn execute(&mut self, ctx: &mut Context) -> Result<()>;
 
     /// Executes the callstack and flushes memory until all ready operations are
